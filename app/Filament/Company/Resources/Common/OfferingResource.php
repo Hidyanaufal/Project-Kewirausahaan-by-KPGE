@@ -14,6 +14,7 @@ use App\Filament\Forms\Components\CreateAdjustmentSelect;
 use App\Models\Common\Offering;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -36,7 +37,7 @@ class OfferingResource extends Resource
                     ->label('Inactive adjustments')
                     ->warning()
                     ->icon('heroicon-o-exclamation-triangle')
-                    ->visible(fn (?Offering $record) => $record?->hasInactiveAdjustments())
+                    ->visible(fn(?Offering $record) => $record?->hasInactiveAdjustments())
                     ->columnSpanFull()
                     ->description(function (Offering $record) {
                         $inactiveAdjustments = collect();
@@ -67,13 +68,10 @@ class OfferingResource extends Resource
     {
         return Forms\Components\Section::make('General')
             ->schema([
-                RadioDeck::make('type')
+                Forms\Components\Select::make('type')
                     ->options(OfferingType::class)
-                    ->default(OfferingType::Product)
-                    ->icons(OfferingType::class)
-                    ->color('primary')
-                    ->columns()
-                    ->required(),
+                    ->required()
+                    ->columnSpanFull(),
                 Forms\Components\TextInput::make('name')
                     ->autofocus()
                     ->required()
@@ -126,7 +124,7 @@ class OfferingResource extends Resource
                     ->multiple(),
             ])
             ->columns()
-            ->visible(static fn (Forms\Get $get) => in_array('Sellable', $get('attributes') ?? []));
+            ->visible(static fn(Forms\Get $get) => in_array('Sellable', $get('attributes') ?? []));
     }
 
     public static function getPurchasableSection(): Forms\Components\Section
@@ -153,7 +151,7 @@ class OfferingResource extends Resource
                     ->multiple(),
             ])
             ->columns()
-            ->visible(static fn (Forms\Get $get) => in_array('Purchasable', $get('attributes') ?? []));
+            ->visible(static fn(Forms\Get $get) => in_array('Purchasable', $get('attributes') ?? []));
     }
 
     public static function table(Table $table): Table
