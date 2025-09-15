@@ -202,5 +202,19 @@
     "Budget Items": "Budget Items",
     "Budget Allocations": "Budget Allocations",
     "Account Selection": "Account Selection",
-    "Custom": "Custom"
+    "Custom": "Custom",
+    "resources": "resources",
+    "Budget": "Budget",
+    "Transaction": "Transaction",
+    "Role": "Role",
+    "Adjustment": "Adjustment",
+    "Offering": "Offering",
+    "Document Template": "Document Template",
+    "Bill": "Bill",
+    "Vendor": "Vendor",
+    "Client": "Client",
+    "pages": "pages",
+    "widgets": "widgets",
+    "custom": "custom",
+    "User": "User"
 }

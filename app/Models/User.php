@@ -11,6 +11,7 @@ use Filament\Models\Contracts\HasTenants;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -18,6 +19,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
+use Wallo\FilamentCompanies\FilamentCompanies;
 use Wallo\FilamentCompanies\HasCompanies;
 use Wallo\FilamentCompanies\HasConnectedAccounts;
 use Wallo\FilamentCompanies\HasProfilePhoto;
@@ -43,6 +45,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar, HasDefaul
         'name',
         'email',
         'password',
+        'company_id',
         'is_super_admin'
     ];
 
@@ -133,5 +136,15 @@ class User extends Authenticatable implements FilamentUser, HasAvatar, HasDefaul
     public function notifications(): MorphMany
     {
         return $this->morphMany(Notification::class, 'notifiable')->latest();
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(FilamentCompanies::companyModel(), 'company_id');
+    }
+
+    public function positions(): MorphMany
+    {
+        return $this->morphMany(ModelHasRole::class, 'model');
     }
 }

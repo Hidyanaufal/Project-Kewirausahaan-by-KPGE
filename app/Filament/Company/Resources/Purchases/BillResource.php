@@ -80,7 +80,7 @@ class BillResource extends Resource
                             Forms\Components\Group::make([
                                 Forms\Components\TextInput::make('bill_number')
                                     ->label('Bill number')
-                                    ->default(static fn () => Bill::getNextDocumentNumber())
+                                    ->default(static fn() => Bill::getNextDocumentNumber())
                                     ->required(),
                                 Forms\Components\TextInput::make('order_number')
                                     ->label('P.O/S.O Number'),
@@ -391,17 +391,17 @@ class BillResource extends Resource
                     ->searchable()
                     ->hiddenOn(BillsRelationManager::class),
                 Tables\Columns\TextColumn::make('total')
-                    ->currencyWithConversion(static fn (Bill $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn(Bill $record) => $record->currency_code)
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('amount_paid')
                     ->label('Amount paid')
-                    ->currencyWithConversion(static fn (Bill $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn(Bill $record) => $record->currency_code)
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('amount_due')
                     ->label('Amount due')
-                    ->currencyWithConversion(static fn (Bill $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn(Bill $record) => $record->currency_code)
                     ->sortable(),
             ])
             ->filters([
@@ -416,8 +416,8 @@ class BillResource extends Resource
                 Tables\Filters\TernaryFilter::make('has_payments')
                     ->label('Has payments')
                     ->queries(
-                        true: fn (Builder $query) => $query->whereHas('payments'),
-                        false: fn (Builder $query) => $query->whereDoesntHave('payments'),
+                        true: fn(Builder $query) => $query->whereHas('payments'),
+                        false: fn(Builder $query) => $query->whereDoesntHave('payments'),
                     ),
                 DateRangeFilter::make('date')
                     ->fromLabel('From date')
@@ -436,9 +436,9 @@ class BillResource extends Resource
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ActionGroup::make([
                         Tables\Actions\EditAction::make()
-                            ->url(static fn (Bill $record) => Pages\EditBill::getUrl(['record' => $record])),
+                            ->url(static fn(Bill $record) => Pages\EditBill::getUrl(['record' => $record])),
                         Tables\Actions\ViewAction::make()
-                            ->url(static fn (Bill $record) => Pages\ViewBill::getUrl(['record' => $record])),
+                            ->url(static fn(Bill $record) => Pages\ViewBill::getUrl(['record' => $record])),
                         Bill::getReplicateAction(Tables\Actions\ReplicateAction::class),
                         Tables\Actions\Action::make('recordPayment')
                             ->label('Record payment')
@@ -484,7 +484,7 @@ class BillResource extends Resource
                                         Forms\Components\TextInput::make('amount')
                                             ->label('Amount')
                                             ->required()
-                                            ->money(fn (Bill $record) => $record->currency_code)
+                                            ->money(fn(Bill $record) => $record->currency_code)
                                             ->live(onBlur: true)
                                             ->helperText(function (Bill $record, $state) {
                                                 $billCurrency = $record->currency_code;
@@ -510,7 +510,7 @@ class BillResource extends Resource
                                                 };
                                             })
                                             ->rules([
-                                                static fn (): Closure => static function (string $attribute, $value, Closure $fail) {
+                                                static fn(): Closure => static function (string $attribute, $value, Closure $fail) {
                                                     if (! CurrencyConverter::isValidAmount($value, 'USD')) {
                                                         $fail('Please enter a valid amount');
                                                     }

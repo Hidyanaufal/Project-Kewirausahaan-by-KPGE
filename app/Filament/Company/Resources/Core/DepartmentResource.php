@@ -20,6 +20,11 @@ class DepartmentResource extends Resource
 
     protected static ?string $slug = 'hr/departments';
 
+    public static function isDiscovered(): bool
+    {
+        return false;
+    }
+
     public static function getModelLabel(): string
     {
         $modelLabel = static::$modelLabel;

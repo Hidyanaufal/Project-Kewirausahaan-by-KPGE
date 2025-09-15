@@ -20,12 +20,15 @@ use App\Actions\FilamentCompanies\UpdateUserPassword;
 use App\Actions\FilamentCompanies\UpdateUserProfileInformation;
 use App\Filament\Company\Clusters\Settings;
 use App\Filament\Company\Pages\Accounting\AccountChart;
+use App\Filament\Company\Pages\CompanyDashboard;
 use App\Filament\Company\Pages\CreateCompany;
 use App\Filament\Company\Pages\ManageCompany;
 use App\Filament\Company\Pages\Reports;
 use App\Filament\Company\Pages\Service\ConnectedAccount;
 use App\Filament\Company\Pages\Service\LiveCurrency;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
+use App\Filament\Company\Resources\Addons\RoleResource;
+use App\Filament\Company\Resources\Addons\UserResource;
 use App\Filament\Company\Resources\Banking\AccountResource;
 use App\Filament\Company\Resources\Common\OfferingResource;
 use App\Filament\Company\Resources\Purchases\BillResource;
@@ -126,9 +129,12 @@ class CompanyPanelProvider extends PanelProvider
             ->navigation(function (NavigationBuilder $builder): NavigationBuilder {
                 return $builder
                     ->items([
+                        ...CompanyDashboard::getNavigationItems(),
                         ...Reports::getNavigationItems(),
                         ...Settings::getNavigationItems(),
                         ...OfferingResource::getNavigationItems(),
+                        ...RoleResource::getNavigationItems(),
+                        ...UserResource::getNavigationItems(),
                     ])
                     ->groups([
                         NavigationGroup::make('Sales')
@@ -172,6 +178,7 @@ class CompanyPanelProvider extends PanelProvider
             ->databaseNotifications(isLazy: false)
             ->viteTheme('resources/css/filament/company/theme.css')
             ->brandLogo('/image/system.logo.png')
+            ->darkModeBrandLogo('/image/system.logo.alt.png')
             ->brandLogoHeight('50px')
             ->tenant(Company::class)
             ->tenantProfile(ManageCompany::class)

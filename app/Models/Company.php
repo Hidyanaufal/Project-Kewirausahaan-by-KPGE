@@ -111,7 +111,6 @@ class Company extends FilamentCompaniesCompany implements HasAvatar
     public function accountSubtypes(): HasMany
     {
         return $this->hasMany(AccountSubtype::class, 'company_id');
-
     }
 
     public function clients(): HasMany
@@ -206,5 +205,10 @@ class Company extends FilamentCompaniesCompany implements HasAvatar
     public function vendors(): HasMany
     {
         return $this->hasMany(Common\Vendor::class, 'company_id');
+    }
+
+    public function roles(): HasMany
+    {
+        return $this->hasMany(Role::class, 'company_id');
     }
 }

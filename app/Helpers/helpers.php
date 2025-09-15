@@ -5,7 +5,10 @@ use App\Enums\Setting\NumberFormat;
 use App\Models\Setting\Localization;
 use App\Services\CompanySettingsService;
 use Filament\Support\RawJs;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 if (! function_exists('generateJsCode')) {
     function generateJsCode(string $precision, ?string $currency = null): string
@@ -143,5 +146,116 @@ if (! function_exists('company_now')) {
     function company_now(): Carbon
     {
         return now(CompanySettingsService::getDefaultTimezone());
+    }
+}
+
+if (! function_exists('form_merge')) {
+    function form_merge(
+        Model $record,
+        array $relations = []
+    ): array {
+        $data = $record->only($record->getFillable());
+
+        foreach ($relations as $relation) {
+            $related = $record->$relation;
+            if ($related instanceof Model) {
+                // hasOne / belongsTo
+                $data = array_merge($data, $related->toArray());
+            } elseif ($related instanceof \Illuminate\Support\Collection) {
+                // hasMany / morphMany
+                $data[$relation] = $related->map->toArray()->all();
+            }
+        }
+
+        return $data;
+    }
+}
+
+if (!function_exists('relation_create')) {
+    /**
+     * Create a root model and all its related models automatically.
+     *
+     * @param string $root The root model class
+     * @param array $data Input data from form
+     * @param array $relations Key: relation name in root model, Value: related model class
+     * @return \Illuminate\Database\Eloquent\Model The created root model instance
+     */
+    function relation_create(
+        string $root,
+        array $data,
+        array $relations = []
+    ) {
+        return DB::transaction(function () use ($root, $data, $relations) {
+            $rootInstance = $root::create(Arr::only($data, (new $root)->getFillable()));
+            foreach ($relations as $relationName => $modelClass) {
+                $rootInstance->$relationName()->create(
+                    Arr::only($data, (new $modelClass)->getFillable())
+                );
+            }
+
+            return $rootInstance;
+        });
+    }
+}
+
+if (!function_exists('relation_update')) {
+    /**
+     * Update a root model and all its related models automatically.
+     *
+     * @param \Illuminate\Database\Eloquent\Model $root The root model instance
+     * @param array $data Input data from form
+     * @param array $relations Key: relation name in root model, Value: related model class
+     * @return \Illuminate\Database\Eloquent\Model The updated root model instance
+     */
+    function relation_update(
+        $root,
+        array $data,
+        array $relations = []
+    ) {
+        return DB::transaction(function () use ($root, $data, $relations) {
+            // update root
+            $root->update(Arr::only($data, $root->getFillable()));
+
+            foreach ($relations as $relationName => $modelClass) {
+                $relationData = Arr::only($data, (new $modelClass)->getFillable());
+
+                // cek apakah sudah ada data di relasi
+                $relation = $root->$relationName()->first();
+
+                if ($relation) {
+                    // kalau sudah ada → update
+                    $relation->update($relationData);
+                } else {
+                    // kalau belum ada → create
+                    if ($relationName === 'offering') {
+                        $relationData['sellable'] = 1;
+                        $relationData['purchasable'] = 1;
+                    }
+                    $root->$relationName()->create($relationData);
+                }
+            }
+
+            return $root;
+        });
+    }
+}
+
+
+if (!function_exists('default_company_id')) {
+    function default_company_id()
+    {
+        return 1;
+    }
+}
+
+
+if (!function_exists('extract_iframe_src')) {
+    function extract_iframe_src(string $iframe): ?string
+    {
+        if (preg_match('/src="([^"]+)"/', $iframe, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
     }
 }

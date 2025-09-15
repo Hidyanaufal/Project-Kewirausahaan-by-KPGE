@@ -32,6 +32,11 @@ class BudgetResource extends Resource
 
     protected static bool $isGloballySearchable = false;
 
+    public static function isDiscovered(): bool
+    {
+        return false;
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -56,14 +61,14 @@ class BudgetResource extends Resource
                             ->required()
                             ->default(company_today()->endOfYear())
                             ->live()
-                            ->disabled(static fn (Forms\Get $get) => blank($get('start_date')))
-                            ->minDate(fn (Forms\Get $get) => match (BudgetIntervalType::parse($get('interval_type'))) {
+                            ->disabled(static fn(Forms\Get $get) => blank($get('start_date')))
+                            ->minDate(fn(Forms\Get $get) => match (BudgetIntervalType::parse($get('interval_type'))) {
                                 BudgetIntervalType::Month => Carbon::parse($get('start_date'))->addMonth(),
                                 BudgetIntervalType::Quarter => Carbon::parse($get('start_date'))->addQuarter(),
                                 BudgetIntervalType::Year => Carbon::parse($get('start_date'))->addYear(),
                                 default => Carbon::parse($get('start_date'))->addDay(),
                             })
-                            ->maxDate(fn (Forms\Get $get) => Carbon::parse($get('start_date'))->endOfYear()),
+                            ->maxDate(fn(Forms\Get $get) => Carbon::parse($get('start_date'))->endOfYear()),
                         Forms\Components\Textarea::make('notes')
                             ->columnSpanFull(),
                     ]),
@@ -284,7 +289,7 @@ class BudgetResource extends Resource
                                     ->schema([
                                         Forms\Components\Placeholder::make('account')
                                             ->hiddenLabel()
-                                            ->content(fn (BudgetItem $record) => $record->account->name ?? ''),
+                                            ->content(fn(BudgetItem $record) => $record->account->name ?? ''),
 
                                         Forms\Components\TextInput::make('total')
                                             ->hiddenLabel()
@@ -342,7 +347,7 @@ class BudgetResource extends Resource
                                         })->toArray(),
                                     ])
                                     ->spreadsheet()
-                                    ->itemLabel(fn (BudgetItem $record) => $record->account->name ?? 'Budget Item')
+                                    ->itemLabel(fn(BudgetItem $record) => $record->account->name ?? 'Budget Item')
                                     ->deletable(false)
                                     ->reorderable(false)
                                     ->addable(false) // Don't allow adding new budget items
@@ -364,7 +369,7 @@ class BudgetResource extends Resource
             ->budgetable()
             ->pluck('id');
 
-        $budgetItems = $accounts->map(static fn ($accountId) => [
+        $budgetItems = $accounts->map(static fn($accountId) => [
             'account_id' => $accountId,
             'total_amount' => 0, // Default to 0 until the user inputs amounts
             'amounts' => self::generateDefaultAllocations($get('start_date'), $get('end_date'), $get('interval_type')),
@@ -390,7 +395,7 @@ class BudgetResource extends Resource
         // Only add accounts that aren't already in the budget items
         $newAccounts = array_diff($selectedAccountIds, $existingAccountIds);
 
-        $newBudgetItems = collect($newAccounts)->map(static fn ($accountId) => [
+        $newBudgetItems = collect($newAccounts)->map(static fn($accountId) => [
             'account_id' => $accountId,
             'total_amount' => 0,
             'amounts' => self::generateDefaultAllocations($get('start_date'), $get('end_date'), $get('interval_type')),
@@ -408,7 +413,7 @@ class BudgetResource extends Resource
 
         $labels = self::generateFormattedLabels($startDate, $endDate, $intervalType);
 
-        return collect($labels)->mapWithKeys(static fn ($label) => [$label => 0])->toArray();
+        return collect($labels)->mapWithKeys(static fn($label) => [$label => 0])->toArray();
     }
 
     private static function increaseAllocations(Forms\Set $set, Forms\Get $get, array $data): void
