@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Http\Responses\LoginRedirectResponse;
+use App\Models\Permission;
+use App\Models\Role;
 use App\Models\Export;
 use App\Models\Import;
 use App\Models\Notification;
@@ -33,6 +35,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        app(\Spatie\Permission\PermissionRegistrar::class)
+            ->setPermissionClass(Permission::class)
+            ->setRoleClass(Role::class);
+
         // Bind custom Import and Export models
         $this->app->bind(BaseImport::class, Import::class);
         $this->app->bind(BaseExport::class, Export::class);

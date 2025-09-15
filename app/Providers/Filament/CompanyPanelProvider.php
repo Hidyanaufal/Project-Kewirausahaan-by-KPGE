@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Actions\FilamentCompanies\AddCompanyEmployee;
+use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use App\Actions\FilamentCompanies\CreateConnectedAccount;
 use App\Actions\FilamentCompanies\CreateNewUser;
 use App\Actions\FilamentCompanies\CreateUserFromProvider;
@@ -24,7 +25,6 @@ use App\Filament\Company\Pages\ManageCompany;
 use App\Filament\Company\Pages\Reports;
 use App\Filament\Company\Pages\Service\ConnectedAccount;
 use App\Filament\Company\Pages\Service\LiveCurrency;
-use App\Filament\Company\Resources\Accounting\BudgetResource;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
 use App\Filament\Company\Resources\Banking\AccountResource;
 use App\Filament\Company\Resources\Common\OfferingResource;
@@ -43,8 +43,10 @@ use App\Livewire\UpdateProfileInformation;
 use App\Models\Company;
 use App\Services\CompanySettingsService;
 use App\Support\FilamentComponentConfigurator;
+use DiogoGPinto\AuthUIEnhancer\AuthUIEnhancerPlugin;
 use Exception;
 use Filament\Actions;
+use Filament\FontProviders\GoogleFontProvider;
 use Filament\Forms;
 use Filament\Forms\Components\Select;
 use Filament\Http\Middleware\Authenticate;
@@ -53,13 +55,11 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Navigation\NavigationBuilder;
 use Filament\Navigation\NavigationGroup;
-use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Support\Enums\MaxWidth;
 use Filament\Tables;
-use Filament\Widgets;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -68,10 +68,7 @@ use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Wallo\FilamentCompanies\Actions\GenerateRedirectForProvider;
-use Wallo\FilamentCompanies\Enums\Feature;
-use Wallo\FilamentCompanies\Enums\Provider;
 use Wallo\FilamentCompanies\FilamentCompanies;
-use Wallo\FilamentCompanies\Pages\Auth\Register;
 
 class CompanyPanelProvider extends PanelProvider
 {
@@ -80,20 +77,25 @@ class CompanyPanelProvider extends PanelProvider
      */
     public function panel(Panel $panel): Panel
     {
-        $isDemoEnvironment = is_demo_environment();
-
         return $panel
             ->default()
+            ->passwordReset()
             ->id('company')
             ->path('company')
+            ->sidebarWidth('250px')
             ->login(Login::class)
-            ->when(! $isDemoEnvironment, function (Panel $panel) {
-                return $panel
-                    ->registration(Register::class)
-                    ->passwordReset();
-            })
+            ->font(
+                family: 'Inter',
+                provider: GoogleFontProvider::class
+            )
+            ->spa()
             ->tenantMenu(false)
             ->plugins([
+                AuthUIEnhancerPlugin::make()
+                    ->formPanelPosition('right')
+                    ->emptyPanelBackgroundImageOpacity('60%')
+                    ->emptyPanelBackgroundImageUrl('/image/backdrop.jpg'),
+                FilamentShieldPlugin::make(),
                 FilamentCompanies::make()
                     ->userPanel('user')
                     ->switchCurrentCompany()
@@ -109,12 +111,7 @@ class CompanyPanelProvider extends PanelProvider
                     ->autoAcceptInvitations()
                     ->termsAndPrivacyPolicy()
                     ->notifications()
-                    ->modals()
-                    ->socialite(
-                        condition: ! $isDemoEnvironment,
-                        providers: [Provider::Github],
-                        features: [Feature::RememberSession, Feature::ProviderAvatars],
-                    ),
+                    ->modals(),
                 PanelShiftDropdown::make()
                     ->logoutItem()
                     ->companySettings()
@@ -141,7 +138,6 @@ class CompanyPanelProvider extends PanelProvider
                                 ...ClientResource::getNavigationItems(),
                                 ...EstimateResource::getNavigationItems(),
                                 ...InvoiceResource::getNavigationItems(),
-                                ...RecurringInvoiceResource::getNavigationItems(),
                             ]),
                         NavigationGroup::make('Purchases')
                             ->label('Purchases')
@@ -155,7 +151,6 @@ class CompanyPanelProvider extends PanelProvider
                             ->icon('heroicon-o-clipboard-document-list')
                             ->extraSidebarAttributes(['class' => 'es-sidebar-group'])
                             ->items([
-                                // ...BudgetResource::getNavigationItems(),
                                 ...AccountChart::getNavigationItems(),
                                 ...TransactionResource::getNavigationItems(),
                             ]),
@@ -176,22 +171,16 @@ class CompanyPanelProvider extends PanelProvider
             ->sidebarCollapsibleOnDesktop()
             ->databaseNotifications(isLazy: false)
             ->viteTheme('resources/css/filament/company/theme.css')
-            ->brandLogo(static fn() => view('components.icons.logo'))
+            ->brandLogo('/image/system.logo.png')
+            ->brandLogoHeight('50px')
             ->tenant(Company::class)
             ->tenantProfile(ManageCompany::class)
             ->tenantRegistration(CreateCompany::class)
             ->discoverResources(in: app_path('Filament/Company/Resources'), for: 'App\\Filament\\Company\\Resources')
             ->discoverPages(in: app_path('Filament/Company/Pages'), for: 'App\\Filament\\Company\\Pages')
             ->discoverClusters(in: app_path('Filament/Company/Clusters'), for: 'App\\Filament\\Company\\Clusters')
-            ->pages([
-                // Pages\Dashboard::class,
-            ])
             ->authGuard('web')
             ->discoverWidgets(in: app_path('Filament/Company/Widgets'), for: 'App\\Filament\\Company\\Widgets')
-            ->widgets([
-                // Widgets\AccountWidget::class,
-                // Widgets\FilamentInfoWidget::class,
-            ])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

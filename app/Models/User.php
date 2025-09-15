@@ -17,6 +17,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 use Wallo\FilamentCompanies\HasCompanies;
 use Wallo\FilamentCompanies\HasConnectedAccounts;
 use Wallo\FilamentCompanies\HasProfilePhoto;
@@ -31,6 +32,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar, HasDefaul
     use HasProfilePhoto;
     use Notifiable;
     use SetsProfilePhotoFromUrl;
+    use HasRoles;
 
     /**
      * The attributes that are mass assignable.
@@ -38,7 +40,10 @@ class User extends Authenticatable implements FilamentUser, HasAvatar, HasDefaul
      * @var array<int, string>
      */
     protected $fillable = [
-        'name', 'email', 'password',
+        'name',
+        'email',
+        'password',
+        'is_super_admin'
     ];
 
     /**

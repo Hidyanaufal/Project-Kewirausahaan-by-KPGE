@@ -41,6 +41,11 @@ class RecurringInvoiceResource extends Resource
 {
     protected static ?string $model = RecurringInvoice::class;
 
+    public static function isDiscovered(): bool
+    {
+        return false;
+    }
+
     public static function form(Form $form): Form
     {
         $company = Auth::user()->currentCompany;
@@ -340,7 +345,7 @@ class RecurringInvoiceResource extends Resource
                     ->sortable()
                     ->hideOnTabs(['draft']),
                 Tables\Columns\TextColumn::make('total')
-                    ->currencyWithConversion(static fn (RecurringInvoice $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn(RecurringInvoice $record) => $record->currency_code)
                     ->sortable()
                     ->toggleable()
                     ->alignEnd(),
@@ -363,9 +368,9 @@ class RecurringInvoiceResource extends Resource
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ActionGroup::make([
                         Tables\Actions\EditAction::make()
-                            ->url(static fn (RecurringInvoice $record): string => Pages\EditRecurringInvoice::getUrl(['record' => $record])),
+                            ->url(static fn(RecurringInvoice $record): string => Pages\EditRecurringInvoice::getUrl(['record' => $record])),
                         Tables\Actions\ViewAction::make()
-                            ->url(static fn (RecurringInvoice $record): string => Pages\ViewRecurringInvoice::getUrl(['record' => $record])),
+                            ->url(static fn(RecurringInvoice $record): string => Pages\ViewRecurringInvoice::getUrl(['record' => $record])),
                         RecurringInvoice::getManageScheduleAction(Tables\Actions\Action::class),
                     ])->dropdown(false),
                     Tables\Actions\DeleteAction::make(),

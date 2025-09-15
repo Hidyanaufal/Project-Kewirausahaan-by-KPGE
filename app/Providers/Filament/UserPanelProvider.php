@@ -7,6 +7,7 @@ use App\Filament\User\Clusters\Account;
 use App\Http\Middleware\Authenticate;
 use Exception;
 use Filament\Facades\Filament;
+use Filament\FontProviders\GoogleFontProvider;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\NavigationBuilder;
@@ -23,7 +24,6 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Wallo\FilamentCompanies\FilamentCompanies;
-use Wallo\FilamentCompanies\Pages\User\PersonalAccessTokens;
 use Wallo\FilamentCompanies\Pages\User\Profile;
 
 class UserPanelProvider extends PanelProvider
@@ -60,23 +60,25 @@ class UserPanelProvider extends PanelProvider
                             ]);
                     }),
             )
+            ->font(
+                family: 'Inter',
+                provider: GoogleFontProvider::class
+            )
             ->colors([
-                'primary' => Color::Indigo,
+                'primary' => Color::Blue,
             ])
+            ->brandLogo('/image/system.logo.png')
+            ->brandLogoHeight('50px')
             ->navigation(false)
             ->viteTheme('resources/css/filament/user/theme.css')
-            ->brandLogo(static fn () => view('components.icons.logo'))
             ->discoverResources(in: app_path('Filament/User/Resources'), for: 'App\\Filament\\User\\Resources')
             ->discoverPages(in: app_path('Filament/User/Pages'), for: 'App\\Filament\\User\\Pages')
             ->discoverClusters(in: app_path('Filament/User/Clusters'), for: 'App\\Filament\\User\\Clusters')
             ->discoverWidgets(in: app_path('Filament/User/Widgets'), for: 'App\\Filament\\User\\Widgets')
             ->pages([
                 Profile::class,
-                PersonalAccessTokens::class,
             ])
-            ->widgets([
-                //
-            ])
+            ->viteTheme('resources/css/filament/company/theme.css')
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

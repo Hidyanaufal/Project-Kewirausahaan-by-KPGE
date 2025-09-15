@@ -14,6 +14,11 @@ class PersonalAccessTokens extends BasePersonalAccessTokens
 
     protected static ?int $navigationSort = 20;
 
+    public static function isDiscovered(): bool
+    {
+        return false;
+    }
+
     public function getMaxContentWidth(): MaxWidth | string | null
     {
         return MaxWidth::ScreenTwoExtraLarge;
