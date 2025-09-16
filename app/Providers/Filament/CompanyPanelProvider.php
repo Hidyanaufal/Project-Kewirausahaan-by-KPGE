@@ -40,6 +40,7 @@ use App\Filament\Company\Resources\Sales\RecurringInvoiceResource;
 use App\Filament\Components\PanelShiftDropdown;
 use App\Filament\Pages\Auth\Login;
 use App\Filament\User\Clusters\Account;
+use App\Helpers\NavigationHelper;
 use App\Http\Middleware\ConfigureCurrentCompany;
 use App\Livewire\UpdatePassword;
 use App\Livewire\UpdateProfileInformation;
@@ -129,36 +130,36 @@ class CompanyPanelProvider extends PanelProvider
             ->navigation(function (NavigationBuilder $builder): NavigationBuilder {
                 return $builder
                     ->items([
-                        ...CompanyDashboard::getNavigationItems(),
-                        ...Reports::getNavigationItems(),
-                        ...Settings::getNavigationItems(),
-                        ...OfferingResource::getNavigationItems(),
-                        ...RoleResource::getNavigationItems(),
-                        ...UserResource::getNavigationItems(),
+                        ...NavigationHelper::filterNavigationByPermissions(CompanyDashboard::class),
+                        ...NavigationHelper::filterNavigationByPermissions(Reports::class),
+                        ...NavigationHelper::filterNavigationByPermissions(Settings::class),
+                        ...NavigationHelper::filterNavigationByPermissions(OfferingResource::class),
+                        ...NavigationHelper::filterNavigationByPermissions(RoleResource::class),
+                        ...NavigationHelper::filterNavigationByPermissions(UserResource::class),
                     ])
                     ->groups([
                         NavigationGroup::make('Sales')
                             ->label('Sales')
                             ->icon('heroicon-o-currency-dollar')
                             ->items([
-                                ...ClientResource::getNavigationItems(),
-                                ...EstimateResource::getNavigationItems(),
-                                ...InvoiceResource::getNavigationItems(),
+                                ...NavigationHelper::filterNavigationByPermissions(ClientResource::class),
+                                ...NavigationHelper::filterNavigationByPermissions(EstimateResource::class),
+                                ...NavigationHelper::filterNavigationByPermissions(InvoiceResource::class),
                             ]),
                         NavigationGroup::make('Purchases')
                             ->label('Purchases')
                             ->icon('heroicon-o-shopping-cart')
                             ->items([
-                                ...BillResource::getNavigationItems(),
-                                ...VendorResource::getNavigationItems(),
+                                ...NavigationHelper::filterNavigationByPermissions(BillResource::class),
+                                ...NavigationHelper::filterNavigationByPermissions(VendorResource::class),
                             ]),
                         NavigationGroup::make('Accounting')
                             ->localizeLabel()
                             ->icon('heroicon-o-clipboard-document-list')
                             ->extraSidebarAttributes(['class' => 'es-sidebar-group'])
                             ->items([
-                                ...AccountChart::getNavigationItems(),
-                                ...TransactionResource::getNavigationItems(),
+                                ...NavigationHelper::filterNavigationByPermissions(AccountChart::class),
+                                ...NavigationHelper::filterNavigationByPermissions(TransactionResource::class),
                             ]),
                         NavigationGroup::make('Banking')
                             ->localizeLabel()
@@ -168,8 +169,8 @@ class CompanyPanelProvider extends PanelProvider
                             ->localizeLabel()
                             ->icon('heroicon-o-wrench-screwdriver')
                             ->items([
-                                ...ConnectedAccount::getNavigationItems(),
-                                ...LiveCurrency::getNavigationItems(),
+                                ...NavigationHelper::filterNavigationByPermissions(ConnectedAccount::class),
+                                ...NavigationHelper::filterNavigationByPermissions(LiveCurrency::class),
                             ]),
                     ]);
             })

@@ -12,7 +12,6 @@ trait HasPermissionCheck
     {
         $user = auth()->user();
 
-
         if (!$user) {
             return false;
         }

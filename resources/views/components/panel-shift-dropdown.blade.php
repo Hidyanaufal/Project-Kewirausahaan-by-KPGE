@@ -38,6 +38,9 @@
                 @endif
 
                 <span class="text-gray-950 dark:text-white">
+                    {{$user->name}}
+                </span>
+                <span class="text-gray-950 dark:text-white text-xs">
                     {{ $currentTenantName ?? filament()->getUserName($user) }}
                 </span>
             </span>

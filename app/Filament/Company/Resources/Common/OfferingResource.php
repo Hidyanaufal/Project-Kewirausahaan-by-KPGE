@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Resources\Common;
 
+use App\Concerns\HasPermissionCheck;
 use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\AccountType;
 use App\Enums\Accounting\AdjustmentCategory;
@@ -25,6 +26,8 @@ use JaOcero\RadioDeck\Forms\Components\RadioDeck;
 
 class OfferingResource extends Resource
 {
+    use HasPermissionCheck;
+
     protected static ?string $model = Offering::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-square-3-stack-3d';
@@ -123,7 +126,7 @@ class OfferingResource extends Resource
                     ->type(AdjustmentType::Sales)
                     ->multiple(),
             ])
-            ->columns()
+            ->columns(3)
             ->visible(static fn(Forms\Get $get) => in_array('Sellable', $get('attributes') ?? []));
     }
 
@@ -150,7 +153,7 @@ class OfferingResource extends Resource
                     ->type(AdjustmentType::Purchase)
                     ->multiple(),
             ])
-            ->columns()
+            ->columns(3)
             ->visible(static fn(Forms\Get $get) => in_array('Purchasable', $get('attributes') ?? []));
     }
 

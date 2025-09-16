@@ -26,7 +26,6 @@ class ViewClient extends ViewRecord
     {
         return [
             RelationManagers\InvoicesRelationManager::class,
-            RelationManagers\RecurringInvoicesRelationManager::class,
             RelationManagers\EstimatesRelationManager::class,
         ];
     }
@@ -52,10 +51,6 @@ class ViewClient extends ViewRecord
                         ->label('New estimate')
                         ->icon('heroicon-m-document-duplicate')
                         ->url(CreateEstimate::getUrl(['client' => $this->record->getKey()])),
-                    Action::make('newRecurringInvoice')
-                        ->label('New recurring invoice')
-                        ->icon('heroicon-m-arrow-path')
-                        ->url(CreateRecurringInvoice::getUrl(['client' => $this->record->getKey()])),
                 ])->dropdown(false),
                 DeleteAction::make(),
             ])
@@ -90,7 +85,7 @@ class ViewClient extends ViewRecord
                             ->label('Primary phone'),
                         TextEntry::make('website')
                             ->label('Website')
-                            ->url(static fn ($state) => $state, true)
+                            ->url(static fn($state) => $state, true)
                             ->link(),
                     ]),
                 Section::make('Additional Details')
