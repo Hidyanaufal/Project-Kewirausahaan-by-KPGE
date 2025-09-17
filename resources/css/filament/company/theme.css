@@ -223,3 +223,14 @@
 .fi-wi-stats-overview-stat {
     overflow: hidden;
 }
+
+.fi-ta-content {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.fi-ta-content::-webkit-scrollbar {
+    display: none;
+}

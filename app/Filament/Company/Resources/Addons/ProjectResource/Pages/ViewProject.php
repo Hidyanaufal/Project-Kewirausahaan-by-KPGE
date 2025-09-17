@@ -26,6 +26,7 @@ class ViewProject extends ViewRecord
             RelationManagers\EstimatesRelationManager::class,
             RelationManagers\InvoicesRelationManager::class,
             RelationManagers\BillsRelationManager::class,
+            RelationManagers\AttachmentsRelationManager::class,
         ];
     }
 

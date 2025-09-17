@@ -14,6 +14,8 @@ use League\Csv\CannotInsertRecord;
 use League\Csv\Exception;
 use League\Csv\Writer;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ExportService
 {
@@ -285,5 +287,81 @@ class ExportService
         return response()->streamDownload(function () use ($pdf) {
             echo $pdf->inline();
         }, $filename);
+    }
+
+    public function exportToExcel(Company $company, ExportableReport $report, ?string $startDate = null, ?string $endDate = null, ?string $activeTab = null): BinaryFileResponse
+    {
+        if ($startDate && $endDate) {
+            $formattedStartDate = Carbon::parse($startDate)->toDateString();
+            $formattedEndDate = Carbon::parse($endDate)->toDateString();
+            $dateLabel = $formattedStartDate . ' to ' . $formattedEndDate;
+        } else {
+            $formattedAsOfDate = Carbon::parse($endDate)->toDateString();
+            $dateLabel = $formattedAsOfDate;
+        }
+
+        $timestamp = company_now()->format('Y-m-d_H-i-s');
+
+        $filename = $company->name . ' ' . $report->getTitle() . ' ' . $dateLabel . ' ' . $timestamp . '.xlsx';
+
+        // bikin exportable class on the fly
+        $export = new class($company, $report, $startDate, $endDate, $activeTab) implements \Maatwebsite\Excel\Concerns\FromArray {
+            public function __construct(
+                protected Company $company,
+                protected ExportableReport $report,
+                protected ?string $startDate,
+                protected ?string $endDate,
+                protected ?string $activeTab,
+            ) {}
+
+            public function array(): array
+            {
+                $rows = [];
+
+                if ($this->startDate && $this->endDate) {
+                    $defaultStartDateFormat = Carbon::parse($this->startDate)->toDefaultDateFormat();
+                    $defaultEndDateFormat = Carbon::parse($this->endDate)->toDefaultDateFormat();
+                    $dateLabel = 'Date Range: ' . $defaultStartDateFormat . ' to ' . $defaultEndDateFormat;
+                } else {
+                    $dateLabel = 'As of ' . Carbon::parse($this->endDate)->toDefaultDateFormat();
+                }
+
+                $rows[] = [$this->report->getTitle()];
+                $rows[] = [$this->company->name];
+                $rows[] = [$dateLabel];
+                $rows[] = [];
+
+                if ($this->activeTab === 'summary') {
+                    $rows[] = $this->report->getSummaryHeaders();
+                    foreach ($this->report->getSummaryCategories() as $category) {
+                        if (filled($category->header)) {
+                            $rows[] = $category->header;
+                        }
+
+                        foreach ($category->types ?? [] as $type) {
+                            $rows[] = $type->summary;
+                        }
+
+                        if (filled($category->summary)) {
+                            $rows[] = $category->summary;
+                        }
+                    }
+                } else {
+                    $rows[] = $this->report->getHeaders();
+                    foreach ($this->report->getCategories() as $category) {
+                        if ($category->header) {
+                            $rows[] = $category->header;
+                        }
+                        foreach ($category->data as $row) {
+                            $rows[] = array_values($row);
+                        }
+                    }
+                }
+
+                return $rows;
+            }
+        };
+
+        return Excel::download($export, $filename);
     }
 }

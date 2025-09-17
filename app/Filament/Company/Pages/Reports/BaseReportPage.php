@@ -20,6 +20,7 @@ use Filament\Support\Enums\IconPosition;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Livewire\Attributes\Computed;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 abstract class BaseReportPage extends Page
@@ -40,6 +41,8 @@ abstract class BaseReportPage extends Page
     abstract public function exportCSV(): StreamedResponse;
 
     abstract public function exportPDF(): StreamedResponse;
+
+    // abstract public function exportEXCEL(): BinaryFileResponse;
 
     abstract protected function getTransformer(ReportDTO $reportDTO): ExportableReport;
 
@@ -92,7 +95,7 @@ abstract class BaseReportPage extends Page
         $flatFields = $this->getFiltersForm()->getFlatFields();
 
         /** @var DateRangeSelect|null $dateRangeField */
-        $dateRangeField = Arr::first($flatFields, static fn ($field) => $field instanceof DateRangeSelect);
+        $dateRangeField = Arr::first($flatFields, static fn($field) => $field instanceof DateRangeSelect);
 
         if (! $dateRangeField) {
             return;
@@ -224,11 +227,11 @@ abstract class BaseReportPage extends Page
             ActionGroup::make([
                 Action::make('exportCSV')
                     ->label('CSV')
-                    ->action(fn () => $this->exportCSV()),
+                    ->action(fn() => $this->exportCSV()),
                 Action::make('exportPDF')
                     ->label('PDF')
                     ->hidden(is_demo_environment())
-                    ->action(fn () => $this->exportPDF()),
+                    ->action(fn() => $this->exportPDF()),
             ])
                 ->label('Export')
                 ->button()

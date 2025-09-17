@@ -7,6 +7,7 @@ use App\Enums\Addons\ProjectStatus;
 use App\Models\Accounting\Bill;
 use App\Models\Accounting\Estimate;
 use App\Models\Accounting\Invoice;
+use App\Models\Addons\Attachment;
 use App\Models\Common\Client;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
@@ -69,5 +70,10 @@ class Project extends Model
     public function bills(): HasMany
     {
         return $this->hasMany(Bill::class);
+    }
+
+    public function attachments()
+    {
+        return $this->morphMany(Attachment::class, 'attachable');
     }
 }
