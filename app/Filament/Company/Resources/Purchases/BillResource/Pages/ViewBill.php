@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Resources\Purchases\BillResource\Pages;
 
+use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers\AttachmentsRelationManager;
 use App\Filament\Company\Resources\Purchases\BillResource;
 use App\Filament\Company\Resources\Purchases\VendorResource;
 use App\Models\Accounting\Bill;
@@ -54,14 +55,14 @@ class ViewBill extends ViewRecord
                             ->badge(),
                         TextEntry::make('vendor.name')
                             ->label('Vendor')
-                            ->url(static fn (Bill $record) => $record->vendor_id ? VendorResource::getUrl('view', ['record' => $record->vendor_id]) : null)
+                            ->url(static fn(Bill $record) => $record->vendor_id ? VendorResource::getUrl('view', ['record' => $record->vendor_id]) : null)
                             ->link(),
                         TextEntry::make('total')
                             ->label('Total')
-                            ->currency(static fn (Bill $record) => $record->currency_code),
+                            ->currency(static fn(Bill $record) => $record->currency_code),
                         TextEntry::make('amount_due')
                             ->label('Amount due')
-                            ->currency(static fn (Bill $record) => $record->currency_code),
+                            ->currency(static fn(Bill $record) => $record->currency_code),
                         TextEntry::make('date')
                             ->label('Date')
                             ->date(),
@@ -79,6 +80,7 @@ class ViewBill extends ViewRecord
     {
         return [
             BillResource\RelationManagers\PaymentsRelationManager::class,
+            AttachmentsRelationManager::class
         ];
     }
 }

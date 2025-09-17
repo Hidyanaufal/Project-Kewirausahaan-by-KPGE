@@ -4,6 +4,7 @@ namespace App\Models\Accounting;
 
 use App\Casts\RateCast;
 use App\Collections\Accounting\DocumentCollection;
+use App\Concerns\HasAttacments;
 use App\Concerns\HasDocumentNumber;
 use App\Enums\Accounting\AdjustmentComputation;
 use App\Enums\Accounting\DocumentDiscountMethod;
@@ -38,6 +39,7 @@ use Livewire\Component;
 class Estimate extends Document
 {
     use HasDocumentNumber;
+    use HasAttacments;
 
     protected $fillable = [
         'company_id',

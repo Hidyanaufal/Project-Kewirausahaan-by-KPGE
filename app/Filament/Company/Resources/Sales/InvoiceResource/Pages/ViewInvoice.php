@@ -3,6 +3,7 @@
 namespace App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 
 use App\Enums\Accounting\DocumentType;
+use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers\AttachmentsRelationManager;
 use App\Filament\Company\Resources\Sales\ClientResource;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Filament\Infolists\Components\BannerEntry;
@@ -57,7 +58,7 @@ class ViewInvoice extends ViewRecord
                     ->label('Inactive adjustments')
                     ->warning()
                     ->icon('heroicon-o-exclamation-triangle')
-                    ->visible(fn (Invoice $record) => $record->hasInactiveAdjustments() && $record->canBeApproved())
+                    ->visible(fn(Invoice $record) => $record->hasInactiveAdjustments() && $record->canBeApproved())
                     ->columnSpanFull()
                     ->description(function (Invoice $record) {
                         $inactiveAdjustments = collect();
@@ -89,11 +90,11 @@ class ViewInvoice extends ViewRecord
                                     ->badge(),
                                 TextEntry::make('client.name')
                                     ->label('Client')
-                                    ->url(static fn (Invoice $record) => $record->client_id ? ClientResource::getUrl('view', ['record' => $record->client_id]) : null)
+                                    ->url(static fn(Invoice $record) => $record->client_id ? ClientResource::getUrl('view', ['record' => $record->client_id]) : null)
                                     ->link(),
                                 TextEntry::make('amount_due')
                                     ->label('Amount due')
-                                    ->currency(static fn (Invoice $record) => $record->currency_code),
+                                    ->currency(static fn(Invoice $record) => $record->currency_code),
                                 TextEntry::make('due_date')
                                     ->label('Due')
                                     ->asRelativeDay(),
@@ -117,6 +118,7 @@ class ViewInvoice extends ViewRecord
     {
         return [
             InvoiceResource\RelationManagers\PaymentsRelationManager::class,
+            AttachmentsRelationManager::class
         ];
     }
 }

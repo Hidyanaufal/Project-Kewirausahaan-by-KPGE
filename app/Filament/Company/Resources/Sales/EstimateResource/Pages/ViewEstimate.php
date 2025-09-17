@@ -3,6 +3,7 @@
 namespace App\Filament\Company\Resources\Sales\EstimateResource\Pages;
 
 use App\Enums\Accounting\DocumentType;
+use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers\AttachmentsRelationManager;
 use App\Filament\Company\Resources\Sales\ClientResource;
 use App\Filament\Company\Resources\Sales\EstimateResource;
 use App\Filament\Infolists\Components\BannerEntry;
@@ -60,7 +61,7 @@ class ViewEstimate extends ViewRecord
                     ->label('Inactive adjustments')
                     ->warning()
                     ->icon('heroicon-o-exclamation-triangle')
-                    ->visible(fn (Estimate $record) => $record->hasInactiveAdjustments() && $record->canBeApproved())
+                    ->visible(fn(Estimate $record) => $record->hasInactiveAdjustments() && $record->canBeApproved())
                     ->columnSpanFull()
                     ->description(function (Estimate $record) {
                         $inactiveAdjustments = collect();
@@ -92,7 +93,7 @@ class ViewEstimate extends ViewRecord
                                     ->badge(),
                                 TextEntry::make('client.name')
                                     ->label('Client')
-                                    ->url(static fn (Estimate $record) => $record->client_id ? ClientResource::getUrl('view', ['record' => $record->client_id]) : null)
+                                    ->url(static fn(Estimate $record) => $record->client_id ? ClientResource::getUrl('view', ['record' => $record->client_id]) : null)
                                     ->link(),
                                 TextEntry::make('expiration_date')
                                     ->label('Expiration date')
@@ -111,5 +112,12 @@ class ViewEstimate extends ViewRecord
                             ->type(DocumentType::Estimate),
                     ]),
             ]);
+    }
+
+    protected function getAllRelationManagers(): array
+    {
+        return [
+            AttachmentsRelationManager::class
+        ];
     }
 }
