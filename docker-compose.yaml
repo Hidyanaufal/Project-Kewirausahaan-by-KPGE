@@ -1,0 +1,69 @@
+services:
+  # PHP Service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mykpg
+    image: tetra/mykpg
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - mykpg_storage:/var/www/storage/app
+    networks:
+      - mykpg_network
+
+  # Queue Worker Service
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mykpg_queue
+    image: tetra/mykpg
+    restart: unless-stopped
+    working_dir: /var/www
+    command: php artisan queue:work --verbose --tries=3 --timeout=300
+    volumes:
+      - ./:/var/www
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - mykpg_storage:/var/www/storage/app
+    depends_on:
+      - db
+    networks:
+      - mykpg_network
+
+  # Nginx Service
+  nginx:
+    image: nginx:alpine
+    container_name: mykpg_nginx
+    restart: unless-stopped
+    ports:
+      - "8011:80"
+    volumes:
+      - ./:/var/www
+      - ./nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - mykpg_network
+
+  # MySQL Service
+  db:
+    image: mysql
+    container_name: mykpg_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mykpg_db_storage:/var/lib/mysql
+    networks:
+      - mykpg_network
+
+networks:
+  mykpg_network:
+    driver: bridge
+
+volumes:
+  mykpg_storage: {}
+  mykpg_db_storage: {}
