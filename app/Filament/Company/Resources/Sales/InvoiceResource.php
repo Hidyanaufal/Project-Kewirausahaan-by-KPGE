@@ -48,6 +48,8 @@ use Illuminate\Support\Facades\Auth;
 
 class InvoiceResource extends Resource
 {
+    use \App\Concerns\HasPermissionCheck;
+
     protected static ?string $model = Invoice::class;
 
     public static function form(Form $form): Form
@@ -88,7 +90,7 @@ class InvoiceResource extends Resource
                             Forms\Components\Group::make([
                                 Forms\Components\TextInput::make('invoice_number')
                                     ->label('Invoice number')
-                                    ->default(static fn () => Invoice::getNextDocumentNumber()),
+                                    ->default(static fn() => Invoice::getNextDocumentNumber()),
                                 Forms\Components\TextInput::make('order_number')
                                     ->label('P.O/S.O Number'),
                                 Cluster::make([
@@ -420,19 +422,19 @@ class InvoiceResource extends Resource
                     ->searchable()
                     ->hiddenOn(InvoicesRelationManager::class),
                 Tables\Columns\TextColumn::make('total')
-                    ->currencyWithConversion(static fn (Invoice $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn(Invoice $record) => $record->currency_code)
                     ->sortable()
                     ->toggleable()
                     ->alignEnd(),
                 Tables\Columns\TextColumn::make('amount_paid')
                     ->label('Amount paid')
-                    ->currencyWithConversion(static fn (Invoice $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn(Invoice $record) => $record->currency_code)
                     ->sortable()
                     ->alignEnd()
                     ->showOnTabs(['unpaid']),
                 Tables\Columns\TextColumn::make('amount_due')
                     ->label('Amount due')
-                    ->currencyWithConversion(static fn (Invoice $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn(Invoice $record) => $record->currency_code)
                     ->sortable()
                     ->alignEnd()
                     ->hideOnTabs(['draft']),
@@ -449,8 +451,8 @@ class InvoiceResource extends Resource
                 Tables\Filters\TernaryFilter::make('has_payments')
                     ->label('Has payments')
                     ->queries(
-                        true: fn (Builder $query) => $query->whereHas('payments'),
-                        false: fn (Builder $query) => $query->whereDoesntHave('payments'),
+                        true: fn(Builder $query) => $query->whereHas('payments'),
+                        false: fn(Builder $query) => $query->whereDoesntHave('payments'),
                     ),
                 Tables\Filters\SelectFilter::make('source_type')
                     ->label('Source type')
@@ -485,9 +487,9 @@ class InvoiceResource extends Resource
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ActionGroup::make([
                         Tables\Actions\EditAction::make()
-                            ->url(static fn (Invoice $record) => Pages\EditInvoice::getUrl(['record' => $record])),
+                            ->url(static fn(Invoice $record) => Pages\EditInvoice::getUrl(['record' => $record])),
                         Tables\Actions\ViewAction::make()
-                            ->url(static fn (Invoice $record) => Pages\ViewInvoice::getUrl(['record' => $record])),
+                            ->url(static fn(Invoice $record) => Pages\ViewInvoice::getUrl(['record' => $record])),
                         Invoice::getReplicateAction(Tables\Actions\ReplicateAction::class),
                         Invoice::getApproveDraftAction(Tables\Actions\Action::class),
                         Invoice::getMarkAsSentAction(Tables\Actions\Action::class),
@@ -497,7 +499,7 @@ class InvoiceResource extends Resource
                             ->visible(function (Invoice $record) {
                                 return $record->canRecordPayment();
                             })
-                            ->url(fn (Invoice $record) => Pages\RecordPayments::getUrl([
+                            ->url(fn(Invoice $record) => Pages\RecordPayments::getUrl([
                                 'tableFilters' => [
                                     'client_id' => ['value' => $record->client_id],
                                     'currency_code' => ['value' => $record->currency_code],
@@ -557,7 +559,7 @@ class InvoiceResource extends Resource
                         ->successNotificationTitle('Invoices approved')
                         ->failureNotificationTitle('Failed to Approve Invoices')
                         ->before(function (Collection $records, Tables\Actions\BulkAction $action) {
-                            $isInvalid = $records->contains(fn (Invoice $record) => ! $record->canBeApproved());
+                            $isInvalid = $records->contains(fn(Invoice $record) => ! $record->canBeApproved());
 
                             if ($isInvalid) {
                                 Notification::make()
@@ -584,7 +586,7 @@ class InvoiceResource extends Resource
                         ->successNotificationTitle('Invoices sent')
                         ->failureNotificationTitle('Failed to Mark Invoices as Sent')
                         ->before(function (Collection $records, Tables\Actions\BulkAction $action) {
-                            $isInvalid = $records->contains(fn (Invoice $record) => ! $record->canBeMarkedAsSent());
+                            $isInvalid = $records->contains(fn(Invoice $record) => ! $record->canBeMarkedAsSent());
 
                             if ($isInvalid) {
                                 Notification::make()

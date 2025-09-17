@@ -23,6 +23,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class VendorResource extends Resource
 {
+    use \App\Concerns\HasPermissionCheck;
+
     protected static ?string $model = Vendor::class;
 
     public static function form(Form $form): Form
@@ -47,12 +49,12 @@ class VendorResource extends Resource
                                     ->columnSpanFull(),
                                 CreateCurrencySelect::make('currency_code')
                                     ->softRequired()
-                                    ->visible(static fn (Forms\Get $get) => VendorType::parse($get('type')) === VendorType::Regular),
+                                    ->visible(static fn(Forms\Get $get) => VendorType::parse($get('type')) === VendorType::Regular),
                                 Forms\Components\Select::make('contractor_type')
                                     ->label('Contractor type')
                                     ->required()
                                     ->live()
-                                    ->visible(static fn (Forms\Get $get) => VendorType::parse($get('type')) === VendorType::Contractor)
+                                    ->visible(static fn(Forms\Get $get) => VendorType::parse($get('type')) === VendorType::Contractor)
                                     ->options(ContractorType::class),
                                 Forms\Components\TextInput::make('ssn')
                                     ->label('Social security number')
@@ -61,7 +63,7 @@ class VendorResource extends Resource
                                     ->mask('999-99-9999')
                                     ->stripCharacters('-')
                                     ->maxLength(11)
-                                    ->visible(static fn (Forms\Get $get) => ContractorType::parse($get('contractor_type')) === ContractorType::Individual)
+                                    ->visible(static fn(Forms\Get $get) => ContractorType::parse($get('contractor_type')) === ContractorType::Individual)
                                     ->maxLength(255),
                                 Forms\Components\TextInput::make('ein')
                                     ->label('Employer identification number')
@@ -70,7 +72,7 @@ class VendorResource extends Resource
                                     ->mask('99-9999999')
                                     ->stripCharacters('-')
                                     ->maxLength(10)
-                                    ->visible(static fn (Forms\Get $get) => ContractorType::parse($get('contractor_type')) === ContractorType::Business)
+                                    ->visible(static fn(Forms\Get $get) => ContractorType::parse($get('contractor_type')) === ContractorType::Business)
                                     ->maxLength(255),
                                 Forms\Components\TextInput::make('account_number')
                                     ->maxLength(255),
@@ -133,7 +135,7 @@ class VendorResource extends Resource
                                                     ->maxLength(15),
                                             ])->maxItems(1),
                                     ])
-                                    ->deletable(fn (PhoneBuilder $builder) => $builder->getItemsCount() > 1)
+                                    ->deletable(fn(PhoneBuilder $builder) => $builder->getItemsCount() > 1)
                                     ->reorderable(false)
                                     ->blockNumbers(false)
                                     ->addActionLabel('Add Phone'),
@@ -165,13 +167,13 @@ class VendorResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()
                     ->sortable()
-                    ->description(static fn (Vendor $vendor) => $vendor->contact?->full_name),
+                    ->description(static fn(Vendor $vendor) => $vendor->contact?->full_name),
                 Tables\Columns\TextColumn::make('contact.email')
                     ->label('Email')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('contact.first_available_phone')
                     ->label('Phone')
-                    ->state(static fn (Vendor $vendor) => $vendor->contact?->first_available_phone),
+                    ->state(static fn(Vendor $vendor) => $vendor->contact?->first_available_phone),
                 Tables\Columns\TextColumn::make('address.address_string')
                     ->label('Address')
                     ->searchable()
@@ -201,7 +203,7 @@ class VendorResource extends Resource
                     })
                     ->sortable(query: function (Builder $query, string $direction) {
                         return $query
-                            ->withSum(['bills' => fn (Builder $query) => $query->unpaid()], 'amount_due')
+                            ->withSum(['bills' => fn(Builder $query) => $query->unpaid()], 'amount_due')
                             ->orderBy('bills_sum_amount_due', $direction);
                     })
                     ->currency(convert: false)

@@ -11,6 +11,7 @@ use App\Enums\Accounting\InvoiceStatus;
 use App\Enums\Accounting\JournalEntryType;
 use App\Enums\Accounting\TransactionType;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
+use App\Models\Addons\Project;
 use App\Models\Banking\BankAccount;
 use App\Models\Common\Client;
 use App\Models\Company;
@@ -468,7 +469,7 @@ class Invoice extends Document
             $adjustmentAmount = abs($imbalance);
 
             // Find last entry of target type and adjust it
-            $lastKey = array_key_last(array_filter($journalEntryData, fn ($entry) => $entry['type'] === $targetType, ARRAY_FILTER_USE_BOTH));
+            $lastKey = array_key_last(array_filter($journalEntryData, fn($entry) => $entry['type'] === $targetType, ARRAY_FILTER_USE_BOTH));
             $journalEntryData[$lastKey]['amount_in_default_currency'] += $adjustmentAmount;
 
             if ($targetType === JournalEntryType::Debit) {
@@ -533,7 +534,7 @@ class Invoice extends Document
         return $action::make('blockedApprove')
             ->label('Approve')
             ->icon('heroicon-m-check-circle')
-            ->visible(fn (self $record) => $record->canBeApproved() && $record->hasInactiveAdjustments())
+            ->visible(fn(self $record) => $record->canBeApproved() && $record->hasInactiveAdjustments())
             ->requiresConfirmation()
             ->modalAlignment(Alignment::Start)
             ->modalIconColor('danger')
@@ -690,5 +691,10 @@ class Invoice extends Document
 
             $replica->adjustments()->sync($lineItem->adjustments->pluck('id'));
         });
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 }

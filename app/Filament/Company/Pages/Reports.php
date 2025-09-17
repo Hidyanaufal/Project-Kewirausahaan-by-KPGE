@@ -23,6 +23,8 @@ use Filament\Support\Colors\Color;
 
 class Reports extends Page
 {
+    use \App\Concerns\HasPermissionCheck;
+
     protected static ?string $navigationIcon = 'heroicon-o-document-chart-bar';
 
     protected static string $view = 'filament.company.pages.reports';
@@ -35,7 +37,7 @@ class Reports extends Page
                 ->parentItem(static::getNavigationParentItem())
                 ->icon(static::getNavigationIcon())
                 ->activeIcon(static::getActiveNavigationIcon())
-                ->isActiveWhen(fn (): bool => request()->routeIs([
+                ->isActiveWhen(fn(): bool => request()->routeIs([
                     static::getRouteName(),
                     static::getRouteName() . '.*',
                 ]))

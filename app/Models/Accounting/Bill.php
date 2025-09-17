@@ -11,6 +11,7 @@ use App\Enums\Accounting\DocumentType;
 use App\Enums\Accounting\JournalEntryType;
 use App\Enums\Accounting\TransactionType;
 use App\Filament\Company\Resources\Purchases\BillResource;
+use App\Models\Addons\Project;
 use App\Models\Banking\BankAccount;
 use App\Models\Common\Vendor;
 use App\Models\Company;
@@ -349,7 +350,7 @@ class Bill extends Document
             $adjustmentAmount = abs($imbalance);
 
             // Find last entry of target type and adjust it
-            $lastKey = array_key_last(array_filter($journalEntryData, fn ($entry) => $entry['type'] === $targetType, ARRAY_FILTER_USE_BOTH));
+            $lastKey = array_key_last(array_filter($journalEntryData, fn($entry) => $entry['type'] === $targetType, ARRAY_FILTER_USE_BOTH));
             $journalEntryData[$lastKey]['amount_in_default_currency'] += $adjustmentAmount;
 
             if ($targetType === JournalEntryType::Debit) {
@@ -460,5 +461,10 @@ class Bill extends Document
 
             $replica->adjustments()->sync($lineItem->adjustments->pluck('id'));
         });
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 }

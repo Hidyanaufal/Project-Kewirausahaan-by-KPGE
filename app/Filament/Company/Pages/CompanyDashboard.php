@@ -2,7 +2,6 @@
 
 namespace App\Filament\Company\Pages;
 
-use App\Concerns\HasPermissionCheck;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Form;
 use Filament\Pages\Dashboard;
@@ -11,7 +10,7 @@ use App\Filament\Company\Widgets;
 
 class CompanyDashboard extends Dashboard
 {
-    use HasPermissionCheck;
+    use \App\Concerns\HasPermissionCheck;
     use HasFiltersForm;
 
     protected static string $routePath = '/';
@@ -47,6 +46,7 @@ class CompanyDashboard extends Dashboard
     {
         return [
             Widgets\IncomeOverview::class,
+            Widgets\IncomeTrendChart::class,
         ];
     }
 }

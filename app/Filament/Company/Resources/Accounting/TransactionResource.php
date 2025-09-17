@@ -31,6 +31,8 @@ use Illuminate\Support\Carbon;
 
 class TransactionResource extends Resource
 {
+    use \App\Concerns\HasPermissionCheck;
+
     protected static ?string $model = Transaction::class;
 
     protected static ?string $recordTitleAttribute = 'description';
@@ -81,33 +83,33 @@ class TransactionResource extends Resource
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('account.name')
                     ->label('Category')
-                    ->prefix(static fn (Transaction $transaction) => $transaction->type->isTransfer() ? 'Transfer to ' : null)
+                    ->prefix(static fn(Transaction $transaction) => $transaction->type->isTransfer() ? 'Transfer to ' : null)
                     ->searchable()
                     ->toggleable()
-                    ->state(static fn (Transaction $transaction) => $transaction->account->name ?? 'Journal Entry'),
+                    ->state(static fn(Transaction $transaction) => $transaction->account->name ?? 'Journal Entry'),
                 Tables\Columns\TextColumn::make('amount')
                     ->label('Amount')
-                    ->weight(static fn (Transaction $transaction) => $transaction->reviewed ? null : FontWeight::SemiBold)
+                    ->weight(static fn(Transaction $transaction) => $transaction->reviewed ? null : FontWeight::SemiBold)
                     ->color(
-                        static fn (Transaction $transaction) => match ($transaction->type) {
+                        static fn(Transaction $transaction) => match ($transaction->type) {
                             TransactionType::Deposit => Color::rgb('rgb(' . Color::Green[700] . ')'),
                             TransactionType::Journal => 'primary',
                             default => null,
                         }
                     )
                     ->sortable()
-                    ->currency(static fn (Transaction $transaction) => $transaction->bankAccount?->account->currency_code),
+                    ->currency(static fn(Transaction $transaction) => $transaction->bankAccount?->account->currency_code),
             ])
             ->defaultSort('posted_at', 'desc')
             ->filters([
                 Tables\Filters\SelectFilter::make('bank_account_id')
                     ->label('Account')
                     ->searchable()
-                    ->options(static fn () => Transaction::getBankAccountOptions(excludeArchived: false)),
+                    ->options(static fn() => Transaction::getBankAccountOptions(excludeArchived: false)),
                 Tables\Filters\SelectFilter::make('account_id')
                     ->label('Category')
                     ->multiple()
-                    ->options(static fn () => Transaction::getChartAccountOptions()),
+                    ->options(static fn() => Transaction::getChartAccountOptions()),
                 Tables\Filters\TernaryFilter::make('reviewed')
                     ->label('Status')
                     ->trueLabel('Reviewed')
@@ -120,7 +122,7 @@ class TransactionResource extends Resource
                     ->default(false),
                 Tables\Filters\SelectFilter::make('payee')
                     ->label('Payee')
-                    ->options(static fn () => Transaction::getPayeeOptions())
+                    ->options(static fn() => Transaction::getPayeeOptions())
                     ->searchable()
                     ->query(function (Builder $query, array $data): Builder {
                         if (empty($data['value'])) {
@@ -140,7 +142,7 @@ class TransactionResource extends Resource
                 static::buildDateRangeFilter('posted_at', 'Posted', true),
                 static::buildDateRangeFilter('updated_at', 'Last modified'),
             ])
-            ->filtersFormSchema(fn (array $filters): array => [
+            ->filtersFormSchema(fn(array $filters): array => [
                 Grid::make()
                     ->schema([
                         $filters['bank_account_id'],
@@ -164,19 +166,19 @@ class TransactionResource extends Resource
                 Tables\Actions\Action::make('markAsReviewed')
                     ->label('Mark as reviewed')
                     ->view('filament.company.components.tables.actions.mark-as-reviewed')
-                    ->icon(static fn (Transaction $transaction) => $transaction->reviewed ? 'heroicon-s-check-circle' : 'heroicon-o-check-circle')
-                    ->color(static fn (Transaction $transaction, Tables\Actions\Action $action) => match (static::determineTransactionState($transaction, $action)) {
+                    ->icon(static fn(Transaction $transaction) => $transaction->reviewed ? 'heroicon-s-check-circle' : 'heroicon-o-check-circle')
+                    ->color(static fn(Transaction $transaction, Tables\Actions\Action $action) => match (static::determineTransactionState($transaction, $action)) {
                         'reviewed' => 'primary',
                         'unreviewed' => Color::rgb('rgb(' . Color::Gray[600] . ')'),
                         'uncategorized' => 'gray',
                     })
-                    ->tooltip(static fn (Transaction $transaction, Tables\Actions\Action $action) => match (static::determineTransactionState($transaction, $action)) {
+                    ->tooltip(static fn(Transaction $transaction, Tables\Actions\Action $action) => match (static::determineTransactionState($transaction, $action)) {
                         'reviewed' => 'Reviewed',
                         'unreviewed' => 'Mark as reviewed',
                         'uncategorized' => 'Categorize first to mark as reviewed',
                     })
-                    ->disabled(fn (Transaction $transaction): bool => $transaction->isUncategorized())
-                    ->action(fn (Transaction $transaction) => $transaction->update(['reviewed' => ! $transaction->reviewed])),
+                    ->disabled(fn(Transaction $transaction): bool => $transaction->isUncategorized())
+                    ->action(fn(Transaction $transaction) => $transaction->update(['reviewed' => ! $transaction->reviewed])),
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ActionGroup::make([
                         EditTransactionAction::make(),
@@ -186,7 +188,7 @@ class TransactionResource extends Resource
                             ->beforeReplicaSaved(static function (Transaction $replica) {
                                 $replica->description = '(Copy of) ' . $replica->description;
                             })
-                            ->hidden(static fn (Transaction $transaction) => $transaction->transactionable_id)
+                            ->hidden(static fn(Transaction $transaction) => $transaction->transactionable_id)
                             ->after(static function (Transaction $original, Transaction $replica) {
                                 $original->journalEntries->each(function (JournalEntry $entry) use ($replica) {
                                     $entry->replicate([
@@ -215,7 +217,7 @@ class TransactionResource extends Resource
                             $replica->description = '(Copy of) ' . $replica->description;
                         })
                         ->before(function (Collection $records, ReplicateBulkAction $action) {
-                            $isInvalid = $records->contains(fn (Transaction $record) => $record->transactionable_id);
+                            $isInvalid = $records->contains(fn(Transaction $record) => $record->transactionable_id);
 
                             if ($isInvalid) {
                                 Notification::make()
@@ -281,8 +283,8 @@ class TransactionResource extends Resource
             ])
             ->query(function (Builder $query, array $data) use ($fieldPrefix): Builder {
                 $query
-                    ->when($data["{$fieldPrefix}_start_date"], fn (Builder $query, $startDate) => $query->whereDate($fieldPrefix, '>=', $startDate))
-                    ->when($data["{$fieldPrefix}_end_date"], fn (Builder $query, $endDate) => $query->whereDate($fieldPrefix, '<=', $endDate));
+                    ->when($data["{$fieldPrefix}_start_date"], fn(Builder $query, $startDate) => $query->whereDate($fieldPrefix, '>=', $startDate))
+                    ->when($data["{$fieldPrefix}_end_date"], fn(Builder $query, $endDate) => $query->whereDate($fieldPrefix, '<=', $endDate));
 
                 return $query;
             })
@@ -293,7 +295,6 @@ class TransactionResource extends Resource
 
                 return $indicators;
             });
-
     }
 
     public static function addIndicatorForDateRange($data, $startKey, $endKey, $labelPrefix, &$indicators): void

@@ -12,6 +12,8 @@ use Livewire\Attributes\Url;
 
 class LiveCurrency extends Page
 {
+    use \App\Concerns\HasPermissionCheck;
+
     protected static ?string $title = 'Live Currency';
 
     protected static ?string $slug = 'services/live-currency';
@@ -75,7 +77,7 @@ class LiveCurrency extends Page
                 ->parentItem(static::getNavigationParentItem())
                 ->icon(static::getNavigationIcon())
                 ->activeIcon(static::getActiveNavigationIcon())
-                ->isActiveWhen(fn (): bool => request()->routeIs(static::getNavigationItemActiveRoutePattern()))
+                ->isActiveWhen(fn(): bool => request()->routeIs(static::getNavigationItemActiveRoutePattern()))
                 ->sort(static::getNavigationSort())
                 ->badge(static::getNavigationBadge(), color: static::getNavigationBadgeColor())
                 ->badgeTooltip(static::getNavigationBadgeTooltip())

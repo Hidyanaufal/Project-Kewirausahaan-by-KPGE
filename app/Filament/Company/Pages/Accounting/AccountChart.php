@@ -30,6 +30,8 @@ use Livewire\Attributes\Url;
 
 class AccountChart extends Page
 {
+    use \App\Concerns\HasPermissionCheck;
+
     protected static ?string $title = 'Chart of Accounts';
 
     protected static ?string $slug = 'accounting/chart';
@@ -64,8 +66,8 @@ class AccountChart extends Page
             ->label('Edit account')
             ->iconButton()
             ->icon('heroicon-m-pencil-square')
-            ->record(fn (array $arguments) => Account::find($arguments['account']))
-            ->form(fn (Form $form) => $this->getAccountForm($form)->operation('edit'));
+            ->record(fn(array $arguments) => Account::find($arguments['account']))
+            ->form(fn(Form $form) => $this->getAccountForm($form)->operation('edit'));
     }
 
     public function createAccountAction(): Action
@@ -75,8 +77,8 @@ class AccountChart extends Page
             ->model(Account::class)
             ->label('Add a new account')
             ->icon('heroicon-o-plus-circle')
-            ->form(fn (Form $form) => $this->getAccountForm($form)->operation('create'))
-            ->fillForm(fn (array $arguments): array => $this->getAccountFormDefaults($arguments['accountSubtype']));
+            ->form(fn(Form $form) => $this->getAccountForm($form)->operation('create'))
+            ->fillForm(fn(array $arguments): array => $this->getAccountFormDefaults($arguments['accountSubtype']));
     }
 
     private function getAccountFormDefaults(int $accountSubtypeId): array
@@ -134,7 +136,7 @@ class AccountChart extends Page
             ->hiddenOn('edit')
             ->validationAttribute('account code')
             ->unique(table: Account::class, column: 'code', ignoreRecord: true)
-            ->validateAccountCode(static fn (Get $get) => $get('subtype_id'));
+            ->validateAccountCode(static fn(Get $get) => $get('subtype_id'));
     }
 
     protected function getBankAccountFormComponents(): array
@@ -290,8 +292,8 @@ class AccountChart extends Page
             AccountSubtype::where('category', $this->activeTab)->get() :
             AccountSubtype::all();
 
-        return $accountSubtypes->groupBy(fn (AccountSubtype $accountSubtype) => $accountSubtype->type->getLabel())
-            ->map(fn (Collection $accountSubtypes, string $type) => $accountSubtypes->mapWithKeys(static fn (AccountSubtype $accountSubtype) => [$accountSubtype->id => $accountSubtype->name]))
+        return $accountSubtypes->groupBy(fn(AccountSubtype $accountSubtype) => $accountSubtype->type->getLabel())
+            ->map(fn(Collection $accountSubtypes, string $type) => $accountSubtypes->mapWithKeys(static fn(AccountSubtype $accountSubtype) => [$accountSubtype->id => $accountSubtype->name]))
             ->toArray();
     }
 
@@ -301,7 +303,7 @@ class AccountChart extends Page
             CreateAction::make()
                 ->button()
                 ->model(Account::class)
-                ->form(fn (Form $form) => $this->getAccountForm($form, false)->operation('create')),
+                ->form(fn(Form $form) => $this->getAccountForm($form, false)->operation('create')),
         ];
     }
 

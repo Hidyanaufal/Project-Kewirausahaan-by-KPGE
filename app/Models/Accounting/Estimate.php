@@ -11,6 +11,7 @@ use App\Enums\Accounting\EstimateStatus;
 use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Company\Resources\Sales\EstimateResource;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
+use App\Models\Addons\Project;
 use App\Models\Common\Client;
 use App\Models\Company;
 use App\Models\Setting\DocumentDefault;
@@ -507,5 +508,10 @@ class Estimate extends Document
 
             $replica->adjustments()->sync($lineItem->adjustments->pluck('id'));
         });
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 }

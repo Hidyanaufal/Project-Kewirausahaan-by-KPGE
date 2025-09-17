@@ -216,5 +216,10 @@
     "pages": "pages",
     "widgets": "widgets",
     "custom": "custom",
-    "User": "User"
+    "User": "User",
+    "Project Information": "Project Information",
+    "Timeline & Value": "Timeline & Value",
+    "Additional": "Additional",
+    "Project": "Project",
+    "Project Type": "Project Type"
 }

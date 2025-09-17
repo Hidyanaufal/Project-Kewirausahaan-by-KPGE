@@ -2,7 +2,6 @@
 
 namespace App\Filament\Company\Resources\Common;
 
-use App\Concerns\HasPermissionCheck;
 use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\AccountType;
 use App\Enums\Accounting\AdjustmentCategory;
@@ -15,18 +14,16 @@ use App\Filament\Forms\Components\CreateAdjustmentSelect;
 use App\Models\Common\Offering;
 use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
-use JaOcero\RadioDeck\Forms\Components\RadioDeck;
 
 class OfferingResource extends Resource
 {
-    use HasPermissionCheck;
+    use \App\Concerns\HasPermissionCheck;
 
     protected static ?string $model = Offering::class;
 

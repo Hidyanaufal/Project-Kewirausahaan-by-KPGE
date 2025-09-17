@@ -27,6 +27,8 @@ use App\Filament\Company\Pages\Reports;
 use App\Filament\Company\Pages\Service\ConnectedAccount;
 use App\Filament\Company\Pages\Service\LiveCurrency;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
+use App\Filament\Company\Resources\Addons\ProjectResource;
+use App\Filament\Company\Resources\Addons\ProjectTypeResource;
 use App\Filament\Company\Resources\Addons\RoleResource;
 use App\Filament\Company\Resources\Addons\UserResource;
 use App\Filament\Company\Resources\Banking\AccountResource;
@@ -125,50 +127,69 @@ class CompanyPanelProvider extends PanelProvider
                     }),
             ])
             ->colors([
-                'primary' => Color::Blue,
+                'primary' => Color::Green,
             ])
             ->navigation(function (NavigationBuilder $builder): NavigationBuilder {
                 return $builder
                     ->items([
                         ...NavigationHelper::filterNavigationByPermissions(CompanyDashboard::class),
                         ...NavigationHelper::filterNavigationByPermissions(Reports::class),
-                        ...NavigationHelper::filterNavigationByPermissions(Settings::class),
-                        ...NavigationHelper::filterNavigationByPermissions(OfferingResource::class),
-                        ...NavigationHelper::filterNavigationByPermissions(RoleResource::class),
-                        ...NavigationHelper::filterNavigationByPermissions(UserResource::class),
                     ])
                     ->groups([
+                        NavigationGroup::make('Projects')
+                            ->label('Projects')
+                            ->icon('heroicon-o-briefcase')
+                            ->items([
+                                ...NavigationHelper::filterNavigationByPermissions(ProjectTypeResource::class),
+                                ...NavigationHelper::filterNavigationByPermissions(ProjectResource::class),
+                            ]),
+
                         NavigationGroup::make('Sales')
                             ->label('Sales')
-                            ->icon('heroicon-o-currency-dollar')
+                            ->icon('heroicon-o-chart-bar')
                             ->items([
                                 ...NavigationHelper::filterNavigationByPermissions(ClientResource::class),
                                 ...NavigationHelper::filterNavigationByPermissions(EstimateResource::class),
                                 ...NavigationHelper::filterNavigationByPermissions(InvoiceResource::class),
                             ]),
+
                         NavigationGroup::make('Purchases')
                             ->label('Purchases')
-                            ->icon('heroicon-o-shopping-cart')
+                            ->icon('heroicon-o-shopping-bag')
                             ->items([
                                 ...NavigationHelper::filterNavigationByPermissions(BillResource::class),
                                 ...NavigationHelper::filterNavigationByPermissions(VendorResource::class),
                             ]),
+
                         NavigationGroup::make('Accounting')
-                            ->localizeLabel()
-                            ->icon('heroicon-o-clipboard-document-list')
-                            ->extraSidebarAttributes(['class' => 'es-sidebar-group'])
+                            ->label('Accounting')
+                            ->icon('heroicon-o-banknotes')
                             ->items([
                                 ...NavigationHelper::filterNavigationByPermissions(AccountChart::class),
                                 ...NavigationHelper::filterNavigationByPermissions(TransactionResource::class),
                             ]),
+
                         NavigationGroup::make('Banking')
-                            ->localizeLabel()
-                            ->icon('heroicon-o-building-library')
-                            ->items(AccountResource::getNavigationItems()),
-                        NavigationGroup::make('Services')
-                            ->localizeLabel()
-                            ->icon('heroicon-o-wrench-screwdriver')
+                            ->label('Banking')
+                            ->icon('heroicon-o-credit-card')
                             ->items([
+                                ...AccountResource::getNavigationItems(),
+                            ]),
+
+                        NavigationGroup::make('People')
+                            ->label('People')
+                            ->icon('heroicon-o-users')
+                            ->items([
+                                ...NavigationHelper::filterNavigationByPermissions(UserResource::class),
+                                ...NavigationHelper::filterNavigationByPermissions(RoleResource::class),
+                            ]),
+
+                        NavigationGroup::make('Settings')
+                            ->label('Settings')
+                            ->icon('heroicon-o-cog-6-tooth')
+                            ->items([
+                                ...NavigationHelper::filterNavigationByPermissions(Settings::class),
+                                ...NavigationHelper::filterNavigationByPermissions(OfferingResource::class),
                                 ...NavigationHelper::filterNavigationByPermissions(ConnectedAccount::class),
                                 ...NavigationHelper::filterNavigationByPermissions(LiveCurrency::class),
                             ]),

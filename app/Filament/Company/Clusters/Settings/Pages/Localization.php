@@ -90,7 +90,6 @@ class Localization extends Page
             $data = $this->form->getState();
 
             $this->handleRecordUpdate($this->record, $data);
-
         } catch (Halt $exception) {
             return;
         }
@@ -126,7 +125,7 @@ class Localization extends Page
                     ->softRequired()
                     ->localizeLabel()
                     ->options(LocalizationModel::getAllLanguages())
-                    ->disabled(is_demo_environment())
+                    ->disabled()
                     ->searchable(),
                 Select::make('timezone')
                     ->softRequired()
@@ -177,8 +176,8 @@ class Localization extends Page
                         Cluster::make([
                             Select::make('fiscal_year_end_month')
                                 ->softRequired()
-                                ->options(array_combine(range(1, 12), array_map(static fn ($month) => company_today()->month($month)->monthName, range(1, 12))))
-                                ->afterStateUpdated(static fn (Set $set) => $set('fiscal_year_end_day', null))
+                                ->options(array_combine(range(1, 12), array_map(static fn($month) => company_today()->month($month)->monthName, range(1, 12))))
+                                ->afterStateUpdated(static fn(Set $set) => $set('fiscal_year_end_day', null))
                                 ->columnSpan(2)
                                 ->live(),
                             Select::make('fiscal_year_end_day')

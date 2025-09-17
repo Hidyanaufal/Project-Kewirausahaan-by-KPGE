@@ -47,7 +47,11 @@ use Illuminate\Support\Facades\Auth;
 
 class EstimateResource extends Resource
 {
+    use \App\Concerns\HasPermissionCheck;
+
     protected static ?string $model = Estimate::class;
+
+    protected static ?string $modelLabel = 'Quotation';
 
     public static function form(Form $form): Form
     {
@@ -84,7 +88,7 @@ class EstimateResource extends Resource
                             Forms\Components\Group::make([
                                 Forms\Components\TextInput::make('estimate_number')
                                     ->label('Estimate number')
-                                    ->default(static fn () => Estimate::getNextDocumentNumber()),
+                                    ->default(static fn() => Estimate::getNextDocumentNumber()),
                                 Forms\Components\TextInput::make('reference_number')
                                     ->label('Reference number'),
                                 Cluster::make([
@@ -397,7 +401,7 @@ class EstimateResource extends Resource
                     ->searchable()
                     ->hiddenOn(EstimatesRelationManager::class),
                 Tables\Columns\TextColumn::make('total')
-                    ->currencyWithConversion(static fn (Estimate $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn(Estimate $record) => $record->currency_code)
                     ->sortable()
                     ->alignEnd(),
             ])
@@ -427,9 +431,9 @@ class EstimateResource extends Resource
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ActionGroup::make([
                         Tables\Actions\EditAction::make()
-                            ->url(static fn (Estimate $record) => Pages\EditEstimate::getUrl(['record' => $record])),
+                            ->url(static fn(Estimate $record) => Pages\EditEstimate::getUrl(['record' => $record])),
                         Tables\Actions\ViewAction::make()
-                            ->url(static fn (Estimate $record) => Pages\ViewEstimate::getUrl(['record' => $record])),
+                            ->url(static fn(Estimate $record) => Pages\ViewEstimate::getUrl(['record' => $record])),
                         Estimate::getReplicateAction(Tables\Actions\ReplicateAction::class),
                         Estimate::getApproveDraftAction(Tables\Actions\Action::class),
                         Estimate::getMarkAsSentAction(Tables\Actions\Action::class),
@@ -489,7 +493,7 @@ class EstimateResource extends Resource
                         ->successNotificationTitle('Estimates approved')
                         ->failureNotificationTitle('Failed to approve estimates')
                         ->before(function (Collection $records, Tables\Actions\BulkAction $action) {
-                            $isInvalid = $records->contains(fn (Estimate $record) => ! $record->canBeApproved());
+                            $isInvalid = $records->contains(fn(Estimate $record) => ! $record->canBeApproved());
 
                             if ($isInvalid) {
                                 Notification::make()
@@ -516,7 +520,7 @@ class EstimateResource extends Resource
                         ->successNotificationTitle('Estimates sent')
                         ->failureNotificationTitle('Failed to mark estimates as sent')
                         ->before(function (Collection $records, Tables\Actions\BulkAction $action) {
-                            $isInvalid = $records->contains(fn (Estimate $record) => ! $record->canBeMarkedAsSent());
+                            $isInvalid = $records->contains(fn(Estimate $record) => ! $record->canBeMarkedAsSent());
 
                             if ($isInvalid) {
                                 Notification::make()
@@ -543,7 +547,7 @@ class EstimateResource extends Resource
                         ->successNotificationTitle('Estimates accepted')
                         ->failureNotificationTitle('Failed to mark estimates as accepted')
                         ->before(function (Collection $records, Tables\Actions\BulkAction $action) {
-                            $isInvalid = $records->contains(fn (Estimate $record) => ! $record->canBeMarkedAsAccepted());
+                            $isInvalid = $records->contains(fn(Estimate $record) => ! $record->canBeMarkedAsAccepted());
 
                             if ($isInvalid) {
                                 Notification::make()
@@ -574,7 +578,7 @@ class EstimateResource extends Resource
                         ->successNotificationTitle('Estimates declined')
                         ->failureNotificationTitle('Failed to mark estimates as declined')
                         ->before(function (Collection $records, Tables\Actions\BulkAction $action) {
-                            $isInvalid = $records->contains(fn (Estimate $record) => ! $record->canBeMarkedAsDeclined());
+                            $isInvalid = $records->contains(fn(Estimate $record) => ! $record->canBeMarkedAsDeclined());
 
                             if ($isInvalid) {
                                 Notification::make()

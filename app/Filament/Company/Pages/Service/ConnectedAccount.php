@@ -11,6 +11,8 @@ use Illuminate\Contracts\Support\Htmlable;
 
 class ConnectedAccount extends Page
 {
+    use \App\Concerns\HasPermissionCheck;
+
     protected static ?string $title = 'Connected Accounts';
 
     protected static ?string $slug = 'services/connected-accounts';
@@ -53,7 +55,7 @@ class ConnectedAccount extends Page
                 ->parentItem(static::getNavigationParentItem())
                 ->icon(static::getNavigationIcon())
                 ->activeIcon(static::getActiveNavigationIcon())
-                ->isActiveWhen(fn (): bool => request()->routeIs(static::getNavigationItemActiveRoutePattern()))
+                ->isActiveWhen(fn(): bool => request()->routeIs(static::getNavigationItemActiveRoutePattern()))
                 ->sort(static::getNavigationSort())
                 ->badge(static::getNavigationBadge(), color: static::getNavigationBadgeColor())
                 ->badgeTooltip(static::getNavigationBadgeTooltip())
