@@ -11,7 +11,9 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__ . '/../routes/console.php',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->trustProxies(at: "*");
+        $middleware->trustHosts(at: ["*"]);
+        $middleware->validateSignatures(except: ["*"]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

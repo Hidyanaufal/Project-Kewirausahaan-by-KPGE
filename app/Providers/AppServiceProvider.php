@@ -18,6 +18,7 @@ use Filament\Support\Enums\Alignment;
 use Filament\Support\Facades\FilamentAsset;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -35,6 +36,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        URL::forceHttps(env('APP_HTTPS'));
+
         app(\Spatie\Permission\PermissionRegistrar::class)
             ->setPermissionClass(Permission::class)
             ->setRoleClass(Role::class);
