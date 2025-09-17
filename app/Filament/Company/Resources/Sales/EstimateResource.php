@@ -52,6 +52,8 @@ class EstimateResource extends Resource
 
     protected static ?string $model = Estimate::class;
 
+    protected static ?string $modelLabel = 'Quotation';
+
     public static function form(Form $form): Form
     {
         $company = Auth::user()->currentCompany;

@@ -10,6 +10,7 @@ use App\Enums\Accounting\DocumentDiscountMethod;
 use App\Enums\Accounting\DocumentType;
 use App\Enums\Accounting\PaymentMethod;
 use App\Enums\Setting\PaymentTerms;
+use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Filament\Company\Resources\Purchases\BillResource\Pages;
 use App\Filament\Company\Resources\Purchases\VendorResource\RelationManagers\BillsRelationManager;
 use App\Filament\Exports\Accounting\BillExporter;
@@ -62,6 +63,7 @@ class BillResource extends Resource
                     ->schema([
                         Forms\Components\Split::make([
                             Forms\Components\Group::make([
+                                ProjectResource::options(),
                                 CreateVendorSelect::make('vendor_id')
                                     ->label('Vendor')
                                     ->required()

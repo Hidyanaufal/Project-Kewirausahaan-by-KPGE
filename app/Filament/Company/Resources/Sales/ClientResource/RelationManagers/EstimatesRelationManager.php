@@ -10,6 +10,10 @@ class EstimatesRelationManager extends RelationManager
 {
     protected static string $relationship = 'estimates';
 
+    protected static ?string $label = 'Quotation';
+
+    protected static ?string $title = 'Quotation';
+
     protected static bool $isLazy = false;
 
     public function isReadOnly(): bool

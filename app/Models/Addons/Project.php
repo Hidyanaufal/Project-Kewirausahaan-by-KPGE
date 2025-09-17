@@ -4,6 +4,7 @@ namespace App\Models\Addons;
 
 use App\Concerns\CompanyOwned;
 use App\Enums\Addons\ProjectStatus;
+use App\Models\Accounting\Bill;
 use App\Models\Accounting\Estimate;
 use App\Models\Accounting\Invoice;
 use App\Models\Common\Client;
@@ -63,5 +64,10 @@ class Project extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function bills(): HasMany
+    {
+        return $this->hasMany(Bill::class);
     }
 }

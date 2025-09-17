@@ -23,8 +23,9 @@ class ViewProject extends ViewRecord
     protected function getAllRelationManagers(): array
     {
         return [
-            RelationManagers\InvoicesRelationManager::class,
             RelationManagers\EstimatesRelationManager::class,
+            RelationManagers\InvoicesRelationManager::class,
+            RelationManagers\BillsRelationManager::class,
         ];
     }
 

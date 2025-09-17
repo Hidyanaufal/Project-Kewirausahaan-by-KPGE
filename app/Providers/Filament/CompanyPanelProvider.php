@@ -102,7 +102,8 @@ class CompanyPanelProvider extends PanelProvider
                 AuthUIEnhancerPlugin::make()
                     ->formPanelPosition('right')
                     ->emptyPanelBackgroundImageOpacity('60%')
-                    ->emptyPanelBackgroundImageUrl('/image/backdrop.jpg'),
+                    ->emptyPanelBackgroundImageUrl('/image/backdrop.jpg')
+                    ->showEmptyPanelOnMobile(),
                 FilamentShieldPlugin::make(),
                 FilamentCompanies::make()
                     ->userPanel('user')
