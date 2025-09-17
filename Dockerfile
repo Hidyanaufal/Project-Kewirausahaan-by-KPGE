@@ -10,7 +10,11 @@ RUN apt-get update && apt-get install -y \
     zip \
     unzip \
     git \
-    curl
+    curl \
+    vim \
+    wkhtmltopdf \
+    xfonts-75dpi \
+    xfonts-base
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
