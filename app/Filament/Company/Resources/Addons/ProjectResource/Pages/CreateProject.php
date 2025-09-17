@@ -6,12 +6,25 @@ use App\Concerns\HasMediumContentWidth;
 use App\Enums\Addons\ProjectStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource;
 use Filament\Resources\Pages\CreateRecord;
+use Livewire\Attributes\Url;
 
 class CreateProject extends CreateRecord
 {
     use HasMediumContentWidth;
 
+    #[Url(as: 'client')]
+    public ?int $clientId = null;
+
     protected static string $resource = ProjectResource::class;
+
+    public function mount(): void
+    {
+        parent::mount();
+
+        if ($this->clientId) {
+            $this->data['client_id'] = $this->clientId;
+        }
+    }
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {

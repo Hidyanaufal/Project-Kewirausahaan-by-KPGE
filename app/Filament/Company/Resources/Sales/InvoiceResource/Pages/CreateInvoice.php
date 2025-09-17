@@ -6,6 +6,7 @@ use App\Concerns\HandlePageRedirect;
 use App\Concerns\ManagesLineItems;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Models\Accounting\Invoice;
+use App\Models\Addons\Project;
 use App\Models\Common\Client;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\MaxWidth;
@@ -22,9 +23,17 @@ class CreateInvoice extends CreateRecord
     #[Url(as: 'client')]
     public ?int $clientId = null;
 
+    #[Url(as: 'project')]
+    public ?int $projectId = null;
+
     public function mount(): void
     {
         parent::mount();
+
+        if ($this->projectId) {
+            $this->data['project_id'] = $this->projectId;
+            $this->clientId = Project::find($this->projectId)->client_id;
+        }
 
         if ($this->clientId) {
             $this->data['client_id'] = $this->clientId;

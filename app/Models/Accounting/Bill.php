@@ -4,6 +4,7 @@ namespace App\Models\Accounting;
 
 use App\Casts\RateCast;
 use App\Collections\Accounting\DocumentCollection;
+use App\Concerns\HasDocumentNumber;
 use App\Enums\Accounting\AdjustmentComputation;
 use App\Enums\Accounting\BillStatus;
 use App\Enums\Accounting\DocumentDiscountMethod;
@@ -35,6 +36,8 @@ use Illuminate\Support\Carbon;
 #[ObservedBy(BillObserver::class)]
 class Bill extends Document
 {
+    use HasDocumentNumber;
+
     protected $table = 'bills';
 
     protected $fillable = [
@@ -58,6 +61,7 @@ class Bill extends Document
         'notes',
         'created_by',
         'updated_by',
+        'project_id',
     ];
 
     protected $casts = [
@@ -69,6 +73,22 @@ class Bill extends Document
         'discount_computation' => AdjustmentComputation::class,
         'discount_rate' => RateCast::class,
     ];
+
+    public function getNumberColumn(): string
+    {
+        return 'bill_number';
+    }
+
+    public function getDocumentPrefix(): string
+    {
+        $company ??= auth()->user()?->currentCompany;
+        if (! $company) {
+            throw new \RuntimeException('No current company is set for the user.');
+        }
+        $defaultSetting = $company->defaultBill;
+        $numberPrefix = $defaultSetting->number_prefix ?? '';
+        return $numberPrefix;
+    }
 
     public function vendor(): BelongsTo
     {

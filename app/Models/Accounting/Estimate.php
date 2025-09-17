@@ -4,6 +4,7 @@ namespace App\Models\Accounting;
 
 use App\Casts\RateCast;
 use App\Collections\Accounting\DocumentCollection;
+use App\Concerns\HasDocumentNumber;
 use App\Enums\Accounting\AdjustmentComputation;
 use App\Enums\Accounting\DocumentDiscountMethod;
 use App\Enums\Accounting\DocumentType;
@@ -36,6 +37,8 @@ use Livewire\Component;
 #[ObservedBy(EstimateObserver::class)]
 class Estimate extends Document
 {
+    use HasDocumentNumber;
+
     protected $fillable = [
         'company_id',
         'client_id',
@@ -65,6 +68,7 @@ class Estimate extends Document
         'footer',
         'created_by',
         'updated_by',
+        'project_id',
     ];
 
     protected $casts = [
@@ -84,6 +88,22 @@ class Estimate extends Document
     protected $appends = [
         'logo_url',
     ];
+
+    public function getNumberColumn(): string
+    {
+        return 'estimate_number';
+    }
+
+    public function getDocumentPrefix(): string
+    {
+        $company ??= auth()->user()?->currentCompany;
+        if (! $company) {
+            throw new \RuntimeException('No current company is set for the user.');
+        }
+        $defaultSetting = $company->defaultEstimate;
+        $numberPrefix = $defaultSetting->number_prefix ?? '';
+        return $numberPrefix;
+    }
 
     protected function logoUrl(): Attribute
     {

@@ -4,7 +4,6 @@ namespace App\Filament\Company\Resources\Sales\ClientResource\RelationManagers;
 
 use App\Filament\Company\Resources\Sales\EstimateResource;
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Tables;
 use Filament\Tables\Table;
 
 class EstimatesRelationManager extends RelationManager
@@ -20,10 +19,6 @@ class EstimatesRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return EstimateResource::table($table)
-            ->headerActions([
-                Tables\Actions\CreateAction::make()
-                    ->url(EstimateResource\Pages\CreateEstimate::getUrl(['client' => $this->getOwnerRecord()->getKey()])),
-            ]);
+        return EstimateResource::table($table);
     }
 }

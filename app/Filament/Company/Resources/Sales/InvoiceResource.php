@@ -9,6 +9,7 @@ use App\Enums\Accounting\DocumentDiscountMethod;
 use App\Enums\Accounting\DocumentType;
 use App\Enums\Accounting\InvoiceStatus;
 use App\Enums\Setting\PaymentTerms;
+use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Filament\Company\Resources\Sales\ClientResource\RelationManagers\InvoicesRelationManager;
 use App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 use App\Filament\Company\Resources\Sales\InvoiceResource\Widgets;
@@ -67,6 +68,7 @@ class InvoiceResource extends Resource
                     ->schema([
                         Forms\Components\Split::make([
                             Forms\Components\Group::make([
+                                ProjectResource::options(),
                                 CreateClientSelect::make('client_id')
                                     ->label('Client')
                                     ->required()

@@ -2,14 +2,14 @@
 
 namespace App\Filament\Company\Resources\Sales\ClientResource\RelationManagers;
 
-use App\Filament\Company\Resources\Sales\RecurringInvoiceResource;
+use App\Filament\Company\Resources\Addons\ProjectResource;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
 
-class RecurringInvoicesRelationManager extends RelationManager
+class ProjectsRelationManager extends RelationManager
 {
-    protected static string $relationship = 'recurringInvoices';
+    protected static string $relationship = 'projects';
 
     protected static bool $isLazy = false;
 
@@ -20,10 +20,10 @@ class RecurringInvoicesRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return RecurringInvoiceResource::table($table)
+        return ProjectResource::table($table)
             ->headerActions([
                 Tables\Actions\CreateAction::make()
-                    ->url(RecurringInvoiceResource\Pages\CreateRecurringInvoice::getUrl(['client' => $this->getOwnerRecord()->getKey()])),
+                    ->url(ProjectResource\Pages\CreateProject::getUrl(['client' => $this->getOwnerRecord()->getKey()])),
             ]);
     }
 }

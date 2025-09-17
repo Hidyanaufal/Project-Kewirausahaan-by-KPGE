@@ -9,6 +9,7 @@ use App\Models\Accounting\Estimate;
 use App\Models\Accounting\Invoice;
 use App\Models\Accounting\RecurringInvoice;
 use App\Models\Accounting\Transaction;
+use App\Models\Addons\Project;
 use App\Models\Setting\Currency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -278,5 +279,10 @@ class Client extends Model
     public function recurringInvoices(): HasMany
     {
         return $this->hasMany(RecurringInvoice::class);
+    }
+
+    public function projects(): HasMany
+    {
+        return $this->hasMany(Project::class);
     }
 }

@@ -9,6 +9,7 @@ use App\Enums\Accounting\DocumentDiscountMethod;
 use App\Enums\Accounting\DocumentType;
 use App\Enums\Accounting\EstimateStatus;
 use App\Enums\Setting\PaymentTerms;
+use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Filament\Company\Resources\Sales\ClientResource\RelationManagers\EstimatesRelationManager;
 use App\Filament\Company\Resources\Sales\EstimateResource\Pages;
 use App\Filament\Company\Resources\Sales\EstimateResource\Widgets;
@@ -51,8 +52,6 @@ class EstimateResource extends Resource
 
     protected static ?string $model = Estimate::class;
 
-    protected static ?string $modelLabel = 'Quotation';
-
     public static function form(Form $form): Form
     {
         $company = Auth::user()->currentCompany;
@@ -68,6 +67,7 @@ class EstimateResource extends Resource
                     ->schema([
                         Forms\Components\Split::make([
                             Forms\Components\Group::make([
+                                ProjectResource::options(),
                                 CreateClientSelect::make('client_id')
                                     ->label('Client')
                                     ->required()

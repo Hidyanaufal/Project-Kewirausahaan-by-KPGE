@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Resources\Addons;
 
+use App\Concerns\HasOptions;
 use App\Filament\Company\Resources\Addons\ProjectResource\Pages;
 use App\Models\Addons\Project;
 use App\Models\Addons\ProjectType;
@@ -15,6 +16,8 @@ use Filament\Tables\Table;
 
 class ProjectResource extends Resource
 {
+    use HasOptions;
+
     protected static ?string $model = Project::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
@@ -145,7 +148,6 @@ class ProjectResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->filtersLayout(FiltersLayout::AboveContent)
             ->filters([
                 SelectFilter::make('project_type_id')
                     ->label('Project Type')
@@ -153,7 +155,13 @@ class ProjectResource extends Resource
                     ->searchable()
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ActionGroup::make([
+                        Tables\Actions\EditAction::make(),
+                        Tables\Actions\ViewAction::make(),
+                    ])->dropdown(false),
+                    Tables\Actions\DeleteAction::make(),
+                ]),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -172,6 +180,7 @@ class ProjectResource extends Resource
         return [
             'index' => Pages\ListProjects::route('/'),
             'create' => Pages\CreateProject::route('/create'),
+            'view' => Pages\ViewProject::route('/{record}'),
             'edit' => Pages\EditProject::route('/{record}/edit'),
         ];
     }

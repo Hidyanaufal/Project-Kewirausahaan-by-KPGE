@@ -3,6 +3,7 @@
 namespace App\Filament\Company\Resources\Common\OfferingResource\Pages;
 
 use App\Concerns\HandlePageRedirect;
+use App\Concerns\HasMediumContentWidth;
 use App\Filament\Company\Resources\Common\OfferingResource;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 class EditOffering extends EditRecord
 {
     use HandlePageRedirect;
+    use HasMediumContentWidth;
 
     protected static string $resource = OfferingResource::class;
 

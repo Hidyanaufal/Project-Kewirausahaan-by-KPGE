@@ -4,10 +4,13 @@ namespace App\Models\Addons;
 
 use App\Concerns\CompanyOwned;
 use App\Enums\Addons\ProjectStatus;
+use App\Models\Accounting\Estimate;
+use App\Models\Accounting\Invoice;
 use App\Models\Common\Client;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Project extends Model
@@ -50,5 +53,15 @@ class Project extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class, 'client_id');
+    }
+
+    public function estimates(): HasMany
+    {
+        return $this->hasMany(Estimate::class);
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
     }
 }

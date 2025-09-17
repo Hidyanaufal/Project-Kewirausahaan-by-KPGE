@@ -4,6 +4,7 @@ namespace App\Models\Accounting;
 
 use App\Casts\RateCast;
 use App\Collections\Accounting\DocumentCollection;
+use App\Concerns\HasDocumentNumber;
 use App\Enums\Accounting\AdjustmentComputation;
 use App\Enums\Accounting\DocumentDiscountMethod;
 use App\Enums\Accounting\DocumentType;
@@ -43,6 +44,8 @@ use Livewire\Component;
 #[ObservedBy(InvoiceObserver::class)]
 class Invoice extends Document
 {
+    use HasDocumentNumber;
+
     protected $table = 'invoices';
 
     protected $fillable = [
@@ -75,6 +78,7 @@ class Invoice extends Document
         'footer',
         'created_by',
         'updated_by',
+        'project_id',
     ];
 
     protected $casts = [
@@ -93,6 +97,22 @@ class Invoice extends Document
     protected $appends = [
         'logo_url',
     ];
+
+    public function getNumberColumn(): string
+    {
+        return 'invoice_number';
+    }
+
+    public function getDocumentPrefix(): string
+    {
+        $company ??= auth()->user()?->currentCompany;
+        if (! $company) {
+            throw new \RuntimeException('No current company is set for the user.');
+        }
+        $defaultSetting = $company->defaultInvoice;
+        $numberPrefix = $defaultSetting->number_prefix ?? '';
+        return $numberPrefix;
+    }
 
     protected function logoUrl(): Attribute
     {

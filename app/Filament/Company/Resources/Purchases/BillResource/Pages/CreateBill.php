@@ -6,6 +6,7 @@ use App\Concerns\HandlePageRedirect;
 use App\Concerns\ManagesLineItems;
 use App\Filament\Company\Resources\Purchases\BillResource;
 use App\Models\Accounting\Bill;
+use App\Models\Addons\Project;
 use App\Models\Common\Vendor;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\MaxWidth;
@@ -22,9 +23,16 @@ class CreateBill extends CreateRecord
     #[Url(as: 'vendor')]
     public ?int $vendorId = null;
 
+    #[Url(as: 'project')]
+    public ?int $projectId = null;
+
     public function mount(): void
     {
         parent::mount();
+
+        if ($this->projectId) {
+            $this->data['project_id'] = $this->projectId;
+        }
 
         if ($this->vendorId) {
             $this->data['vendor_id'] = $this->vendorId;

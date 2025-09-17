@@ -73,6 +73,7 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use pxlrbt\FilamentSpotlight\SpotlightPlugin;
 use Wallo\FilamentCompanies\Actions\GenerateRedirectForProvider;
 use Wallo\FilamentCompanies\FilamentCompanies;
 
@@ -97,6 +98,7 @@ class CompanyPanelProvider extends PanelProvider
             ->spa()
             ->tenantMenu(false)
             ->plugins([
+                SpotlightPlugin::make(),
                 AuthUIEnhancerPlugin::make()
                     ->formPanelPosition('right')
                     ->emptyPanelBackgroundImageOpacity('60%')
@@ -201,7 +203,7 @@ class CompanyPanelProvider extends PanelProvider
             ->viteTheme('resources/css/filament/company/theme.css')
             ->brandLogo('/image/system.logo.png')
             ->darkModeBrandLogo('/image/system.logo.alt.png')
-            ->brandLogoHeight('50px')
+            ->brandLogoHeight('100px')
             ->tenant(Company::class)
             ->tenantProfile(ManageCompany::class)
             ->tenantRegistration(CreateCompany::class)

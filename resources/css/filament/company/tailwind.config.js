@@ -15,6 +15,7 @@ export default {
         "./vendor/jaocero/radio-deck/resources/views/**/*.blade.php",
         "./vendor/codewithdennis/filament-simple-alert/resources/**/*.blade.php",
         "./vendor/diogogpinto/filament-auth-ui-enhancer/resources/**/*.blade.php",
+        "./vendor/wire-elements/**/*.blade.php",
     ],
     theme: {
         extend: {

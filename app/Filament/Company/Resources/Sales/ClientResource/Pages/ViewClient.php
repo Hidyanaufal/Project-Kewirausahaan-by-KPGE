@@ -6,7 +6,6 @@ use App\Filament\Company\Resources\Sales\ClientResource;
 use App\Filament\Company\Resources\Sales\ClientResource\RelationManagers;
 use App\Filament\Company\Resources\Sales\EstimateResource\Pages\CreateEstimate;
 use App\Filament\Company\Resources\Sales\InvoiceResource\Pages\CreateInvoice;
-use App\Filament\Company\Resources\Sales\RecurringInvoiceResource\Pages\CreateRecurringInvoice;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -25,6 +24,7 @@ class ViewClient extends ViewRecord
     protected function getAllRelationManagers(): array
     {
         return [
+            RelationManagers\ProjectsRelationManager::class,
             RelationManagers\InvoicesRelationManager::class,
             RelationManagers\EstimatesRelationManager::class,
         ];

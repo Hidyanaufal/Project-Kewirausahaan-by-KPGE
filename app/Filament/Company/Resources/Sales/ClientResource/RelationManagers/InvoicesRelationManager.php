@@ -20,10 +20,6 @@ class InvoicesRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return InvoiceResource::table($table)
-            ->headerActions([
-                Tables\Actions\CreateAction::make()
-                    ->url(InvoiceResource\Pages\CreateInvoice::getUrl(['client' => $this->getOwnerRecord()->getKey()])),
-            ]);
+        return InvoiceResource::table($table);
     }
 }
