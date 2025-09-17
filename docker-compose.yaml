@@ -44,6 +44,7 @@ services:
     volumes:
       - ./:/var/www
       - ./nginx/conf.d/:/etc/nginx/conf.d/
+      - mykpg_storage:/var/www/storage/app
     networks:
       - mykpg_network
 
