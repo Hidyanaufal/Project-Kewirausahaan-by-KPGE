@@ -4,7 +4,7 @@
     <x-company.document-template.header class="border-b default-template-header">
         <div class="flex items-center mb-6">
             <!-- Logo -->
-            <div class="w-24 h-24 mr-4 bg-gradient-to-br from-red-600 to-black clip-hexagon">
+            <div>
                 <img src="{{ asset('image/logo/LOGO KOPERASI PERTAMINA GEOTHERMAL .jpg') }}" alt="Logo Perusahaan" class="object-contain w-full h-full" />
             </div>
         
@@ -54,10 +54,10 @@
                 @foreach($document->lineItems as $index => $item)
                 <tr>
                     @if($index === 0)
-                    <td class="px-4 py-2 text-center border" rowspan="{{ count($document->lineItems) + 2 }}">
+                    <td class="px-4 py-2 text-center border border-black" rowspan="{{ count($document->lineItems) + 2 }}">
                         {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
                     </td>
-                    <td class="py-3 pl-6 font-semibold text-left border">
+                    <td class="py-3 pl-6 font-semibold text-left border border-black">
                         @isset($document->project)
                         <div class="mb-6">
                             {{ $document->project }}
@@ -70,10 +70,10 @@
                 </tr>
                 <tr>
                     @endif
-                    <td class="py-3 pl-6 font-semibold text-left border">
+                    <td class="py-3 pl-6 font-semibold text-left border border-black">
                         {{ $item->name }}
                     </td>
-                    <td class="py-3 pr-6 text-right border">
+                    <td class="py-3 pr-6 text-right border border-black">
                         {{ $item->subtotal }}
                     </td>
                 </tr>

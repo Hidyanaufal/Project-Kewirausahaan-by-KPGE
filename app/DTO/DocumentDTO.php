@@ -142,7 +142,7 @@ readonly class DocumentDTO
 
     protected static function formatToMoney(int $value, ?string $currencyCode): string
     {
-        return CurrencyConverter::formatToMoney($value, $currencyCode);
+        return CurrencyConverter::formatCentsToMoney($value, $currencyCode);
     }
 
     public function getFontHtml(): Htmlable
