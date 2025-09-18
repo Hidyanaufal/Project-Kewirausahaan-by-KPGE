@@ -13,6 +13,9 @@ enum Template: string implements HasLabel
     case Kppb = 'kppb';
     case Kpg = 'kpg';
     case Kppe = 'kppe';
+    case Default = 'default';
+    case Classic = 'classic';
+    case Modern = 'modern';
 
     public const KPP = self::Kppb->value;
 
