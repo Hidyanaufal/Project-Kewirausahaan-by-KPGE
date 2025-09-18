@@ -7,13 +7,13 @@ readonly class ClientPreviewDTO extends ClientDTO
     public static function fake(): self
     {
         return new self(
-            name: 'John Doe',
-            addressLine1: '1234 Elm St',
-            addressLine2: 'Suite 123',
-            city: 'Springfield',
-            state: 'Illinois',
-            postalCode: '62701',
-            country: 'United States',
+            name: 'PT. PERTAMINA GEOTHERMAL ENERGY TBK',
+            addressLine1: 'Kantor Pusat - Grha Pertamina Tower Pertamax Lt. 7',
+            addressLine2: 'Jalan Merdeka Timur No. 11-13,',
+            city: 'Gambir',
+            state: 'Jakarta Pusat',
+            postalCode: '10110',
+            country: 'Indonesia',
         );
     }
 }

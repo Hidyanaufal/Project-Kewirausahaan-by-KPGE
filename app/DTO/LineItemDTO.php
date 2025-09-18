@@ -29,7 +29,7 @@ readonly class LineItemDTO
     protected static function formatToMoney(float | string | int $value, ?string $currencyCode): string
     {
         if (is_int($value)) {
-            return CurrencyConverter::formatCentsToMoney($value, $currencyCode);
+            return CurrencyConverter::formatToMoney($value, $currencyCode);
         }
 
         return CurrencyConverter::formatToMoney($value, $currencyCode);

@@ -12,7 +12,7 @@ class DocumentPreview extends Grid
 
     protected bool | Closure $isPreview = false;
 
-    protected Template | Closure $template = Template::Default;
+    protected Template | Closure $template = Template::Kppb;
 
     protected function setUp(): void
     {

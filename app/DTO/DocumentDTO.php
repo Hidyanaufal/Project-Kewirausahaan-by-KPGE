@@ -40,6 +40,10 @@ readonly class DocumentDTO
         public string $accentColor = '#000000',
         public bool $showLogo = true,
         public Font $font = Font::Inter,
+        public ?string $email,
+        public ?string $terbilang,
+        public ?string $dpp,
+        public ?string $project,
     ) {}
 
     public static function fromModel(Document $document): self
@@ -67,6 +71,8 @@ readonly class DocumentDTO
             self::formatToMoney($document->amountDue(), $currencyCode) :
             null;
 
+        $projectName = $document->project->name;
+
         return new self(
             header: $document->header,
             subheader: $document->subheader,
@@ -85,18 +91,58 @@ readonly class DocumentDTO
             amountDue: $amountDue,
             company: CompanyDTO::fromModel($document->company),
             client: $document->client ? ClientDTO::fromModel($document->client) : null,
-            lineItems: $document->lineItems->map(fn ($item) => LineItemDTO::fromModel($item)),
+            lineItems: $document->lineItems->map(fn($item) => LineItemDTO::fromModel($item)),
             label: $document::documentType()->getLabels(),
             columnLabel: DocumentColumnLabelDTO::fromModel($settings),
             accentColor: $settings->accent_color ?? '#000000',
             showLogo: $settings->show_logo ?? false,
             font: $settings->font ?? Font::Inter,
+            email: $document->company->profile->email,
+            terbilang: self::generateTerbilang($document->amountDue()),
+            dpp: self::generateDpp($document->subtotal),
+            project: $projectName,
         );
+    }
+
+    protected static function generateTerbilang($nilai)
+    {
+        $angka = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
+
+        $nilai = abs($nilai);
+
+        if ($nilai < 12) {
+            return " " . $angka[$nilai];
+        } elseif ($nilai < 20) {
+            return self::generateTerbilang($nilai - 10) . " Belas";
+        } elseif ($nilai < 100) {
+            return self::generateTerbilang(intval($nilai / 10)) . " Puluh" . self::generateTerbilang($nilai % 10);
+        } elseif ($nilai < 200) {
+            return " Seratus" . self::generateTerbilang($nilai - 100);
+        } elseif ($nilai < 1000) {
+            return self::generateTerbilang(intval($nilai / 100)) . " Ratus" . self::generateTerbilang($nilai % 100);
+        } elseif ($nilai < 2000) {
+            return " Seribu" . self::generateTerbilang($nilai - 1000);
+        } elseif ($nilai < 1000000) {
+            return self::generateTerbilang(intval($nilai / 1000)) . " Ribu" . self::generateTerbilang($nilai % 1000);
+        } elseif ($nilai < 1000000000) {
+            return self::generateTerbilang(intval($nilai / 1000000)) . " Juta" . self::generateTerbilang($nilai % 1000000);
+        } elseif ($nilai < 1000000000000) {
+            return self::generateTerbilang(intval($nilai / 1000000000)) . " Miliar" . self::generateTerbilang($nilai % 1000000000);
+        } else {
+            return self::generateTerbilang(intval($nilai / 1000000000000)) . " Triliun" . self::generateTerbilang($nilai % 1000000000000);
+        }
+        return "";
+    }
+
+    protected static function generateDpp($nilai)
+    {
+        $dpp = $nilai;
+        return number_format($dpp = $dpp * (11 / 12), 2);
     }
 
     protected static function formatToMoney(int $value, ?string $currencyCode): string
     {
-        return CurrencyConverter::formatCentsToMoney($value, $currencyCode);
+        return CurrencyConverter::formatToMoney($value, $currencyCode);
     }
 
     public function getFontHtml(): Htmlable

@@ -9,11 +9,12 @@ enum Template: string implements HasLabel
 {
     use ParsesEnum;
 
-    case Default = 'default';
-    case Modern = 'modern';
-    case Classic = 'classic';
+    case Jes = 'jes';
+    case Kppb = 'kppb';
+    case Kpg = 'kpg';
+    case Kppe = 'kppe';
 
-    public const DEFAULT = self::Default->value;
+    public const KPP = self::Kppb->value;
 
     public function getLabel(): ?string
     {

@@ -44,6 +44,10 @@ readonly class DocumentPreviewDTO extends DocumentDTO
             accentColor: $data['accent_color'] ?? $settings->accent_color ?? '#000000',
             showLogo: $data['show_logo'] ?? $settings->show_logo ?? true,
             font: Font::tryFrom($data['font']) ?? $settings->font ?? Font::Inter,
+            email: $company->profile->email,
+            terbilang: self::generateTerbilang(95000),
+            dpp: self::generateDpp(95000),
+            project: 'Pengadaan Jasa',
         );
     }
 
