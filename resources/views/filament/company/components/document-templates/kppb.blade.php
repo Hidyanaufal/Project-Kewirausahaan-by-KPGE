@@ -1,177 +1,194 @@
-<x-company.document-template.container
-    class="default-template-container"
-    :preview="$preview">
-
+<div class="p-6 text-gray-800 bg-white rounded-md shadow-sm invoice-container">
     {{-- Header --}}
-    <x-company.document-template.header class="border-b default-template-header">
-        <div class="flex items-center mb-6">
+    <div class="mb-6 header">
+        <div class="flex items-center">
             <!-- Logo -->
             <div class="w-24 h-24 mr-4">
-                <img
-                    src="{{ asset('image/logo/LOGO PT. KARYA PERSADA PANAS BUMI.jpg') }}"
-                    alt="Logo Perusahaan"
-                    class="object-contain w-full h-full"/>
+                <img src="{{ asset('image/logo/LOGO PT. KARYA PERSADA PANAS BUMI.jpg') }}" alt="Logo Perusahaan" class="object-contain w-full h-full" />
             </div>
-
+        
             <!-- Company Info -->
-            <div class="font-bold">
-                PT. KARYA PERSADA PANAS BUMI (KPP)<br>
+            <div class="text-sm font-bold">
+                PT. KARYA PERSADA PANAS BUMI<br>
                 <small class="block mt-1 text-xs font-normal">
-                    Menara Cakrawala / Skyline Building Lt. 7,<br>
-                    Jl. MH. Thamrin No. 9 Jakarta Pusat - 10340
+                    <span class="block">Menara Cakrawala / Skyline Building Lt. 7,</span>
+                    <span class="block">Jl. MH. Thamrin No. 9 Jakarta Pusat - 10340</span>
                 </small>
                 <div class="mt-1 text-sm font-normal">
-                    Tlp. 021-39833222 Fax. 021-39833230
+                    Tlp. 021 3143133 Fax. 021 39833230
                 </div>
             </div>
-        </div>
-    </x-company.document-template.header>
+        </div>        
+    </div>
 
-    <div class="mt-2 text-center">
-        <h2 class="my-8 font-bold text-md">{{ $document->header }}</h2>
-        <div class="mb-8">No.
-            {{ $document->number }}</div>
+    {{-- Title --}}
+    <div class="my-2 text-center">
+        <h2 class="text-lg font-bold">{{ $document->header }}</h2>
+        <div class="mt-1 text-sm">No. {{ $document->number }}</div>
     </div>
 
     {{-- Metadata --}}
-    <x-company.document-template.metadata
-        class="space-y-4 default-template-metadata">
-        <div class="flex mb-8 leading-relaxed">
-            <div class="w-20">Kepada :</div>
+    <div class="space-y-4 metadata">
+        <div class="flex mb-4 leading-relaxed">
+            <div class="w-20 text-sm">Kepada :</div>
             <div class="text-sm">
-                <p class="text-sm font-bold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
-                @if($document->client && ($formattedAddress =
-                $document->client->getFormattedAddressHtml())) {!! $formattedAddress !!} @endif
+                <p class="font-semibold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
+                @if($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
+                    {!! $formattedAddress !!}
+                @endif
             </div>
         </div>
-    </x-company.document-template.metadata>
+    </div>
 
-            {{-- Line Items --}}
-<x-company.document-template.line-items class="px-6 default-template-line-items">
-    <table class="w-full mb-6 text-sm border border-collapse border-black">
-        <thead>
-            <tr>
-                <th class="w-1/6 px-2 py-2 text-center border border-black">Tanggal / Date</th>
-                <th class="w-3/6 px-4 py-2 text-left border border-black">Keterangan / Description</th>
-                <th class="w-1/6 px-2 py-2 text-center border border-black">Harga Satuan</th>
-                <th class="w-1/6 px-2 py-2 text-center border border-black">Jumlah / Amount (Rp.)</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($document->lineItems as $index => $item)
-            <tr>
-                @if($index === 0)
-                <td class="px-4 py-2 border border-black" rowspan="{{ count($document->lineItems) + 3 }}">
-                    {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
-                </td>
-                <td class="py-3 pl-6 font-semibold text-left border border-black">
-                    @isset($document->project)
-                    <div class="mb-6">
-                        {{ $document->project }}
-                        @if($item->description)
-                        <div class="mt-1 font-normal text-gray-600">{{ $item->description }}</div>
-                        @endif
-                    </div>
-                    @endisset
-                </td>
-            </tr>
-            <tr>
-                @endif
-                <td class="px-4 py-2 border border-black">
-                    {{ $item->name }}
-                </td>
-                <td class="py-3 pr-6 text-right border border-black">
-                    {{ $item->subtotal }}
-                </td>
-                <td class="py-3 pr-6 text-right border border-black">
-                    {{ $item->subtotal }}
-                </td>
-            </tr>
-            @endforeach
-    
-            <tr>
-                <td class="px-2 py-6" colspan="2">
-                    @if($document->referenceNumber || $document->dueDate)
-                        <div class="text-sm leading-relaxed text-gray-800">
-                            @if($document->referenceNumber)
-                                <strong>Ref PO</strong><br>
-                                No. PO: {{ $document->referenceNumber }}<br>
-                            @endif
-                            @if($document->dueDate)
-                                Tanggal: {{ \Carbon\Carbon::parse($document->dueDate)->format('d F Y') }}
+    {{-- Line Items --}}
+    <div class="mb-6 line-items">
+        <table class="w-full text-sm border-4 border-black border-double">
+            <thead>
+                <tr>
+                    <th class="w-1/6 px-4 py-2 text-center border border-black">Tanggal</th>
+                    <th class="w-3/6 px-4 py-2 text-left border border-black">Keterangan</th>
+                    <th class="w-1/6 px-4 py-2 text-center border border-black">Harga Satuan</th>
+                    <th class="w-1/6 px-4 py-2 text-center border border-black">Jumlah (Rp.)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($document->lineItems as $index => $item)
+                <tr>
+                    @if($index === 0)
+                    <td class="px-4 py-2 text-center border border-black" rowspan="{{ count($document->lineItems) + 3 }}">
+                        {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
+                    </td>
+                    <td class="py-3 pl-6 font-semibold text-left border border-black">
+                        @isset($document->project)
+                        <div class="mb-6">
+                            {{ $document->project }}
+                            @if($item->description)
+                            <div class="mt-1 font-normal text-gray-600">{{ $item->description }}</div>
                             @endif
                         </div>
-                    @endif
-                </td>
-                <tr>
-                    <td colspan="2" class="px-3 py-2 text-right border-b-2 border-black">Keuntungan 5,8%</td>
-                    <td class="px-3 py-2 text-right border-b-2 border-black">Rp {{ $document->discount }}</td>
+                        @endisset
+                    </td>
+                    <td class="py-3 pl-6 font-semibold text-left border border-black">
+                    </td>
                 </tr>
-            </tr>
-
-                    <!-- Jumlah -->
-            <tr>
-                <td colspan="3" class="px-3 text-right border-t">Jumlah</td>
-                <td class="px-3 text-right border-t">
-                    Rp
-                    {{ $document->subtotal }}
-                </td>
-            </tr>
-
-                    <!-- PPN -->
+                <tr>
+                    @endif
+                    <td class="px-4 py-2 border border-black">
+                        {{ $item->name }} unit {{ $item->quantity}}
+                    </td>
+                    <td class="py-3 pr-6 text-right border border-black">
+                        {{ $item->subtotal }}
+                    </td>
+                    <td class="py-3 pr-6 text-right border border-black">
+                        {{ $item->subtotal }}
+                    </td>
+                </tr>
+                @endforeach
+        
+                <tr>
+                    <td class="px-2 py-6 border-b-2 border-black">
+                        @if($document->referenceNumber || $document->dueDate)
+                            <div class="text-sm text-gray-800">
+                                @if($document->referenceNumber)
+                                    <strong>Ref PO</strong><br>
+                                    No. PO: {{ $document->referenceNumber }}<br>
+                                @endif
+                                @if($document->dueDate)
+                                    Tanggal: {{ \Carbon\Carbon::parse($document->dueDate)->format('d F Y') }}
+                                @endif
+                            </div>
+                        @endif
+                    </td>
+                    <td class="py-3 pl-6 font-semibold text-left border border-black">
+                    </td>
                     <tr>
-                        <td colspan="3" class="px-3 text-right ">PPN 11%</td>
-                        <td class="px-3 text-right ">
-                            Rp
-                            {{ $document->tax }}
-                        </td>
+                        <td colspan="2" class="px-3 py-2 text-right border-b-2 border-black">Keuntungan 5,8%</td>
+                        <td class="px-3 py-2 text-right border-b-2 border-black">{{ $document->discount ?? 'Rp0' }}</td>
                     </tr>
+                </tr>
+        
+                <!-- Profit -->
+        
+                <!-- Jumlah -->
+                <tr>
+                    <td colspan="3" class="px-3 py-2 text-right border border-black">Jumlah</td>
+                    <td class="px-3 py-2 text-right border border-black">
+                        {{ $document->subtotal }}
+                    </td>
+                </tr>
+        
+                <!-- PPN -->
+                <tr>
+                    <td colspan="3" class="px-3 py-2 text-right border border-black">PPN 11%</td>
+                    <td class="px-3 py-2 text-right border border-black">
+                        {{ $document->tax }}
+                    </td>
+                </tr>
+        
+                <!-- Total -->
+                <tr>
+                    <td colspan="3" class="px-3 py-2 font-bold text-right border border-black">Total setelah PPN</td>
+                    <td class="px-3 py-2 font-bold text-right border border-black">
+                        {{ $document->amountDue }}
+                    </td>
+                </tr>
+        
+                <!-- Terbilang -->
+                <tr>
+                    <td colspan="4" class="px-3 py-2 border border-black">
+                        <strong>Terbilang:</strong>
+                        <em>{{ $document->terbilang }}</em>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 
-                    <!-- Total -->
-                    <tr>
-                        <td colspan="3" class="px-3 font-bold text-right ">Total setelah PPN</td>
-                        <td class="px-3 font-bold text-right ">
-                            Rp
-                            {{ $document->amountDue }}
-                        </td>
-                    </tr>
+    {{-- Footer Notes --}}
+    <div class="mt-2 text-sm footer">
+        <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>
+        <div class="mb-2 text-sm font-semibold">
+            PT. BANK MANDIRI (PERSERO) KCP JKT SARINAH<br>
+            A/n. PT. KARYA PERSADA PANAS BUMI<br>
+            ACCOUNT NO. 103-000-6116806
+        </div>
 
-                    <!-- Terbilang -->
-                    <tr>
-                        <td colspan="4" class="px-3 py-2 border border-black">
-                            <strong>Terbilang:</strong>
-                            <em>{{ $document->terbilang }}</em>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </x-company.document-template.line-items>
+        {{-- Signature --}}
+        <div class="w-64 ml-auto text-left">
+            PT. KARYA PERSADA PANAS BUMI<br>
+            Jakarta, {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}<br><br><br>
+            <div class="mt-4 font-bold">{{ $document->signatureName ?? 'Robby Wijayadi' }}</div>
+            <div>{{ $document->signatureTitle ?? 'Direktur' }}</div>
+        </div>
+    </div>
+</div>
 
-                    {{-- Footer Notes --}}
-                    <x-company.document-template.footer
-                        class="flex flex-col px-6 pb-6 text-sm default-template-footer">
-                        <div class="text-sm leading-relaxed">Pembayaran harap dilakukan melalui:</div>
-                        <div class="mb-12 text-sm font-bold leading-relaxed">
-                            PT. BANK MANDIRI (PERSERO) KCP JKT SARINAH<br>
-                                A/n. PT. KARYA PERSADA PANAS BUMI<br>
-                                    ACCOUNT NO. 103-000-6116806
-                                </div>
-
-                                {{-- Signature --}}
-                                {{-- {{ $document->company->name }}
-                                --}}
-                                <div class="w-64 ml-auto text-left">
-                                    PT. KARYA PERSADA PANAS BUMI<br>
-                                        Jakarta,
-                                        {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}
-                                        <br>
-                                            <br>
-                                                <br>
-                                                <br>
-                                                    <div class="mt-4 font-bold">{{ $document->signatureName ?? 'Robby Wijayadi' }}</div>
-                                                    <div>{{ $document->signatureTitle ?? 'Direktur' }}</div>
-                                                </div>
-
-                                            </x-company.document-template.footer>
-
-                                        </x-company.document-template.container>
+<style>
+    .invoice-container {
+        font-family: Arial, sans-serif;
+    }
+    .header {
+        padding-bottom: 8px;
+        border-bottom: 1px solid #ccc;
+    }
+    .header span {
+        display: block;
+    }
+    .line-items table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    .line-items th,
+    .line-items td {
+        padding: 8px;
+        border: 1px solid #000;
+    }
+    .line-items th {
+        text-align: center;
+        background-color: #f2f2f2;
+    }
+    .footer {
+        margin-top: 20px;
+    }
+</style>

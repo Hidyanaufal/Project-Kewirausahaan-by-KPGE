@@ -98,14 +98,30 @@ readonly class DocumentDTO
             showLogo: $settings->show_logo ?? false,
             font: $settings->font ?? Font::Inter,
             email: $document->company->profile->email,
-            terbilang: self::generateTerbilang($document->amountDue()),
+            terbilang: self::generateTerbilang($amountDue),
             dpp: self::generateDpp($document->subtotal),
             project: $projectName,
         );
     }
 
-    protected static function generateTerbilang($nilai)
+    protected static function sanitizeRupiah($nilai)
     {
+        // Hilangkan simbol "Rp" dan spasi
+        $nilai = str_replace(['Rp', 'rp', ' '], '', $nilai);
+
+        // Ganti koma dengan titik (ubah desimal lokal ke format internasional)
+        $nilai = str_replace(',00', '', $nilai);
+
+        // Hilangkan pemisah ribuan (titik)
+        $nilai = str_replace('.', '', $nilai);
+
+        return (float)$nilai;
+    }
+
+    protected static function generateTerbilang($rupiah)
+    {
+        $nilai = self::sanitizeRupiah($rupiah);
+
         $angka = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
 
         $nilai = abs($nilai);
@@ -136,8 +152,9 @@ readonly class DocumentDTO
 
     protected static function generateDpp($nilai)
     {
-        $dpp = $nilai;
-        return number_format($dpp = $dpp * (11 / 12), 2);
+        $dpp = round($nilai * (11 / 12));
+        $money = money($dpp, 'IDR');
+        return $money->format();
     }
 
     protected static function formatToMoney(int $value, ?string $currencyCode): string

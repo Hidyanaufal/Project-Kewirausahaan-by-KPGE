@@ -1,48 +1,48 @@
-<x-company.document-template.container class="default-template-container" :preview="$preview">
-
+<div class="p-6 text-gray-800 bg-white rounded-md shadow-sm invoice-container">
     {{-- Header --}}
-    <x-company.document-template.header class="border-b default-template-header">
-        <div class="flex items-center mb-6">
+    <div class="mb-6 header">
+        <div class="flex items-center">
             <!-- Logo -->
             <div class="w-24 h-24 mr-4">
                 <img src="{{ asset('image/logo/LOGO_PT._JAYATAMA_ENERGI_SEJAHTERA.png') }}" alt="Logo Perusahaan" class="object-contain w-full h-full" />
             </div>
         
             <!-- Company Info -->
-            <div class="font-bold">
+            <div class="text-sm font-bold">
                 PT. JAYATAMA ENERGI SEJAHTERA<br>
                 <small class="block mt-1 text-xs font-normal">
-                    Bizzcentrum, Jl. H Agus Salim No.50, Kebon Sirih,<br>
-                    Menteng, Jakarta Pusat, 10340
+                    <span>Bizzcentrum, Jl. H Agus Salim No.50, Kebon Sirih,</span>
+                    <span>Menteng, Jakarta Pusat, 10340</span>
                 </small>
                 <div class="mt-1 text-sm font-normal">
                     pt.jayatamaenergi.sejahtera@gmail.com
                 </div>
             </div>
         </div>        
-    </x-company.document-template.header>
+    </div>
 
-    <div class="mt-2 text-center">
-        <h2 class="my-8 font-bold text-md">{{ $document->header }}</h2>
-        <div class="mb-8">No. {{ $document->number }}</div>
+    {{-- Title --}}
+    <div class="my-2 text-center">
+        <h2 class="text-lg font-bold">{{ $document->header }}</h2>
+        <div class="mt-1 text-sm">No. {{ $document->number }}</div>
     </div>
 
     {{-- Metadata --}}
-    <x-company.document-template.metadata class="space-y-4 default-template-metadata">
-        <div class="flex mb-8 leading-relaxed">
-            <div class="w-20">Kepada :</div>
+    <div class="space-y-4 metadata">
+        <div class="flex mb-4 leading-relaxed">
+            <div class="w-20 text-sm">Kepada :</div>
             <div class="text-sm">
-                <p class="text-sm font-bold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
+                <p class="font-semibold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
                 @if($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
                     {!! $formattedAddress !!}
                 @endif
             </div>
         </div>
-    </x-company.document-template.metadata>
+    </div>
 
     {{-- Line Items --}}
-    <x-company.document-template.line-items class="px-6 default-template-line-items">
-        <table class="w-full mb-6 text-sm border-2 border-separate border-black border-double border-spacing-0">
+    <div class="mb-6 line-items">
+        <table class="w-full text-sm border-4 border-black border-double border-spacing-0">
             <thead>
                 <tr>
                     <th class="w-1/6 px-2 py-2 text-center whitespace-normal border border-black">Tanggal / Date</th>
@@ -90,7 +90,7 @@
                 <tr>
                     <td colspan="2" class="px-3 py-2 text-right border border-black">Jumlah</td>
                     <td class="px-3 py-2 text-right border border-black">
-                        Rp {{ $document->subtotal }}
+                        {{ $document->subtotal }}
                     </td>
                 </tr>
 
@@ -98,7 +98,7 @@
                 <tr>
                     <td colspan="2" class="px-3 py-2 text-right border border-black">DPP Lain-Lain</td>
                     <td class="px-3 py-2 text-right border border-black">
-                        Rp {{ $document->dpp }}
+                        {{ $document->dpp }}
                     </td>
                 </tr>
         
@@ -106,7 +106,7 @@
                 <tr>
                     <td colspan="2" class="px-3 py-2 text-right border border-black">PPN 11%</td>
                     <td class="px-3 py-2 text-right border border-black">
-                        Rp {{ $document->tax }}
+                        {{ $document->tax }}
                     </td>
                 </tr>
         
@@ -114,7 +114,7 @@
                 <tr>
                     <td colspan="2" class="px-3 py-2 font-bold text-right border border-black">Total setelah PPN</td>
                     <td class="px-3 py-2 font-bold text-right border border-black">
-                        Rp {{ $document->amountDue }}
+                        {{ $document->amountDue }}
                     </td>
                 </tr>
         
@@ -126,63 +126,54 @@
                     </td>
                 </tr>
             </tbody>
-            {{-- <tfoot class="text-sm border-t-4 border-double summary-section">
-                @if($document->subtotal)
-                <tr>
-                    <td class="pl-6"></td>
-                    <td class="text-right">Jumlah:</td>
-                    <td class="pr-6 text-right">{{ $document->subtotal }}</td>
-                </tr>
-                @endif
-        
-                <tr>
-                    <td class="pl-6"></td>
-                    <td class="text-right">DPP Lain-Lain:</td>
-                    <td class="pr-6 text-right">{{ $document->discount }}</td>
-                </tr>
-        
-                @if($document->tax)
-                <tr>
-                    <td class="pl-6"></td>
-                    <td class="font-semibold text-right">PPN 11%:</td>
-                    <td class="pr-6 text-right">{{ $document->tax }}</td>
-                </tr>
-                @endif
-        
-                <tr>
-                    <td class="pl-6"></td>
-                    <td class="font-semibold text-right">{{ 'Grand Total' }}:</td>
-                    <td class="pr-6 text-right">{{ $document->amountDue }}</td>
-                </tr>
-        
-                <tr>
-                    <td colspan="3" class="px-4 py-3 border border-black">
-                        <strong>Terbilang:</strong> 
-                        <em>{{ $document->terbilang }}</em>
-                    </td>
-                </tr>
-            </tfoot> --}}
         </table>
-    </x-company.document-template.line-items>
+    </div>
 
     {{-- Footer Notes --}}
-    <x-company.document-template.footer class="flex flex-col px-6 pb-6 text-sm default-template-footer">
-        <div class="text-sm leading-relaxed">Pembayaran harap dilakukan melalui:</div>
-        <div class="mb-12 text-sm font-bold leading-relaxed">
+    <div class="mt-2 text-sm footer">
+        <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>
+        <div class="mb-2 text-sm font-semibold">
             BANK MANDIRI KCP RS PUSAT OTAK NASIONAL<br>
             A/n. PT JAYATAMA ENERGI SEJAHTERA<br>
             ACCOUNT NO. 166-00-0576920-3
         </div>
 
         {{-- Signature --}}
-        {{-- {{ $document->company->name }} --}}
         <div class="w-64 ml-auto text-left">
             PT Jayatama Energi Sejahtera<br>
             Jakarta, {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}<br><br><br>
-            <div class="mt-12 font-bold">{{ $document->signatureName ?? 'Santi' }}</div>
+            <div class="mt-4 font-bold">{{ $document->signatureName ?? 'Santi' }}</div>
             <div>{{ $document->signatureTitle ?? 'Direktur' }}</div>
         </div>
+    </div>
+</div>
 
-    </x-company.document-template.footer>
-
-</x-company.document-template.container>
+<style>
+    .invoice-container {
+        font-family: Arial, sans-serif;
+    }
+    .header {
+        padding-bottom: 8px;
+        border-bottom: 1px solid #ccc;
+    }
+    .header span {
+        display: block;
+    }
+    .line-items table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    .line-items th,
+    .line-items td {
+        padding: 8px;
+        border: 1px solid #000;
+    }
+    .line-items th {
+        text-align: center;
+        background-color: #f2f2f2;
+    }
+    .footer {
+        margin-top: 20px;
+    }
+</style>
