@@ -6,7 +6,7 @@
     <x-company.document-template.header class="border-b default-template-header">
         <div class="flex items-center mb-6">
             <!-- Logo -->
-            <div>
+            <div class="w-24 h-24 mr-4">
                 <img
                     src="{{ asset('image/logo/LOGO PT. KARYA PERSADA PANAS BUMI.jpg') }}"
                     alt="Logo Perusahaan"
