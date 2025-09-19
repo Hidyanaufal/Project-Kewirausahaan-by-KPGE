@@ -7,6 +7,7 @@ use App\Filament\Company\Resources\Addons\ProjectResource\Pages;
 use App\Models\Addons\Project;
 use App\Models\Addons\ProjectType;
 use Filament\Forms;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -18,6 +19,42 @@ class ProjectResource extends Resource
     use HasOptions;
 
     protected static ?string $model = Project::class;
+
+    public static function options(
+        ?string $key = null,
+        ?string $label = null,
+        ?string $name = null,
+        ?string $id = null
+    ): Select {
+        $key   = $key   ?? static::getOptionKey();
+        $label = $label ?? static::getOptionLabel();
+        $name  = $name  ?? static::getOptionName();
+        $id    = $id    ?? static::getOptionId();
+
+        $modalHeading = __('filament-forms::components.select.actions.create_option.modal.heading') . ' ' . $label;
+
+        return Select::make($key)
+            ->label($label)
+            ->createOptionModalHeading($modalHeading)
+            ->searchable()
+            ->getSearchResultsUsing(function (string $search) use ($id) {
+                return static::getModel()::query()
+                    ->where('number', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->limit(50)
+                    ->get()
+                    ->mapWithKeys(fn($item) => [
+                        $item->$id => "{$item->number} - {$item->name}",
+                    ]);
+            })
+            ->getOptionLabelUsing(
+                fn($value): ?string =>
+                optional(static::getModel()::find($value), fn($item) => "{$item->number} - {$item->name}")
+            )
+            ->preload()
+            ->required();
+    }
+
 
     public static function form(Form $form): Form
     {
@@ -94,6 +131,13 @@ class ProjectResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('number')
                     ->sortable()
+                    ->searchable(isIndividual: false)
+                    ->toggleable(isToggledHiddenByDefault: false),
+
+                Tables\Columns\TextColumn::make('name')
+                    ->label('Project Name')
+                    ->searchable(isIndividual: false)
+                    ->wrap()
                     ->toggleable(isToggledHiddenByDefault: false),
 
                 Tables\Columns\TextColumn::make('type.name')
@@ -109,11 +153,6 @@ class ProjectResource extends Resource
                 Tables\Columns\TextColumn::make('pic.name')
                     ->label('PIC')
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: false),
-
-                Tables\Columns\TextColumn::make('name')
-                    ->label('Project Name')
-                    ->searchable()
                     ->toggleable(isToggledHiddenByDefault: false),
 
                 Tables\Columns\TextColumn::make('request_number_date')

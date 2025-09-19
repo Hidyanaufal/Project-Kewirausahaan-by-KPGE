@@ -81,6 +81,9 @@ class Invoice extends Document
         'created_by',
         'updated_by',
         'project_id',
+        'tax_code_id',
+        'tax_number',
+        'tax_date',
     ];
 
     protected $casts = [

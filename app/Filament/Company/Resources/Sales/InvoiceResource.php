@@ -28,6 +28,7 @@ use App\Filament\Tables\Filters\DateRangeFilter;
 use App\Models\Accounting\Adjustment;
 use App\Models\Accounting\DocumentLineItem;
 use App\Models\Accounting\Invoice;
+use App\Models\Addons\TaxCode;
 use App\Models\Common\Client;
 use App\Models\Common\Offering;
 use App\Utilities\Currency\CurrencyAccessor;
@@ -378,6 +379,27 @@ class InvoiceResource extends Resource
                         Forms\Components\Textarea::make('terms')
                             ->default($settings->terms)
                             ->columnSpanFull(),
+                    ]),
+                Forms\Components\Section::make('Tax Detail')
+                    ->collapsible()
+                    ->columns(3)
+                    ->schema([
+                        Forms\Components\Select::make('tax_code_id')
+                            ->label('Tax Code')
+                            ->native(false)
+                            ->options(function () {
+                                return TaxCode::query()
+                                    ->get()
+                                    ->mapWithKeys(function ($taxCode) {
+                                        return [
+                                            $taxCode->id => "{$taxCode->code} - {$taxCode->description}",
+                                        ];
+                                    });
+                            }),
+                        Forms\Components\TextInput::make('tax_number')
+                            ->label('Tax Number'),
+                        Forms\Components\DatePicker::make('tax_date')
+                            ->label('Tax Date'),
                     ]),
                 DocumentFooterSection::make('Invoice Footer')
                     ->defaultFooter($settings->footer),

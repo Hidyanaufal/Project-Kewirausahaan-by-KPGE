@@ -6,6 +6,7 @@ use App\Concerns\HandlePageRedirect;
 use App\Concerns\ManagesLineItems;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Models\Accounting\Invoice;
+use App\Models\Addons\TaxTransaction;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\MaxWidth;
@@ -48,6 +49,14 @@ class EditInvoice extends EditRecord
         if ($record->approved_at && $record->approvalTransaction) {
             $record->updateApprovalTransaction();
         }
+
+        TaxTransaction::where([
+            'invoice_id' => $record->id
+        ])->update([
+            'tax_code_id' => $data['tax_code_id'],
+            'tax_number' => $data['tax_number'],
+            'tax_date' => $data['tax_date'],
+        ]);
 
         return $record;
     }

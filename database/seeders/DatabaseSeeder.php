@@ -12,7 +12,8 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            UserCompanySeeder::class,
+            // UserCompanySeeder::class,
+            TaxCodeSeeder::class
         ]);
     }
 }
