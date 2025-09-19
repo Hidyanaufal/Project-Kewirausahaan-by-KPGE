@@ -39,11 +39,11 @@ class CreateOfferingSelect extends Select
         $this
             ->searchable()
             ->preload()
-            ->createOptionForm(fn (Form $form) => $this->createOfferingForm($form))
-            ->createOptionAction(fn (Action $action) => $this->createOfferingAction($action));
+            ->createOptionForm(fn(Form $form) => $this->createOfferingForm($form))
+            ->createOptionAction(fn(Action $action) => $this->createOfferingAction($action));
 
         $this->relationship(
-            name: fn () => $this->isPurchasable() && ! $this->isSellable() ? 'purchasableOffering' : ($this->isSellable() && ! $this->isPurchasable() ? 'sellableOffering' : 'offering'),
+            name: fn() => $this->isPurchasable() && ! $this->isSellable() ? 'purchasableOffering' : ($this->isSellable() && ! $this->isPurchasable() ? 'sellableOffering' : 'offering'),
             titleAttribute: 'name'
         );
 
@@ -73,12 +73,12 @@ class CreateOfferingSelect extends Select
         return $form->schema([
             OfferingResource::getGeneralSection($this->isSellableAndPurchasable()),
             OfferingResource::getSellableSection()->visible(
-                fn (Get $get) => $this->isSellableAndPurchasable()
+                fn(Get $get) => $this->isSellableAndPurchasable()
                     ? in_array('Sellable', $get('attributes') ?? [])
                     : $this->isSellable()
             ),
             OfferingResource::getPurchasableSection()->visible(
-                fn (Get $get) => $this->isSellableAndPurchasable()
+                fn(Get $get) => $this->isSellableAndPurchasable()
                     ? in_array('Purchasable', $get('attributes') ?? [])
                     : $this->isPurchasable()
             ),
@@ -90,7 +90,7 @@ class CreateOfferingSelect extends Select
         return $action
             ->label('Create offering')
             ->slideOver()
-            ->modalWidth(MaxWidth::ThreeExtraLarge)
+            ->modalWidth(MaxWidth::FiveExtraLarge)
             ->modalHeading('Create a new offering');
     }
 
