@@ -12,6 +12,11 @@ class IncomeOverview extends BaseWidget
 {
     use HasPermissionCheck;
 
+    protected function getColumns(): int
+    {
+        return 2;
+    }
+
     protected function getStats(): array
     {
         $reportService = app(ReportService::class);
@@ -29,22 +34,22 @@ class IncomeOverview extends BaseWidget
         return [
             Stat::make('Revenue', $summary[0]['value'] ?? 'Rp0,00')
                 ->icon('heroicon-o-currency-dollar')
-                ->color('success')
+                ->color($summary[0]['value'] > 0 ? 'success' : 'danger')
                 ->description('Total Revenue'),
 
             Stat::make('COGS', $summary[1]['value'] ?? 'Rp0,00')
                 ->icon('heroicon-o-shopping-cart')
-                ->color('danger')
+                ->color($summary[1]['value'] > 0 ? 'success' : 'danger')
                 ->description('Cost of Goods Sold'),
 
             Stat::make('Expenses', $summary[2]['value'] ?? 'Rp0,00')
                 ->icon('heroicon-o-banknotes')
-                ->color('warning')
+                ->color($summary[2]['value'] > 0 ? 'success' : 'danger')
                 ->description('Operating Expenses'),
 
             Stat::make('Net Earnings', $summary[3]['value'] ?? 'Rp0,00')
                 ->icon('heroicon-o-chart-bar')
-                ->color('info')
+                ->color($summary[3]['value'] > 0 ? 'success' : 'danger')
                 ->description('Final Net Earnings'),
         ];
     }

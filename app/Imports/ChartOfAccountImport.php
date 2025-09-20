@@ -19,11 +19,16 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
 {
     protected int $companyId;
     protected bool $reset;
+    protected bool $importBalance;
 
-    public function __construct(int $companyId, bool $reset = false)
-    {
-        $this->companyId = $companyId;
-        $this->reset     = $reset;
+    public function __construct(
+        int $companyId,
+        bool $reset = false,
+        bool $importBalance = true
+    ) {
+        $this->companyId      = $companyId;
+        $this->reset          = $reset;
+        $this->importBalance  = $importBalance;
 
         if ($reset) {
             Log::warning("COA Import - Reset enabled, deleting all accounts for company_id={$companyId}");
@@ -145,37 +150,44 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             ]);
             $row['bank_account_id'] = $bank->id;
 
-            Log::info("COA Import - BankAccount created for account {$account->code}", $bank->toArray());
+            Log::info("COA Import - BankAccount created for account {$account->code}");
         }
 
-        // Jika child → buat transaksi + jurnal
-        if ($isChild) {
-            $balance = $this->floatParser($row['balance'] ?? 0);
-            Log::debug("COA Import - Parsed Balance", ['code' => $row['code'], 'balance' => $balance]);
+        if ($this->importBalance) {
+            // Jika child → buat transaksi + jurnal
+            if ($isChild) {
+                $balance = $this->floatParser($row['balance'] ?? 0);
+                if ($balance != 0) {
+                    Log::debug("COA Import - Parsed Balance", ['code' => $row['code'], 'balance' => $balance]);
 
-            $transaction = Transaction::create([
-                'company_id'      => $this->companyId,
-                'account_id'      => $row['account_id'],
-                'bank_account_id' => $row['bank_account_id'] ?? null,
-                'type'            => $balance < 0 ? 'withdrawal' : 'deposit',
-                'description'     => 'Auto Import',
-                'amount'          => abs($balance * 100), // disimpan dalam cent
-            ]);
+                    $transaction = Transaction::create([
+                        'company_id'      => $this->companyId,
+                        'account_id'      => $row['account_id'],
+                        'bank_account_id' => $row['bank_account_id'] ?? null,
+                        'type'            => $balance < 0 ? 'withdrawal' : 'deposit',
+                        'description'     => 'Auto Import',
+                        'posted_at'       => now(),
+                        'amount'          => abs($balance * 100), // disimpan dalam cent
+                    ]);
 
-            Log::info("COA Import - Transaction created", $transaction->toArray());
+                    Log::info("COA Import - Transaction created", $transaction->toArray());
 
-            // Buat JournalEntry (double entry simplified)
-            $entryType = $balance < 0 ? 'debit' : 'credit';
-            $journal = JournalEntry::create([
-                'company_id'     => $this->companyId,
-                'account_id'     => $row['account_id'],
-                'transaction_id' => $transaction->id,
-                'type'           => $entryType,
-                'amount'         => abs($balance * 100),
-                'description'    => 'Auto Import',
-            ]);
+                    // Buat JournalEntry (double entry simplified)
+                    $entryType = $balance < 0 ? 'debit' : 'credit';
+                    $journal = JournalEntry::create([
+                        'company_id'     => $this->companyId,
+                        'account_id'     => $row['account_id'],
+                        'transaction_id' => $transaction->id,
+                        'type'           => $entryType,
+                        'amount'         => abs($balance * 100),
+                        'description'    => 'Auto Import',
+                    ]);
 
-            Log::info("COA Import - JournalEntry created", $journal->toArray());
+                    Log::info("COA Import - JournalEntry created", $journal->toArray());
+                } else {
+                    Log::debug("COA Import - Skipped Balance 0", ['code' => $row['code']]);
+                }
+            }
         }
 
         Log::info("COA Import - Finished processing row {$row['code']}");
