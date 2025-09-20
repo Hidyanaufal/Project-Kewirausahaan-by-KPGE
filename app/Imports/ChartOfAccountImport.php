@@ -6,6 +6,8 @@ use App\Enums\Banking\BankAccountType;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\AccountSubtype;
 use App\Helpers\AccountTypeHelper;
+use App\Models\Accounting\JournalEntry;
+use App\Models\Accounting\Transaction;
 use App\Models\Banking\BankAccount;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Log;
@@ -38,38 +40,15 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
         return 200;
     }
 
+    public function floatParser($value)
+    {
+        $value = str_replace('.', '', $value);  // hapus ribuan
+        $value = str_replace(',', '.', $value); // ubah desimal
+        return (float) $value;
+    }
+
     public function model(array $row)
     {
-        /*
-        {
-            "account_no": "1600",
-            "sub_account_no": null,
-            "account_name": "Piutang Pihak Berelasi",
-            "account_type": "Other Current Asset",
-            "balance": "7.245.579.544,00",
-        },
-        {
-            "account_no": null,
-            "sub_account_no": "1500.01",
-            "account_name": "PPn Masukan",
-            "account_type": "Other Current Asset",
-            "balance": "0,00",
-        },
-        {
-            "account_no": null,
-            "sub_account_no": "1600.01",
-            "account_name": "Piutang PT. KPP",
-            "account_type": "Other Current Asset",
-            "balance": "4.664.887.221,00",
-        },
-        {
-            "account_no": null,
-            "sub_account_no": "1100.09",
-            "account_name": "Penyisihan Piutang Tidak tertagih",
-            "account_type": "Account Receivable",
-            "balance": "-1.582.479.465,37",
-        }
-         */
         Log::info('COA Import - Start processing row', $row);
 
         if (empty($row['account_name'])) {
@@ -149,24 +128,59 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             'archived'      => filter_var($row['archived'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'default'       => filter_var($row['default'] ?? false, FILTER_VALIDATE_BOOLEAN),
         ]);
+        $row['account_id'] = $account->id;
 
         if ($isChild) {
             if (AccountTypeHelper::isBankAccount($accountSub->name)) {
-                BankAccount::create([
+                $bank = BankAccount::create([
                     'company_id' => $this->companyId,
                     'account_id' => $account->id,
                     'type' => BankAccountType::Depository->value,
                     'enabled' => 0,
                 ]);
+                $row['bank_account_id'] = $bank->id;
             }
         }
-
         if ($isChild) {
-            $balance = floatval($row['balance']);
+            $balance = $this->floatParser($row['balance']);
+
             Log::debug("Balance", [
-                'account' => $account,
                 'balance' => $balance
             ]);
+
+            // Insert ke transactions
+            $transaction = Transaction::create([
+                'company_id'         => $this->companyId,
+                'account_id'         => $row['account_id'] ?? null,
+                'bank_account_id'    => $row['bank_account_id'] ?? null,
+                'type'               => $balance < 0 ? 'withdrawal' : 'deposit',
+                'description'        => 'Auto Import',
+                'amount'             => abs($balance * 100), // asumsi disimpan dalam cent
+            ]);
+            $transactionId = $transaction->id;
+
+            // Insert ke journal_entries (double entry)
+            if ($balance < 0) {
+                // Saldo Negatif; Withdrawal → debit akun kas, kredit akun lawan
+                JournalEntry::create([
+                    'company_id'     => $this->companyId,
+                    'account_id'     => $row['account_id'],
+                    'transaction_id' => $transactionId,
+                    'type'           => 'debit',
+                    'amount'         => abs($balance * 100),
+                    'description'    => 'Auto Import',
+                ]);
+            } else {
+                // Saldo Positif; Deposit → debit akun lawan, kredit akun kas
+                JournalEntry::create([
+                    'company_id'     => $this->companyId,
+                    'account_id'     => $row['account_id'],
+                    'transaction_id' => $transactionId,
+                    'type'           => 'credit',
+                    'amount'         => abs($balance * 100),
+                    'description'    => 'Auto Import',
+                ]);
+            }
         }
 
         Log::info("COA Import - Account ready to insert", $account->toArray());
