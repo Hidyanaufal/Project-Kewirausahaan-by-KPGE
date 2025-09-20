@@ -4,11 +4,9 @@ namespace App\Imports;
 
 use App\Models\Accounting\Account;
 use App\Models\Accounting\AccountSubtype;
-use App\Enums\Accounting\AccountType;
+use App\Helpers\AccountTypeHelper;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
@@ -25,6 +23,7 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
         if ($reset) {
             logger("COA Import - Reset enabled, deleting all accounts for company_id={$companyId}");
             Account::where('company_id', $companyId)->delete();
+            AccountSubtype::where('company_id', $companyId)->delete();
             logger("COA Import - All accounts deleted for company_id={$companyId}");
         } else {
             logger("COA Import - Reset disabled, existing accounts will be preserved for company_id={$companyId}");
@@ -75,6 +74,23 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             return null;
         }
 
+        $isParent = false;
+        if ($row['account_no']) {
+            $isParent = true;
+        }
+        $isChild = !$isParent;
+
+        if ($isParent) {
+            $row['code'] = $row['account_no'];
+        } else {
+            $row['code'] = $row['sub_account_no'];
+        }
+
+        if (!$row['code']) {
+            Log::warning('COA Import - Skipped row (missing code)', $row);
+            return null;
+        }
+
         if (Account::where('company_id', $this->companyId)
             ->where('code', $row['code'])
             ->exists()
@@ -83,51 +99,44 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             return null;
         }
 
-        $typeValue = null;
-        if (!empty($row['type'])) {
-            $normalized = Str::snake(Str::lower(trim($row['type'])));
-            Log::info("COA Import - Normalized type: {$row['type']} -> {$normalized}");
-
-            try {
-                $typeValue = AccountType::from($normalized);
-            } catch (\ValueError $e) {
-                Log::error("COA Import - Invalid type '{$row['type']}' for code {$row['code']}");
-                throw ValidationException::withMessages([
-                    'type' => "Invalid account type `{$row['type']}` for code {$row['code']}",
+        if ($row['account_type']) {
+            $accountSub = AccountSubtype::where([
+                'name' => $row['account_type']
+            ])->first();
+            if (!$accountSub) {
+                $accountType = $row['account_type'];
+                $accountSub = AccountSubtype::create([
+                    'company_id' => $this->companyId,
+                    'name' => $row['account_type'],
+                    'category' => AccountTypeHelper::map($accountType)->getCategory(),
+                    'type' => AccountTypeHelper::map($accountType)->value,
+                    'inverse_cash_flow' => AccountTypeHelper::isInverseCashFlow($accountType)
                 ]);
             }
-        } else {
-            $typeValue = AccountType::CurrentAsset;
-            Log::info("COA Import - Defaulting type to CurrentAsset for code {$row['code']}");
         }
 
-        $categoryValue = $typeValue->getCategory();
-        Log::info("COA Import - Category for {$row['code']} = {$categoryValue->value}");
-
-        $subtypeId = null;
-        if (!empty($row['subtype'])) {
-            Log::info("COA Import - Looking for subtype '{$row['subtype']}'");
-            $subtype = AccountSubtype::firstOrCreate(
-                [
-                    'company_id' => $this->companyId,
-                    'name'       => $row['subtype'],
-                ],
-                [
-                    'category'   => $categoryValue,
-                    'type'       => $typeValue,
-                    'description' => $row['subtype'],
-                ]
-            );
-            $subtypeId = $subtype->id;
-            Log::info("COA Import - Subtype assigned with ID {$subtypeId}");
+        $parentId = null;
+        if ($isChild) {
+            $childCode = $row['code']; // '1100.02'
+            $childCode = explode('.', $childCode); // ['1100', '02']
+            $estParentCode = $childCode[0]; // '1100'
+            $accountParent = Account::where([
+                'company_id' => $this->companyId,
+                'code' => $estParentCode
+            ])->first();
+            if ($accountParent) {
+                $parentId = $accountParent->id;
+                Log::info("COA Import - Parent Account detected");
+                Log::info("COA Import - Account {$row['code']} is Child from {$accountParent->code}");
+            }
         }
 
         $account = new Account([
             'company_id'    => $this->companyId,
-            'subtype_id'    => $subtypeId,
-            'parent_id'     => $row['parent_id'] ?? null,
-            'category'      => $categoryValue,
-            'type'          => $typeValue,
+            'subtype_id'    => $accountSub->id,
+            'parent_id'     => $parentId,
+            'category'      => $accountSub->category,
+            'type'          => $accountSub->type,
             'code'          => $row['code'],
             'name'          => $row['name'],
             'currency_code' => $row['currency_code'] ?? 'IDR',
