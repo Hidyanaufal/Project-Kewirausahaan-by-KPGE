@@ -23,15 +23,18 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
     public function __construct(int $companyId, bool $reset = false)
     {
         $this->companyId = $companyId;
+        $this->reset     = $reset;
 
         if ($reset) {
-            logger("COA Import - Reset enabled, deleting all accounts for company_id={$companyId}");
+            Log::warning("COA Import - Reset enabled, deleting all accounts for company_id={$companyId}");
+
             Account::where('company_id', $companyId)->delete();
             AccountSubtype::where('company_id', $companyId)->delete();
             BankAccount::where('company_id', $companyId)->delete();
-            logger("COA Import - All accounts deleted for company_id={$companyId}");
+
+            Log::warning("COA Import - All accounts deleted for company_id={$companyId}");
         } else {
-            logger("COA Import - Reset disabled, existing accounts will be preserved for company_id={$companyId}");
+            Log::info("COA Import - Reset disabled, preserving existing accounts for company_id={$companyId}");
         }
     }
 
@@ -40,7 +43,7 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
         return 200;
     }
 
-    public function floatParser($value)
+    protected function floatParser($value): float
     {
         $value = str_replace('.', '', $value);  // hapus ribuan
         $value = str_replace(',', '.', $value); // ubah desimal
@@ -49,78 +52,77 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
 
     public function model(array $row)
     {
-        Log::info('COA Import - Start processing row', $row);
+        Log::info("COA Import - Start processing row", $row);
 
+        // Validasi account_name
         if (empty($row['account_name'])) {
-            Log::warning('COA Import - Skipped row (missing account_name)', $row);
+            Log::warning("COA Import - Skipped row (missing account_name)", $row);
             return null;
         }
 
-        $isParent = false;
-        if ($row['account_no']) {
-            $isParent = true;
-        }
-        $isChild = !$isParent;
-
-        if ($isParent) {
-            $row['code'] = $row['account_no'];
-        } else {
-            $row['code'] = $row['sub_account_no'];
-        }
+        // Tentukan parent/child
+        $isParent = !empty($row['account_no']);
+        $isChild  = !$isParent;
+        $row['code'] = $isParent ? $row['account_no'] : ($row['sub_account_no'] ?? null);
 
         if (!$row['code']) {
-            Log::warning('COA Import - Skipped row (missing code)', $row);
+            Log::warning("COA Import - Skipped row (missing code)", $row);
             return null;
         }
 
-        if (Account::where('company_id', $this->companyId)
-            ->where('code', $row['code'])
-            ->exists()
-        ) {
+        // Cek duplikat
+        if (Account::where('company_id', $this->companyId)->where('code', $row['code'])->exists()) {
             Log::info("COA Import - Skipped, account already exists: {$row['code']}");
             return null;
         }
 
-        if ($row['account_type']) {
-            $accountSub = AccountSubtype::where([
-                'name' => $row['account_type']
-            ])->first();
+        // Handle Subtype
+        $accountSub = null;
+        if (!empty($row['account_type'])) {
+            $accountSub = AccountSubtype::where('name', $row['account_type'])->first();
 
             if (!$accountSub) {
+                Log::info("COA Import - Creating new AccountSubtype: {$row['account_type']}");
                 $accountType = $row['account_type'];
-                $accountSub = AccountSubtype::create([
-                    'company_id' => $this->companyId,
-                    'name' => $row['account_type'],
-                    'category' => AccountTypeHelper::map($accountType)->getCategory(),
-                    'type' => AccountTypeHelper::map($accountType)->value,
-                    'inverse_cash_flow' => AccountTypeHelper::isInverseCashFlow($accountType)
+                $accountSub  = AccountSubtype::create([
+                    'company_id'       => $this->companyId,
+                    'name'             => $row['account_type'],
+                    'category'         => AccountTypeHelper::map($accountType)->getCategory(),
+                    'type'             => AccountTypeHelper::map($accountType)->value,
+                    'inverse_cash_flow' => AccountTypeHelper::isInverseCashFlow($accountType),
                 ]);
+            } else {
+                Log::info("COA Import - Using existing AccountSubtype: {$accountSub->name}");
             }
         }
 
+        // Cari Parent
         $parentId = null;
         if ($isChild) {
-            $childCode = $row['code']; // '1100.02'
-            $childCode = explode('.', $childCode); // ['1100', '02']
-            $estParentCode = $childCode[0]; // '1100'
-            $accountParent = Account::where([
-                'company_id' => $this->companyId,
-                'code' => $estParentCode
-            ])->first();
+            $childParts = explode('.', $row['code']); // contoh: 1100.02
+            $estParentCode = $childParts[0] ?? null; // 1100
 
-            if ($accountParent) {
-                $parentId = $accountParent->id;
-                Log::info("COA Import - Parent Account detected");
-                Log::info("COA Import - Account {$row['code']} is Child from {$accountParent->code}");
+            if ($estParentCode) {
+                $accountParent = Account::where('company_id', $this->companyId)
+                    ->where('code', $estParentCode)
+                    ->first();
+
+                if ($accountParent) {
+                    $parentId = $accountParent->id;
+                    Log::info("COA Import - Child {$row['code']} linked to Parent {$accountParent->code}");
+                } else {
+                    Log::warning("COA Import - No parent found for child {$row['code']}");
+                }
             }
         }
 
+        // Buat Account
         $account = Account::create([
             'company_id'    => $this->companyId,
-            'subtype_id'    => $accountSub->id,
+            'subtype_id'    => $accountSub?->id,
             'parent_id'     => $parentId,
-            'category'      => $accountSub->category,
-            'type'          => $accountSub->type,
+            'category'      => $accountSub?->category,
+            'type'          => $accountSub?->type,
             'code'          => $row['code'],
             'name'          => $row['account_name'],
             'currency_code' => $row['currency_code'] ?? 'IDR',
@@ -128,62 +130,55 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             'archived'      => filter_var($row['archived'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'default'       => filter_var($row['default'] ?? false, FILTER_VALIDATE_BOOLEAN),
         ]);
+
+        Log::info("COA Import - Account created", $account->toArray());
+
         $row['account_id'] = $account->id;
 
-        if ($isChild) {
-            if (AccountTypeHelper::isBankAccount($accountSub->name)) {
-                $bank = BankAccount::create([
-                    'company_id' => $this->companyId,
-                    'account_id' => $account->id,
-                    'type' => BankAccountType::Depository->value,
-                    'enabled' => 0,
-                ]);
-                $row['bank_account_id'] = $bank->id;
-            }
-        }
-        if ($isChild) {
-            $balance = $this->floatParser($row['balance']);
-
-            Log::debug("Balance", [
-                'balance' => $balance
+        // Jika child dan BankAccount
+        if ($isChild && AccountTypeHelper::isBankAccount($accountSub->name)) {
+            $bank = BankAccount::create([
+                'company_id' => $this->companyId,
+                'account_id' => $account->id,
+                'type'       => BankAccountType::Depository->value,
+                'enabled'    => 0,
             ]);
+            $row['bank_account_id'] = $bank->id;
 
-            // Insert ke transactions
+            Log::info("COA Import - BankAccount created for account {$account->code}", $bank->toArray());
+        }
+
+        // Jika child → buat transaksi + jurnal
+        if ($isChild) {
+            $balance = $this->floatParser($row['balance'] ?? 0);
+            Log::debug("COA Import - Parsed Balance", ['code' => $row['code'], 'balance' => $balance]);
+
             $transaction = Transaction::create([
-                'company_id'         => $this->companyId,
-                'account_id'         => $row['account_id'] ?? null,
-                'bank_account_id'    => $row['bank_account_id'] ?? null,
-                'type'               => $balance < 0 ? 'withdrawal' : 'deposit',
-                'description'        => 'Auto Import',
-                'amount'             => abs($balance * 100), // asumsi disimpan dalam cent
+                'company_id'      => $this->companyId,
+                'account_id'      => $row['account_id'],
+                'bank_account_id' => $row['bank_account_id'] ?? null,
+                'type'            => $balance < 0 ? 'withdrawal' : 'deposit',
+                'description'     => 'Auto Import',
+                'amount'          => abs($balance * 100), // disimpan dalam cent
             ]);
-            $transactionId = $transaction->id;
 
-            // Insert ke journal_entries (double entry)
-            if ($balance < 0) {
-                // Saldo Negatif; Withdrawal → debit akun kas, kredit akun lawan
-                JournalEntry::create([
-                    'company_id'     => $this->companyId,
-                    'account_id'     => $row['account_id'],
-                    'transaction_id' => $transactionId,
-                    'type'           => 'debit',
-                    'amount'         => abs($balance * 100),
-                    'description'    => 'Auto Import',
-                ]);
-            } else {
-                // Saldo Positif; Deposit → debit akun lawan, kredit akun kas
-                JournalEntry::create([
-                    'company_id'     => $this->companyId,
-                    'account_id'     => $row['account_id'],
-                    'transaction_id' => $transactionId,
-                    'type'           => 'credit',
-                    'amount'         => abs($balance * 100),
-                    'description'    => 'Auto Import',
-                ]);
-            }
+            Log::info("COA Import - Transaction created", $transaction->toArray());
+
+            // Buat JournalEntry (double entry simplified)
+            $entryType = $balance < 0 ? 'debit' : 'credit';
+            $journal = JournalEntry::create([
+                'company_id'     => $this->companyId,
+                'account_id'     => $row['account_id'],
+                'transaction_id' => $transaction->id,
+                'type'           => $entryType,
+                'amount'         => abs($balance * 100),
+                'description'    => 'Auto Import',
+            ]);
+
+            Log::info("COA Import - JournalEntry created", $journal->toArray());
         }
 
-        Log::info("COA Import - Account ready to insert", $account->toArray());
+        Log::info("COA Import - Finished processing row {$row['code']}");
 
         return $account;
     }
