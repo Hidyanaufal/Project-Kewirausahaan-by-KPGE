@@ -38,10 +38,40 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
 
     public function model(array $row)
     {
+        /*
+        {
+            "account_no": "1600",
+            "sub_account_no": null,
+            "account_name": "Piutang Pihak Berelasi",
+            "account_type": "Other Current Asset",
+            "balance": "7.245.579.544,00",
+        },
+        {
+            "account_no": null,
+            "sub_account_no": "1500.01",
+            "account_name": "PPn Masukan",
+            "account_type": "Other Current Asset",
+            "balance": "0,00",
+        },
+        {
+            "account_no": null,
+            "sub_account_no": "1600.01",
+            "account_name": "Piutang PT. KPP",
+            "account_type": "Other Current Asset",
+            "balance": "4.664.887.221,00",
+        },
+        {
+            "account_no": null,
+            "sub_account_no": "1100.09",
+            "account_name": "Penyisihan Piutang Tidak tertagih",
+            "account_type": "Account Receivable",
+            "balance": "-1.582.479.465,37",
+        }
+         */
         Log::info('COA Import - Start processing row', $row);
 
-        if (empty($row['code']) || empty($row['name'])) {
-            Log::warning('COA Import - Skipped row (missing code/name)', $row);
+        if (empty($row['account_name'])) {
+            Log::warning('COA Import - Skipped row (missing account_name)', $row);
             return null;
         }
 
@@ -104,7 +134,7 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             'description'   => $row['description'] ?? null,
             'archived'      => filter_var($row['archived'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'default'       => filter_var($row['default'] ?? false, FILTER_VALIDATE_BOOLEAN),
-            'created_by'    => auth()->id() ?? null,
+            'created_by'    => null,
         ]);
 
         Log::info("COA Import - Account ready to insert", $account->toArray());

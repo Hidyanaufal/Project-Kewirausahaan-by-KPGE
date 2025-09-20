@@ -310,6 +310,7 @@ class AccountChart extends Page
                 ->form(fn(Form $form) => $this->getAccountForm($form, false)->operation('create')),
             ExcelImportAction::make(
                 importClass: ChartOfAccountImport::class,
+                templatePath: url('templates/coa_import_template.xlsx'),
                 context: [
                     'companyId' => AuthHelper::currentCompany(),
                     'reset' => true
