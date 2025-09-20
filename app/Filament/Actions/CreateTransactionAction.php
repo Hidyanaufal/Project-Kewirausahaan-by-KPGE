@@ -26,7 +26,7 @@ class CreateTransactionAction extends CreateAction
 
         $this->modalWidth(function (): MaxWidth {
             return match ($this->getTransactionType()) {
-                TransactionType::Journal => MaxWidth::Screen,
+                TransactionType::Journal => MaxWidth::FiveExtraLarge,
                 default => MaxWidth::ThreeExtraLarge,
             };
         });
@@ -46,7 +46,7 @@ class CreateTransactionAction extends CreateAction
             };
         });
 
-        $this->fillForm(fn (): array => $this->getFormDefaultsForType($this->getTransactionType()));
+        $this->fillForm(fn(): array => $this->getFormDefaultsForType($this->getTransactionType()));
 
         $this->form(function (Form $form) {
             return match ($this->getTransactionType()) {
@@ -84,6 +84,6 @@ class CreateTransactionAction extends CreateAction
             return $data;
         });
 
-        $this->outlined(fn () => ! $this->getGroup());
+        $this->outlined(fn() => ! $this->getGroup());
     }
 }
