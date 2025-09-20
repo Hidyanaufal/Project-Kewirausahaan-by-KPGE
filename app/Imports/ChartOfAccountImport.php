@@ -2,9 +2,11 @@
 
 namespace App\Imports;
 
+use App\Enums\Banking\BankAccountType;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\AccountSubtype;
 use App\Helpers\AccountTypeHelper;
+use App\Models\Banking\BankAccount;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
@@ -24,6 +26,7 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             logger("COA Import - Reset enabled, deleting all accounts for company_id={$companyId}");
             Account::where('company_id', $companyId)->delete();
             AccountSubtype::where('company_id', $companyId)->delete();
+            BankAccount::where('company_id', $companyId)->delete();
             logger("COA Import - All accounts deleted for company_id={$companyId}");
         } else {
             logger("COA Import - Reset disabled, existing accounts will be preserved for company_id={$companyId}");
@@ -103,6 +106,7 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             $accountSub = AccountSubtype::where([
                 'name' => $row['account_type']
             ])->first();
+
             if (!$accountSub) {
                 $accountType = $row['account_type'];
                 $accountSub = AccountSubtype::create([
@@ -124,6 +128,7 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
                 'company_id' => $this->companyId,
                 'code' => $estParentCode
             ])->first();
+
             if ($accountParent) {
                 $parentId = $accountParent->id;
                 Log::info("COA Import - Parent Account detected");
@@ -131,20 +136,30 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             }
         }
 
-        $account = new Account([
+        $account = Account::create([
             'company_id'    => $this->companyId,
             'subtype_id'    => $accountSub->id,
             'parent_id'     => $parentId,
             'category'      => $accountSub->category,
             'type'          => $accountSub->type,
             'code'          => $row['code'],
-            'name'          => $row['name'],
+            'name'          => $row['account_name'],
             'currency_code' => $row['currency_code'] ?? 'IDR',
             'description'   => $row['description'] ?? null,
             'archived'      => filter_var($row['archived'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'default'       => filter_var($row['default'] ?? false, FILTER_VALIDATE_BOOLEAN),
-            'created_by'    => null,
         ]);
+
+        if ($isChild) {
+            if (AccountTypeHelper::isBankAccount($accountSub->name)) {
+                BankAccount::create([
+                    'company_id' => $this->companyId,
+                    'account_id' => $account->id,
+                    'type' => BankAccountType::Depository->value,
+                    'enabled' => 0,
+                ]);
+            }
+        }
 
         Log::info("COA Import - Account ready to insert", $account->toArray());
 

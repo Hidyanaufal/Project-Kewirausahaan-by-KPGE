@@ -23,6 +23,10 @@ class AccountTypeHelper
         'Revenue'                   => AccountType::OperatingRevenue,
     ];
 
+    const bankAccount = [
+        'Cash/Bank'
+    ];
+
     const inverseCashFlow = [
         'Account Receivable',
         'Inventory',
@@ -40,5 +44,10 @@ class AccountTypeHelper
     public static function isInverseCashFlow(string $key): bool
     {
         return in_array($key, self::inverseCashFlow, true);
+    }
+
+    public static function isBankAccount(string $key): bool
+    {
+        return in_array($key, self::bankAccount, true);
     }
 }

@@ -15,6 +15,7 @@ class ExcelImportAction
 {
     public static function make(
         string $importClass,
+        bool $hidden = false,
         string $label = 'Import',
         $icon = 'heroicon-o-document-arrow-down',
         string $color = 'primary',
@@ -26,6 +27,7 @@ class ExcelImportAction
     ): Action {
         return Action::make('import')
             ->label($label)
+            ->hidden($hidden)
             ->color($color)
             ->outlined()
             ->icon($icon)
