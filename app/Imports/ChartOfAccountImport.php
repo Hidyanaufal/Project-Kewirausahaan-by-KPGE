@@ -161,6 +161,14 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             }
         }
 
+        if ($isChild) {
+            $balance = floatval($row['balance']);
+            Log::debug("Balance", [
+                'account' => $account,
+                'balance' => $balance
+            ]);
+        }
+
         Log::info("COA Import - Account ready to insert", $account->toArray());
 
         return $account;

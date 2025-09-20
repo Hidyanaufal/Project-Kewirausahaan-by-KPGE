@@ -229,5 +229,14 @@
     "Kppb": "Kppb",
     "Kppe": "Kppe",
     "Tax Detail": "Tax Detail",
-    "Quotation": "Quotation"
+    "Quotation": "Quotation",
+    "All Logs": "All Logs",
+    "Alert": "Alert",
+    "Critical": "Critical",
+    "Debug": "Debug",
+    "Emergency": "Emergency",
+    "Error": "Error",
+    "Info": "Info",
+    "Notice": "Notice",
+    "Warning": "Warning"
 }

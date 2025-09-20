@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use AchyutN\FilamentLogViewer\FilamentLogViewer;
 use App\Actions\FilamentCompanies\AddCompanyEmployee;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use App\Actions\FilamentCompanies\CreateConnectedAccount;
