@@ -2,9 +2,12 @@
 
 namespace App\Filament\Company\Pages\Accounting;
 
+use App\Actions\Addons\ExcelImportAction;
 use App\Enums\Accounting\AccountCategory;
 use App\Enums\Banking\BankAccountType;
 use App\Filament\Forms\Components\CreateCurrencySelect;
+use App\Helpers\AuthHelper;
+use App\Imports\ChartOfAccountImport;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\AccountSubtype;
 use App\Utilities\Accounting\AccountCode;
@@ -27,6 +30,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rules\Unique;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
+use Filament\Forms;
 
 class AccountChart extends Page
 {
@@ -304,6 +308,13 @@ class AccountChart extends Page
                 ->button()
                 ->model(Account::class)
                 ->form(fn(Form $form) => $this->getAccountForm($form, false)->operation('create')),
+            ExcelImportAction::make(
+                importClass: ChartOfAccountImport::class,
+                context: [
+                    'companyId' => AuthHelper::currentCompany(),
+                    'reset' => true
+                ]
+            )
         ];
     }
 

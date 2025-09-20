@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Resources\Addons;
 
+use App\Concerns\HasPermissionCheck;
 use App\Filament\Company\Resources\Addons\ProjectTypeResource\Pages;
 use App\Models\Addons\ProjectType;
 use Filament\Forms;
@@ -13,6 +14,8 @@ use Filament\Tables\Table;
 
 class ProjectTypeResource extends Resource
 {
+    use HasPermissionCheck;
+
     protected static ?string $model = ProjectType::class;
 
     public static function form(Form $form): Form

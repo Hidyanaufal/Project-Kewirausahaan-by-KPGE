@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Resources\Banking;
 
+use App\Concerns\HasPermissionCheck;
 use App\Enums\Accounting\AccountCategory;
 use App\Enums\Banking\BankAccountType;
 use App\Filament\Company\Resources\Banking\AccountResource\Pages;
@@ -23,6 +24,8 @@ use Wallo\FilamentSelectify\Components\ToggleButton;
 
 class AccountResource extends Resource
 {
+    use HasPermissionCheck;
+
     protected static ?string $model = BankAccount::class;
 
     protected static ?string $modelLabel = 'account';
@@ -68,7 +71,7 @@ class AccountResource extends Resource
                             ->relationship('account')
                             ->schema([
                                 Forms\Components\Select::make('subtype_id')
-                                    ->options(static fn (Forms\Get $get) => static::groupSubtypesBySubtypeType(BankAccountType::parse($get('data.type', true))))
+                                    ->options(static fn(Forms\Get $get) => static::groupSubtypesBySubtypeType(BankAccountType::parse($get('data.type', true))))
                                     ->disabledOn('edit')
                                     ->localizeLabel()
                                     ->searchable()
@@ -121,17 +124,17 @@ class AccountResource extends Resource
                     ->localizeLabel('Account')
                     ->searchable()
                     ->weight(FontWeight::Medium)
-                    ->icon(static fn (BankAccount $record) => $record->isEnabled() ? 'heroicon-o-lock-closed' : null)
-                    ->tooltip(static fn (BankAccount $record) => $record->isEnabled() ? 'Default Account' : null)
+                    ->icon(static fn(BankAccount $record) => $record->isEnabled() ? 'heroicon-o-lock-closed' : null)
+                    ->tooltip(static fn(BankAccount $record) => $record->isEnabled() ? 'Default Account' : null)
                     ->iconPosition('after')
-                    ->description(static fn (BankAccount $record) => $record->mask ?? null),
+                    ->description(static fn(BankAccount $record) => $record->mask ?? null),
                 Tables\Columns\TextColumn::make('account.subtype.name')
                     ->localizeLabel('Subtype')
                     ->sortable()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('account.ending_balance')
                     ->localizeLabel('Ending balance')
-                    ->state(static fn (BankAccount $record) => $record->account->ending_balance->convert()->formatWithCode())
+                    ->state(static fn(BankAccount $record) => $record->account->ending_balance->convert()->formatWithCode())
                     ->toggleable()
                     ->alignment(Alignment::End),
             ])
@@ -179,8 +182,8 @@ class AccountResource extends Resource
 
         $subtypes = AccountSubtype::where('category', $category)->get();
 
-        return $subtypes->groupBy(fn (AccountSubtype $subtype) => $subtype->type->getLabel())
-            ->map(fn (Collection $subtypes, string $type) => $subtypes->mapWithKeys(static fn (AccountSubtype $subtype) => [$subtype->id => $subtype->name]))
+        return $subtypes->groupBy(fn(AccountSubtype $subtype) => $subtype->type->getLabel())
+            ->map(fn(Collection $subtypes, string $type) => $subtypes->mapWithKeys(static fn(AccountSubtype $subtype) => [$subtype->id => $subtype->name]))
             ->toArray();
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Filament\Company\Resources\Addons;
 
 use App\Concerns\HasOptions;
+use App\Concerns\HasPermissionCheck;
 use App\Filament\Company\Resources\Addons\ProjectResource\Pages;
 use App\Models\Addons\Project;
 use App\Models\Addons\ProjectType;
@@ -17,6 +18,7 @@ use Filament\Tables\Table;
 class ProjectResource extends Resource
 {
     use HasOptions;
+    use HasPermissionCheck;
 
     protected static ?string $model = Project::class;
 
