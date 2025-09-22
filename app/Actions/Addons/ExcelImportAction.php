@@ -21,7 +21,6 @@ class ExcelImportAction
         string $color = 'primary',
         string $disk = 'local',
         string $successMessage = 'Please wait while your data import is being processed in the background. You can refresh this page later to see the updated results. Thank you.',
-        ?\Closure $afterImport = null,
         ?string $templatePath = null,
         array $context = [],
     ): Action {
@@ -53,7 +52,6 @@ class ExcelImportAction
             ->action(function (array $data) use (
                 $importClass,
                 $successMessage,
-                $afterImport,
                 $disk,
                 $context
             ) {
@@ -67,11 +65,6 @@ class ExcelImportAction
                         'context' => $context,
                     ]);
                     Excel::import(new $importClass(...$context), $filePath);
-
-                    if ($afterImport) {
-                        $afterImport($data);
-                    }
-
                     Notification::make()
                         ->success()
                         ->title('Import Queued')

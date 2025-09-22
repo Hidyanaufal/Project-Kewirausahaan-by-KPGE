@@ -6,6 +6,8 @@ use App\Enums\Banking\BankAccountType;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\AccountSubtype;
 use App\Helpers\AccountTypeHelper;
+use App\Helpers\AuthHelper;
+use App\Models\Accounting\Adjustment;
 use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Transaction;
 use App\Models\Banking\BankAccount;
@@ -32,11 +34,10 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
 
         if ($reset) {
             Log::warning("COA Import - Reset enabled, deleting all accounts for company_id={$companyId}");
-
             Account::where('company_id', $companyId)->delete();
             AccountSubtype::where('company_id', $companyId)->delete();
             BankAccount::where('company_id', $companyId)->delete();
-
+            Adjustment::where('company_id', $companyId)->delete();
             Log::warning("COA Import - All accounts deleted for company_id={$companyId}");
         } else {
             Log::info("COA Import - Reset disabled, preserving existing accounts for company_id={$companyId}");
@@ -84,16 +85,19 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
         // Handle Subtype
         $accountSub = null;
         if (!empty($row['account_type'])) {
-            $accountSub = AccountSubtype::where('name', $row['account_type'])->first();
+            $accountSub = AccountSubtype::where([
+                'name'       => $row['account_type'],
+                'company_id' => $this->companyId
+            ])->first();
 
             if (!$accountSub) {
                 Log::info("COA Import - Creating new AccountSubtype: {$row['account_type']}");
                 $accountType = $row['account_type'];
                 $accountSub  = AccountSubtype::create([
-                    'company_id'       => $this->companyId,
-                    'name'             => $row['account_type'],
-                    'category'         => AccountTypeHelper::map($accountType)->getCategory(),
-                    'type'             => AccountTypeHelper::map($accountType)->value,
+                    'company_id'        => $this->companyId,
+                    'name'              => $row['account_type'],
+                    'category'          => AccountTypeHelper::map($accountType)->getCategory(),
+                    'type'              => AccountTypeHelper::map($accountType)->value,
                     'inverse_cash_flow' => AccountTypeHelper::isInverseCashFlow($accountType),
                 ]);
             } else {
@@ -119,6 +123,15 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
                     Log::warning("COA Import - No parent found for child {$row['code']}");
                 }
             }
+
+            // Case khusus KPG jika lebih dari 9500
+            if (intval($row['code']) > 9500 and intval($row['code']) < 9600) {
+                $accountParent = Account::where([
+                    'company_id' => $this->companyId,
+                    'code' => '9500'
+                ])->first();
+                $parentId = $accountParent->id;
+            }
         }
 
         // Buat Account
@@ -142,14 +155,12 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
 
         // Jika child dan BankAccount
         if ($isChild && AccountTypeHelper::isBankAccount($accountSub->name)) {
-            $bank = BankAccount::create([
+            BankAccount::create([
                 'company_id' => $this->companyId,
                 'account_id' => $account->id,
                 'type'       => BankAccountType::Depository->value,
                 'enabled'    => 0,
             ]);
-            $row['bank_account_id'] = $bank->id;
-
             Log::info("COA Import - BankAccount created for account {$account->code}");
         }
 
@@ -158,7 +169,10 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
             if ($isChild) {
                 $balance = $this->floatParser($row['balance'] ?? 0);
                 if ($balance != 0) {
-                    Log::debug("COA Import - Parsed Balance", ['code' => $row['code'], 'balance' => $balance]);
+                    Log::debug("COA Import - Parsed Balance", [
+                        'code' => $row['code'],
+                        'balance' => $balance
+                    ]);
 
                     $transaction = Transaction::create([
                         'company_id'      => $this->companyId,
@@ -168,22 +182,49 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
                         'description'     => 'Auto Import',
                         'posted_at'       => now(),
                         'amount'          => abs($balance * 100), // disimpan dalam cent
+                        'reviewed'        => true
                     ]);
 
                     Log::info("COA Import - Transaction created", $transaction->toArray());
 
                     // Buat JournalEntry (double entry simplified)
-                    $entryType = $balance < 0 ? 'debit' : 'credit';
+                    $isDebit = $balance > 0;
+                    $entryType = $isDebit ? 'debit' : 'credit';
+
+                    if ($accountSub->inverse_cash_flow) {
+                        if ($entryType == 'debit') {
+                            $entryType = 'credit';
+                        } else {
+                            $entryType = 'debit';
+                        }
+                    }
+
+                    Log::info("COA Import - JournalEntry Process for Account ID: " . $row['account_id'], [
+                        'entryType'         => $entryType,
+                        'code'              => $row['code'],
+                        'balance'           => $balance,
+                        'account_sub_name'  => $accountSub->name,
+                        'inverse_cash_flow' => $accountSub->inverse_cash_flow
+                    ]);
+
+                    // cek duplikat journal entry
+                    if (JournalEntry::where('company_id', $this->companyId)->where('account_id', $account->id)->exists()) {
+                        Log::info("COA Import - Journal Entry Skipped, account already exists: {$row['code']}");
+                        return null;
+                    }
+
                     $journal = JournalEntry::create([
+                        'transaction_id' => $transaction->id,
                         'company_id'     => $this->companyId,
                         'account_id'     => $row['account_id'],
-                        'transaction_id' => $transaction->id,
                         'type'           => $entryType,
                         'amount'         => abs($balance * 100),
                         'description'    => 'Auto Import',
                     ]);
-
-                    Log::info("COA Import - JournalEntry created", $journal->toArray());
+                    Log::info("COA Import - JournalEntry Created for Account ID: " . $row['account_id'], [
+                        'account_code'  => $row['code'],
+                        'journal'       => $journal,
+                    ]);
                 } else {
                     Log::debug("COA Import - Skipped Balance 0", ['code' => $row['code']]);
                 }

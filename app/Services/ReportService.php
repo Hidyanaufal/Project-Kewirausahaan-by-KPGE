@@ -66,7 +66,7 @@ class ReportService
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $columnNameKeys = array_map(fn (Column $column) => $column->getName(), $columns);
+        $columnNameKeys = array_map(fn(Column $column) => $column->getName(), $columns);
 
         $accountCategories = [];
         $reportTotalBalances = [];
@@ -135,10 +135,8 @@ class ReportService
             $balances['net_movement'] = $balances['credit_balance'] - $balances['debit_balance'];
         }
 
-        if ($category->isReal()) {
-            $balances['starting_balance'] = $account->starting_balance ?? 0;
-            $balances['ending_balance'] = $balances['starting_balance'] + $balances['net_movement'];
-        }
+        $balances['starting_balance'] = $account->starting_balance ?? 0;
+        $balances['ending_balance'] = $balances['starting_balance'] + $balances['net_movement'];
 
         return $balances;
     }
@@ -278,7 +276,7 @@ class ReportService
         $isPostClosingTrialBalance = $trialBalanceType === 'postClosing';
 
         $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString())
-            ->when($isPostClosingTrialBalance, fn (Builder $query) => $query->whereNotIn('category', [AccountCategory::Revenue, AccountCategory::Expense]))
+            ->when($isPostClosingTrialBalance, fn(Builder $query) => $query->whereNotIn('category', [AccountCategory::Revenue, AccountCategory::Expense]))
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
@@ -705,7 +703,7 @@ class ReportService
         $asOfDateCarbon = Carbon::parse($asOfDate);
         $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate());
 
-        $orderedCategories = array_filter(AccountCategory::getOrderedCategories(), fn (AccountCategory $category) => $category->isReal());
+        $orderedCategories = array_filter(AccountCategory::getOrderedCategories(), fn(AccountCategory $category) => $category->isReal());
 
         $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString())
             ->whereIn('category', $orderedCategories)
@@ -837,7 +835,7 @@ class ReportService
         foreach ($documents as $entityId => $entityDocuments) {
             $aging = [
                 'current' => $entityDocuments
-                    ->filter(static fn ($doc) => ($doc->days_overdue ?? 0) <= 0)
+                    ->filter(static fn($doc) => ($doc->days_overdue ?? 0) <= 0)
                     ->sumMoneyInDefaultCurrency('amount_due'),
             ];
 
@@ -854,7 +852,7 @@ class ReportService
             }
 
             $aging['over_periods'] = $entityDocuments
-                ->filter(static fn ($doc) => ($doc->days_overdue ?? 0) > ($numberOfPeriods * $daysPerPeriod))
+                ->filter(static fn($doc) => ($doc->days_overdue ?? 0) > ($numberOfPeriods * $daysPerPeriod))
                 ->sumMoneyInDefaultCurrency('amount_due');
 
             $aging['total'] = array_sum($aging);
@@ -992,19 +990,19 @@ class ReportService
         foreach ($documents as $entityId => $entityDocuments) {
             $entity = $entityDocuments->first()->{$entityType->value};
 
-            $onTimeDocs = $entityDocuments->filter(fn (Invoice | Bill $doc) => $doc->paid_at->lte($doc->due_date));
+            $onTimeDocs = $entityDocuments->filter(fn(Invoice | Bill $doc) => $doc->paid_at->lte($doc->due_date));
             $onTimeCount = $onTimeDocs->count();
 
-            $lateDocs = $entityDocuments->filter(fn (Invoice | Bill $doc) => $doc->paid_at->gt($doc->due_date));
+            $lateDocs = $entityDocuments->filter(fn(Invoice | Bill $doc) => $doc->paid_at->gt($doc->due_date));
             $lateCount = $lateDocs->count();
 
             $avgDaysToPay = $entityDocuments->avg(
-                fn (Invoice | Bill $doc) => $doc instanceof Invoice
+                fn(Invoice | Bill $doc) => $doc instanceof Invoice
                     ? $doc->approved_at->diffInDays($doc->paid_at)
                     : $doc->date->diffInDays($doc->paid_at)
             ) ?? 0;
 
-            $avgDaysLate = $lateDocs->avg(fn (Invoice | Bill $doc) => $doc->due_date->diffInDays($doc->paid_at)) ?? 0;
+            $avgDaysLate = $lateDocs->avg(fn(Invoice | Bill $doc) => $doc->due_date->diffInDays($doc->paid_at)) ?? 0;
 
             $onTimeRate = $entityDocuments->isNotEmpty()
                 ? ($onTimeCount / $entityDocuments->count() * 100)
@@ -1039,7 +1037,7 @@ class ReportService
         }
 
         $categories = collect($categories)
-            ->sortByDesc(static fn (EntityReportDTO $category) => $category->paymentMetrics->onTimePaymentRate, SORT_NATURAL)
+            ->sortByDesc(static fn(EntityReportDTO $category) => $category->paymentMetrics->onTimePaymentRate, SORT_NATURAL)
             ->values()
             ->all();
 

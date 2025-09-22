@@ -96,7 +96,7 @@ class CompanyPanelProvider extends PanelProvider
                 family: 'Inter',
                 provider: GoogleFontProvider::class
             )
-            ->spa()
+            ->spa(true)
             ->tenantMenu(false)
             ->plugins([
                 SpotlightPlugin::make(),

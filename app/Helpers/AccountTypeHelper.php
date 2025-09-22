@@ -28,12 +28,11 @@ class AccountTypeHelper
     ];
 
     const inverseCashFlow = [
-        'Account Receivable',
-        'Inventory',
-        'Other Current Asset',
-        'Prepaid and Deferred Charges',
-        'Long-Term Investments',
-        'Input Tax Recoverable',
+        'Account Payable',
+        'Equity',
+        'Other Current Liability',
+        'Revenue',
+        'Other Income',
     ];
 
     public static function map(string $key): ?AccountType

@@ -21,9 +21,9 @@
     </div>
     <div>
         <div class="px-2 pb-2">
-            <h2 class="text-gray-800 dark:text-gray-200 text-base font-semibold">
+            <h5 class="text-sm text-gray-800 dark:text-gray-200 font-normal">
                 {{ $currentTenantName }}
-            </h2>
+            </h5>
             <p class="text-sm font-normal text-gray-500 dark:text-gray-400">
                 {{ $currentCompanyOwner->email }}
             </p>
