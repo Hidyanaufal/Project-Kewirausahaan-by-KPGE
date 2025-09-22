@@ -152,7 +152,7 @@ class Account extends Model
 
     public static function getAccountsReceivableAccount(?int $companyId = null): self
     {
-        return self::where('name', 'Accounts Receivable')
+        return self::where('name', 'Account Receivable IDR')
             ->when($companyId, function (Builder $query) use ($companyId) {
                 $query->where('company_id', $companyId);
             })
@@ -161,7 +161,7 @@ class Account extends Model
 
     public static function getAccountsPayableAccount(?int $companyId = null): self
     {
-        return self::where('name', 'Accounts Payable')
+        return self::where('name', 'Account Payable IDR')
             ->when($companyId, function (Builder $query) use ($companyId) {
                 $query->where('company_id', $companyId);
             })

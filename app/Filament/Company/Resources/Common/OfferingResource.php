@@ -123,7 +123,7 @@ class OfferingResource extends Resource
                     ->type(AdjustmentType::Sales)
                     ->multiple(),
             ])
-            ->columns(3)
+            ->columns(1)
             ->visible(static fn(Forms\Get $get) => in_array('Sellable', $get('attributes') ?? []));
     }
 
@@ -150,7 +150,7 @@ class OfferingResource extends Resource
                     ->type(AdjustmentType::Purchase)
                     ->multiple(),
             ])
-            ->columns(3)
+            ->columns(1)
             ->visible(static fn(Forms\Get $get) => in_array('Purchasable', $get('attributes') ?? []));
     }
 
