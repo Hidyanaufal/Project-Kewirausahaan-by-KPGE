@@ -58,13 +58,13 @@ class Reports extends Page
                     ->description('Key financial statements that provide an overview of your company’s financial health and performance.')
                     ->extraAttributes(['class' => 'es-report-card'])
                     ->schema([
-                        ReportEntry::make('income_statement')
-                            ->hiddenLabel()
-                            ->heading('Income Statement')
-                            ->description('Shows revenue, expenses, and net earnings over a period, indicating overall financial performance.')
-                            ->icon('heroicon-o-chart-bar')
-                            ->iconColor(Color::Purple)
-                            ->url(IncomeStatement::getUrl()),
+                        // ReportEntry::make('income_statement')
+                        //     ->hiddenLabel()
+                        //     ->heading('Income Statement')
+                        //     ->description('Shows revenue, expenses, and net earnings over a period, indicating overall financial performance.')
+                        //     ->icon('heroicon-o-chart-bar')
+                        //     ->iconColor(Color::Purple)
+                        //     ->url(IncomeStatement::getUrl()),
                         ReportEntry::make('balance_sheet')
                             ->hiddenLabel()
                             ->heading('Balance Sheet')
@@ -72,13 +72,13 @@ class Reports extends Page
                             ->icon('heroicon-o-clipboard-document-list')
                             ->iconColor(Color::Teal)
                             ->url(BalanceSheet::getUrl()),
-                        ReportEntry::make('cash_flow_statement')
-                            ->hiddenLabel()
-                            ->heading('Cash Flow Statement')
-                            ->description('Tracks cash inflows and outflows, giving insight into liquidity and cash management over a period.')
-                            ->icon('heroicon-o-document-currency-dollar')
-                            ->iconColor(Color::Cyan)
-                            ->url(CashFlowStatement::getUrl()),
+                        // ReportEntry::make('cash_flow_statement')
+                        //     ->hiddenLabel()
+                        //     ->heading('Cash Flow Statement')
+                        //     ->description('Tracks cash inflows and outflows, giving insight into liquidity and cash management over a period.')
+                        //     ->icon('heroicon-o-document-currency-dollar')
+                        //     ->iconColor(Color::Cyan)
+                        //     ->url(CashFlowStatement::getUrl()),
                     ]),
                 Section::make('Client Reports')
                     ->aside()
@@ -146,13 +146,13 @@ class Reports extends Page
                             ->icon('heroicon-o-calculator')
                             ->iconColor(Color::Slate)
                             ->url(AccountBalances::getUrl()),
-                        ReportEntry::make('trial_balance')
-                            ->hiddenLabel()
-                            ->heading('Trial Balance')
-                            ->description('Summarizes all account debits and credits on a specific date to verify the ledger is balanced.')
-                            ->icon('heroicon-o-scale')
-                            ->iconColor(Color::Sky)
-                            ->url(TrialBalance::getUrl()),
+                        // ReportEntry::make('trial_balance')
+                        //     ->hiddenLabel()
+                        //     ->heading('Trial Balance')
+                        //     ->description('Summarizes all account debits and credits on a specific date to verify the ledger is balanced.')
+                        //     ->icon('heroicon-o-scale')
+                        //     ->iconColor(Color::Sky)
+                        //     ->url(TrialBalance::getUrl()),
                         ReportEntry::make('account_transactions')
                             ->hiddenLabel()
                             ->heading('Account Transactions')
