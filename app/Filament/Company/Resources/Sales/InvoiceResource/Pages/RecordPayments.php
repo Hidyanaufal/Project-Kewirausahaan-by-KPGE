@@ -4,6 +4,7 @@ namespace App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 
 use App\Enums\Accounting\InvoiceStatus;
 use App\Enums\Accounting\PaymentMethod;
+use App\Filament\Company\Resources\Banking\AccountResource;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Filament\Tables\Columns\CustomTextInputColumn;
 use App\Models\Accounting\Invoice;
@@ -69,6 +70,16 @@ class RecordPayments extends ListRecords
     {
         parent::mount();
 
+        if (!BankAccount::where('enabled', true)->first()) {
+            Notification::make()
+                ->warning()
+                ->title('Default Bank Account Not Set')
+                ->body('Please configure a default bank account before continuing.')
+                ->send();
+
+            $this->redirect(AccountResource::getUrl('index'));
+        }
+
         $preservedClientId = $this->tableFilters['client_id']['value'] ?? null;
         $preservedCurrencyCode = $this->tableFilters['currency_code']['value'] ?? CurrencyAccessor::getDefaultCurrency();
 
@@ -95,7 +106,7 @@ class RecordPayments extends ListRecords
                 ->requiresConfirmation()
                 ->modalHeading('Confirm payments')
                 ->modalDescription(function () {
-                    $invoiceCount = collect($this->paymentAmounts)->filter(fn ($amount) => $amount > 0)->count();
+                    $invoiceCount = collect($this->paymentAmounts)->filter(fn($amount) => $amount > 0)->count();
                     $totalAmount = array_sum($this->paymentAmounts);
                     $currencyCode = $this->getTableFilterState('currency_code')['value'];
                     $totalFormatted = CurrencyConverter::formatCentsToMoney($totalAmount, $currencyCode, true);
@@ -195,7 +206,7 @@ class RecordPayments extends ListRecords
                             ->options(static function () {
                                 return Transaction::getBankAccountOptionsFlat();
                             })
-                            ->default(fn () => BankAccount::where('enabled', true)->first()?->id)
+                            ->default(fn() => BankAccount::where('enabled', true)->first()?->id)
                             ->selectablePlaceholder(false)
                             ->searchable()
                             ->softRequired(),
@@ -262,7 +273,7 @@ class RecordPayments extends ListRecords
                     ->sortable(),
                 TextColumn::make('amount_due')
                     ->label('Amount due')
-                    ->currency(static fn (Invoice $record) => $record->currency_code)
+                    ->currency(static fn(Invoice $record) => $record->currency_code)
                     ->alignEnd()
                     ->sortable()
                     ->summarize([
@@ -347,7 +358,7 @@ class RecordPayments extends ListRecords
                                 return CurrencyConverter::formatCentsToMoney($total, $bankAccountCurrency, true);
                             }),
                         Summarizer::make()
-                            ->using(fn () => $this->totalPaymentAmount)
+                            ->using(fn() => $this->totalPaymentAmount)
                             ->visible(function () {
                                 $activeCurrency = $this->getTableFilterState('currency_code')['value'] ?? null;
                                 $bankAccountCurrency = $this->getSelectedBankAccount()->account->currency_code;
@@ -394,7 +405,7 @@ class RecordPayments extends ListRecords
                         }
 
                         $label = collect($filter->getOptions())
-                            ->mapWithKeys(fn (string | array $label, string $value): array => is_array($label) ? $label : [$value => $label])
+                            ->mapWithKeys(fn(string | array $label, string $value): array => is_array($label) ? $label : [$value => $label])
                             ->get($state['value']);
 
                         if (blank($label)) {
@@ -408,7 +419,7 @@ class RecordPayments extends ListRecords
                 Tables\Filters\SelectFilter::make('client_id')
                     ->label('Client')
                     ->selectablePlaceholder(false)
-                    ->options(fn () => Client::query()->pluck('name', 'id')->toArray())
+                    ->options(fn() => Client::query()->pluck('name', 'id')->toArray())
                     ->searchable()
                     ->query(function (EloquentBuilder $query, array $data) {
                         if (blank($data['value'] ?? null)) {

@@ -4,6 +4,7 @@ namespace App\Filament\Company\Resources\Purchases\BillResource\Pages;
 
 use App\Enums\Accounting\BillStatus;
 use App\Enums\Accounting\PaymentMethod;
+use App\Filament\Company\Resources\Banking\AccountResource;
 use App\Filament\Company\Resources\Purchases\BillResource;
 use App\Filament\Tables\Columns\CustomTextInputColumn;
 use App\Models\Accounting\Bill;
@@ -56,6 +57,16 @@ class PayBills extends ListRecords
     {
         parent::mount();
 
+        if (!BankAccount::where('enabled', true)->first()) {
+            Notification::make()
+                ->warning()
+                ->title('Default Bank Account Not Set')
+                ->body('Please configure a default bank account before continuing.')
+                ->send();
+
+            $this->redirect(AccountResource::getUrl('index'));
+        }
+
         $this->form->fill();
 
         $this->reset('tableFilters');
@@ -69,7 +80,7 @@ class PayBills extends ListRecords
                 ->requiresConfirmation()
                 ->modalHeading('Confirm payments')
                 ->modalDescription(function () {
-                    $billCount = collect($this->paymentAmounts)->filter(fn ($amount) => $amount > 0)->count();
+                    $billCount = collect($this->paymentAmounts)->filter(fn($amount) => $amount > 0)->count();
                     $totalAmount = array_sum($this->paymentAmounts);
                     $currencyCode = $this->getTableFilterState('currency_code')['value'];
                     $totalFormatted = CurrencyConverter::formatCentsToMoney($totalAmount, $currencyCode, true);
@@ -145,7 +156,7 @@ class PayBills extends ListRecords
                             ->options(static function () {
                                 return Transaction::getBankAccountOptionsFlat();
                             })
-                            ->default(fn () => BankAccount::where('enabled', true)->first()?->id)
+                            ->default(fn() => BankAccount::where('enabled', true)->first()?->id)
                             ->selectablePlaceholder(false)
                             ->searchable()
                             ->softRequired(),
@@ -190,7 +201,7 @@ class PayBills extends ListRecords
                     ->sortable(),
                 TextColumn::make('amount_due')
                     ->label('Amount due')
-                    ->currency(static fn (Bill $record) => $record->currency_code)
+                    ->currency(static fn(Bill $record) => $record->currency_code)
                     ->alignEnd()
                     ->sortable()
                     ->summarize([
@@ -275,7 +286,7 @@ class PayBills extends ListRecords
                                 return CurrencyConverter::formatCentsToMoney($total, $defaultCurrency, true);
                             }),
                         Summarizer::make()
-                            ->using(fn () => $this->totalPaymentAmount)
+                            ->using(fn() => $this->totalPaymentAmount)
                             ->visible(function () {
                                 $activeCurrency = $this->getTableFilterState('currency_code')['value'] ?? null;
                                 $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
@@ -322,7 +333,7 @@ class PayBills extends ListRecords
                         }
 
                         $label = collect($filter->getOptions())
-                            ->mapWithKeys(fn (string | array $label, string $value): array => is_array($label) ? $label : [$value => $label])
+                            ->mapWithKeys(fn(string | array $label, string $value): array => is_array($label) ? $label : [$value => $label])
                             ->get($state['value']);
 
                         if (blank($label)) {
@@ -335,7 +346,7 @@ class PayBills extends ListRecords
                     }),
                 Tables\Filters\SelectFilter::make('vendor_id')
                     ->label('Vendor')
-                    ->options(fn () => Vendor::query()->pluck('name', 'id')->toArray())
+                    ->options(fn() => Vendor::query()->pluck('name', 'id')->toArray())
                     ->searchable(),
                 Tables\Filters\SelectFilter::make('status')
                     ->multiple()

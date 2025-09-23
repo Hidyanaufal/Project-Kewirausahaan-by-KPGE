@@ -42,7 +42,7 @@ class AccountTypeHelper
 
     public static function isInverseCashFlow(string $key): bool
     {
-        return in_array($key, self::inverseCashFlow, true);
+        return !in_array($key, self::inverseCashFlow, true);
     }
 
     public static function isBankAccount(string $key): bool

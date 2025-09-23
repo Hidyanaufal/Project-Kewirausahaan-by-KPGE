@@ -2,6 +2,10 @@
 
 namespace App\Imports;
 
+use App\Casts\RateCast;
+use App\Enums\Accounting\AdjustmentCategory;
+use App\Enums\Accounting\AdjustmentComputation;
+use App\Enums\Accounting\AdjustmentStatus;
 use App\Enums\Banking\BankAccountType;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\AccountSubtype;
@@ -188,7 +192,7 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
                     Log::info("COA Import - Transaction created", $transaction->toArray());
 
                     // Buat JournalEntry (double entry simplified)
-                    $isDebit = $balance > 0;
+                    $isDebit = $balance < 0;
                     $entryType = $isDebit ? 'debit' : 'credit';
 
                     if ($accountSub->inverse_cash_flow) {
@@ -230,6 +234,23 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
                 }
             }
         }
+
+        // Insert otomatis Adjustment
+        if (in_array($account->name, ['PPn Masukan', 'PPn Keluaran'])) {
+            $type = $account->name == 'PPn Masukan' ? 'purchase' : 'sales';
+            Adjustment::create([
+                'company_id' => $this->companyId,
+                'name' => 'PPN 11',
+                'status' => AdjustmentStatus::Active,
+                'category' => AdjustmentCategory::Tax,
+                'computation' => AdjustmentComputation::Percentage,
+                'rate' => 110000,
+                'type' => $type,
+                'account_id' => $account->id
+            ]);
+            Log::info("COA Import - Adjusment created for account {$account->code}");
+        }
+
 
         Log::info("COA Import - Finished processing row {$row['code']}");
 

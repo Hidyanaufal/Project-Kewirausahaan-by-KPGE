@@ -106,7 +106,7 @@ class AdjustmentResource extends Resource
                     ->label('Name')
                     ->sortable()
                     ->description(function (Adjustment $record) {
-                        return $record->account->code . ' - ' . $record->account->name;
+                        return $record?->account?->code . ' - ' . $record?->account?->name;
                     }),
                 Tables\Columns\TextColumn::make('status')
                     ->badge(),

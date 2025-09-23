@@ -478,6 +478,7 @@ class Estimate extends Document
 
         $invoice = $this->invoice()->create([
             'company_id' => $this->company_id,
+            'project_id' => $this->project_id,
             'client_id' => $this->client_id,
             'logo' => $this->logo,
             'header' => $this->company->defaultInvoice->header,
