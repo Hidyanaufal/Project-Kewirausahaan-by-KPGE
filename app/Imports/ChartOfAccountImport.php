@@ -163,6 +163,7 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
                 'company_id' => $this->companyId,
                 'account_id' => $account->id,
                 'type'       => BankAccountType::Depository->value,
+                'number'     => $row['account_number'] ?? null,
                 'enabled'    => 0,
             ]);
             Log::info("COA Import - BankAccount created for account {$account->code}");
