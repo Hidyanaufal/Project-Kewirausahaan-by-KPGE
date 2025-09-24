@@ -1,6 +1,7 @@
 services:
   # PHP Service
   app:
+    user: "www-data"
     build:
       context: .
       dockerfile: Dockerfile
@@ -11,12 +12,13 @@ services:
     volumes:
       - ./:/var/www
       - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
-      - mykpg_storage:/var/www/storage/app
+      - mykpg_storage:/var/www/storage
     networks:
       - mykpg_network
 
   # Queue Worker Service
   queue:
+    user: "www-data"
     build:
       context: .
       dockerfile: Dockerfile
@@ -28,7 +30,7 @@ services:
     volumes:
       - ./:/var/www
       - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
-      - mykpg_storage:/var/www/storage/app
+      - mykpg_storage:/var/www/storage
     depends_on:
       - db
     networks:
@@ -44,7 +46,7 @@ services:
     volumes:
       - ./:/var/www
       - ./nginx/conf.d/:/etc/nginx/conf.d/
-      - mykpg_storage:/var/www/storage/app
+      - mykpg_storage:/var/www/storage
     networks:
       - mykpg_network
 
