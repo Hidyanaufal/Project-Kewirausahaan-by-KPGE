@@ -22,19 +22,18 @@ class AddressFields extends Grid
         $this->schema([
             TextInput::make('address_line_1')
                 ->label('Address line 1')
-                ->required(fn () => $this->isRequired())
+                ->required(fn() => $this->isRequired())
                 ->maxLength(255),
             TextInput::make('address_line_2')
                 ->label('Address line 2')
                 ->maxLength(255),
             CountrySelect::make('country_code')
-                ->disabled(fn () => $this->isCountryDisabled())
-                ->clearStateField()
-                ->required(fn () => $this->isRequired()),
+                ->required()
+                ->clearStateField(),
             StateSelect::make('state_id'),
             TextInput::make('city')
                 ->label('City')
-                ->required(fn () => $this->isRequired())
+                ->required(fn() => $this->isRequired())
                 ->maxLength(255),
             TextInput::make('postal_code')
                 ->label('Postal code')

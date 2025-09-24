@@ -21,14 +21,14 @@
 
     {{-- Title --}}
     <div class="my-2 text-center">
-        <h2 class="text-lg font-bold">Invoice</h2>
+        <h2 class="text-lg font-bold">{{ $document->header == 'Estimate' ? 'Quotation' : $document->header }}</h2>
         <div class="mt-1 text-sm">No. {{ $document->number }}</div>
     </div>
 
     {{-- Metadata --}}
     <div class="space-y-1 metadata">
-        <div class="flex mb-2">
-            <div class="w-1/4 text-sm">Kepada :</div>
+        <div class="flex mb-2 gap-5">
+            <div class="text-sm">Kepada :</div>
             <div class="text-sm">
                 <p class="font-semibold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
                 @if($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
@@ -130,6 +130,11 @@
 
     {{-- Footer Notes --}}
     <div class="mt-2 text-sm footer">
+        <div class="leading-relaxed">Terms and Condition:</div>
+        <div class="mb-4 text-sm font-semibold">
+            {{$document->terms ?? '-'}}
+        </div>
+
         <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>
         <div class="mb-2 text-sm font-semibold">
             PT. BANK MANDIRI (PERSERO) KCP JKT SARINAH<br>

@@ -62,10 +62,11 @@ class EstimateResource extends Resource
 
         return $form
             ->schema([
-                DocumentHeaderSection::make('Estimate Header')
+                DocumentHeaderSection::make('Quotation Header')
                     ->defaultHeader($settings->header)
-                    ->defaultSubheader($settings->subheader),
-                Forms\Components\Section::make('Estimate Details')
+                    ->defaultSubheader($settings->subheader)
+                    ->visible(false),
+                Forms\Components\Section::make('Quotation Details')
                     ->schema([
                         Forms\Components\Split::make([
                             Forms\Components\Group::make([
@@ -373,7 +374,8 @@ class EstimateResource extends Resource
                             ->default($settings->terms)
                             ->columnSpanFull(),
                     ]),
-                DocumentFooterSection::make('Estimate Footer')
+                DocumentFooterSection::make('Quotation Footer')
+                    ->visible(false)
                     ->defaultFooter($settings->footer),
             ]);
     }

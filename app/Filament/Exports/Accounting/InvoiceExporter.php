@@ -15,6 +15,7 @@ class InvoiceExporter extends Exporter
     {
         return [
             ExportColumn::make('invoice_number'),
+            ExportColumn::make('tax_number'),
             ExportColumn::make('date')
                 ->date(),
             ExportColumn::make('due_date')

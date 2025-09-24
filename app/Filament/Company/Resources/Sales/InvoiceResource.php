@@ -64,7 +64,8 @@ class InvoiceResource extends Resource
             ->schema([
                 DocumentHeaderSection::make('Invoice Header')
                     ->defaultHeader($settings->header)
-                    ->defaultSubheader($settings->subheader),
+                    ->defaultSubheader($settings->subheader)
+                    ->visible(false),
                 Forms\Components\Section::make('Invoice Details')
                     ->schema([
                         Forms\Components\Split::make([
@@ -402,7 +403,8 @@ class InvoiceResource extends Resource
                             ->label('Tax Date'),
                     ]),
                 DocumentFooterSection::make('Invoice Footer')
-                    ->defaultFooter($settings->footer),
+                    ->defaultFooter($settings->footer)
+                    ->visible(false),
             ]);
     }
 
@@ -434,6 +436,8 @@ class InvoiceResource extends Resource
                 Tables\Columns\TextColumn::make('date')
                     ->date()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('tax_number')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('invoice_number')
                     ->label('Number')
                     ->searchable()

@@ -238,5 +238,8 @@
     "Error": "Error",
     "Info": "Info",
     "Notice": "Notice",
-    "Warning": "Warning"
+    "Warning": "Warning",
+    "Quotation Header": "Quotation Header",
+    "Quotation Details": "Quotation Details",
+    "Quotation Footer": "Quotation Footer"
 }

@@ -30,7 +30,7 @@ class ViewEstimate extends ViewRecord
     {
         return [
             Actions\EditAction::make()
-                ->label('Edit estimate')
+                ->label('Edit quotation')
                 ->outlined(),
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
@@ -82,7 +82,7 @@ class ViewEstimate extends ViewRecord
 
                         return new HtmlString($output);
                     }),
-                Section::make('Estimate Details')
+                Section::make('Quotation Details')
                     ->columns(4)
                     ->schema([
                         Grid::make(1)
