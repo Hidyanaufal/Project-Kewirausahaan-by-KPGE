@@ -8,13 +8,13 @@ use Filament\Support\Contracts\HasLabel;
 
 enum ProjectStatus: string implements HasLabel, HasColor, HasIcon
 {
-    case Pending = 'pending';
+    case Draft = 'draft';
     case Approved = 'approved';
 
     public function getLabel(): string
     {
         return match ($this) {
-            self::Pending => 'Pending',
+            self::Draft => 'Draft',
             self::Approved => 'Approved',
         };
     }
@@ -22,7 +22,7 @@ enum ProjectStatus: string implements HasLabel, HasColor, HasIcon
     public function getColor(): string|array|null
     {
         return match ($this) {
-            self::Pending => 'warning',
+            self::Draft => 'warning',
             self::Approved => 'success',
         };
     }
@@ -30,7 +30,7 @@ enum ProjectStatus: string implements HasLabel, HasColor, HasIcon
     public function getIcon(): ?string
     {
         return match ($this) {
-            self::Pending => 'heroicon-o-clock',
+            self::Draft => 'heroicon-o-clock',
             self::Approved => 'heroicon-o-check-circle',
         };
     }

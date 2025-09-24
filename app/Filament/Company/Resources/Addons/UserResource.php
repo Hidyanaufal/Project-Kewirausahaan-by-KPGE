@@ -162,7 +162,7 @@ class UserResource extends Resource
                             Notification::make()
                                 ->success()
                                 ->title('Password Reset Successful')
-                                ->body("The password for user **{$record->name}** has been successfully reset.")
+                                ->body("The password for user <strong>{$record->name}</strong> has been successfully reset.")
                                 ->send();
                         }),
                     Tables\Actions\DeleteAction::make()

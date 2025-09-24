@@ -4,6 +4,7 @@ namespace App\Filament\Company\Resources\Addons;
 
 use App\Concerns\HasOptions;
 use App\Concerns\HasPermissionCheck;
+use App\Enums\Addons\ProjectStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource\Pages;
 use App\Models\Addons\Project;
 use App\Models\Addons\ProjectType;
@@ -67,6 +68,7 @@ class ProjectResource extends Resource
                     Forms\Components\TextInput::make('number')
                         ->label('Project Number')
                         ->hiddenOn(['create'])
+                        ->disabledOn(['edit'])
                         ->required(),
 
                     Forms\Components\DatePicker::make('request_number_date')
@@ -163,6 +165,10 @@ class ProjectResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: false),
 
+                Tables\Columns\TextColumn::make('status')
+                    ->badge()
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('project_value')
                     ->label('Value')
                     ->money('idr')
@@ -187,6 +193,11 @@ class ProjectResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                SelectFilter::make('status')
+                    ->label('Project Status')
+                    ->options(ProjectStatus::class)
+                    ->searchable(),
+
                 SelectFilter::make('project_type_id')
                     ->label('Project Type')
                     ->options(fn() => ProjectType::get()->pluck('name', 'id'))

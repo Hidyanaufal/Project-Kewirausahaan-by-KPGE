@@ -34,7 +34,6 @@ trait HasPermissionCheck
     {
         $permissionName = static::getPermissionName();
 
-        // Kalau permission name diawali 'page_', langsung pakai permissionName tanpa prefix
         if (str_starts_with($permissionName, 'page_')) {
             $permission = $permissionName;
         } elseif (str_starts_with($permissionName, 'widget_')) {

@@ -2,21 +2,23 @@
 
 namespace App\Helpers;
 
+use App\Enums\Addons\RoleDefault;
+use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Auth;
 
 class AuthHelper
 {
-    public static function currentUser()
+    public static function user(): User
+    {
+        $guard = Filament::auth();
+        return $guard->user();
+    }
+
+    public static function currentUser(): int
     {
         $guard = Filament::auth();
         return $guard->user()->id;
-    }
-
-    public static function role()
-    {
-        $guard = Filament::auth();
-        return $guard->user()->role;
     }
 
     public static function currentCompany(): ?int
@@ -29,5 +31,19 @@ class AuthHelper
             }
         }
         return $companyId;
+    }
+
+    public static function isUser(): bool
+    {
+        return static::user()->hasRole(RoleDefault::User->value);
+    }
+
+    public static function isAdmin(): bool
+    {
+        if (static::user()->is_super_admin) {
+            return true;
+        }
+
+        return static::user()->hasRole(RoleDefault::Admin->value);
     }
 }

@@ -72,4 +72,27 @@ class Project extends Model
     {
         return $this->hasMany(Bill::class);
     }
+
+    public static function generateProjectNumber(int $projectTypeId): string
+    {
+        $prefix = ProjectType::query()
+            ->whereKey($projectTypeId)
+            ->value('code') ?? 'DOC';
+
+        $year = now()->format('y');
+        $basePrefix = $prefix . $year;
+
+        $lastDocument = self::query()
+            ->where('number', 'like', "{$basePrefix}-%")
+            ->orderBy('number', 'desc')
+            ->first();
+
+        $lastCounter = $lastDocument
+            ? (int) substr($lastDocument->number, -3)
+            : 0;
+
+        $newCounter = $lastCounter + 1;
+
+        return $basePrefix . '-' . str_pad($newCounter, 3, '0', STR_PAD_LEFT);
+    }
 }

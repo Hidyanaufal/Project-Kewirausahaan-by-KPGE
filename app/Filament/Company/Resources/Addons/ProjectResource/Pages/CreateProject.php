@@ -5,6 +5,8 @@ namespace App\Filament\Company\Resources\Addons\ProjectResource\Pages;
 use App\Concerns\HasMediumContentWidth;
 use App\Enums\Addons\ProjectStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource;
+use App\Helpers\AuthHelper;
+use App\Models\Addons\Project;
 use Filament\Resources\Pages\CreateRecord;
 use Livewire\Attributes\Url;
 
@@ -29,27 +31,11 @@ class CreateProject extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $data['request_number_date'] = today();
-        $data['status'] = ProjectStatus::Approved;
+        $data['status'] = AuthHelper::isAdmin() ? ProjectStatus::Approved : ProjectStatus::Draft;
 
-        $prefix = \App\Models\Addons\ProjectType::query()
-            ->whereKey($data['project_type_id'])
-            ->value('code') ?? 'DOC';
-
-        $year = now()->format('y');
-        $basePrefix = $prefix . $year;
-
-        $lastDocument = \App\Models\Addons\Project::query()
-            ->where('number', 'like', "{$basePrefix}-%")
-            ->orderBy('number', 'desc')
-            ->first();
-
-        $lastCounter = $lastDocument
-            ? (int) substr($lastDocument->number, -3)
-            : 0;
-
-        $newCounter = $lastCounter + 1;
-
-        $data['number'] = $basePrefix . '-' . str_pad($newCounter, 3, '0', STR_PAD_LEFT);
+        if ($data['status'] == ProjectStatus::Approved) {
+            $data['number'] = Project::generateNumber($data['project_type_id']);
+        }
 
         return $data;
     }
