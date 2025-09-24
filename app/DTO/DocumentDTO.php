@@ -17,7 +17,7 @@ readonly class DocumentDTO
      * @param  LineItemDTO[]  $lineItems
      */
     public function __construct(
-        public string $header,
+        public ?string $header,
         public ?string $subheader,
         public ?string $footer,
         public ?string $terms,
