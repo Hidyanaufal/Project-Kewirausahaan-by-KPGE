@@ -177,7 +177,7 @@ class CompanyPanelProvider extends PanelProvider
                             ->label('Banking')
                             ->icon('heroicon-o-credit-card')
                             ->items([
-                                ...AccountResource::getNavigationItems(),
+                                ...NavigationHelper::filterNavigationByPermissions(AccountResource::class),
                             ]),
 
                         NavigationGroup::make('People')

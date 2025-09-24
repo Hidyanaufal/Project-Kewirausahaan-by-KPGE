@@ -29,7 +29,6 @@ class UserResource extends Resource
     public static function form(Form $form): Form
     {
         return $form
-            ->inlineLabel()
             ->columns(1)
             ->schema([
                 Forms\Components\TextInput::make('name')
@@ -91,49 +90,83 @@ class UserResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->actions([
-                Tables\Actions\EditAction::make()
-                    ->modalWidth(MaxWidth::Medium)
-                    ->mutateRecordDataUsing(function ($record) {
-                        $record = $record->toArray();
-                        $record['roles'] = ModelHasRole::where('model_id', $record['id'])->pluck('role_id');
-                        return $record;
-                    })
-                    ->action(function (array $data, $record) {
-                        DB::beginTransaction();
-                        try {
-                            relation_update($record, $data);
-                            DB::table('model_has_roles')
-                                ->where([
-                                    'model_type' => User::class,
-                                    'model_id' => $record->id,
-                                ])
-                                ->delete();
-                            if (isset($data['roles'])) {
-                                foreach ($data['roles'] as $role) {
-                                    DB::table('model_has_roles')->insert([
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\EditAction::make()
+                        ->modalWidth(MaxWidth::Medium)
+                        ->mutateRecordDataUsing(function ($record) {
+                            $record = $record->toArray();
+                            $record['roles'] = ModelHasRole::where('model_id', $record['id'])->pluck('role_id');
+                            return $record;
+                        })
+                        ->action(function (array $data, $record) {
+                            DB::beginTransaction();
+                            try {
+                                relation_update($record, $data);
+                                DB::table('model_has_roles')
+                                    ->where([
                                         'model_type' => User::class,
                                         'model_id' => $record->id,
-                                        'role_id' => $role,
-                                        'company_id' => AuthHelper::currentCompany()
-                                    ]);
+                                    ])
+                                    ->delete();
+                                if (isset($data['roles'])) {
+                                    foreach ($data['roles'] as $role) {
+                                        DB::table('model_has_roles')->insert([
+                                            'model_type' => User::class,
+                                            'model_id' => $record->id,
+                                            'role_id' => $role,
+                                            'company_id' => AuthHelper::currentCompany()
+                                        ]);
+                                    }
                                 }
+                                DB::commit();
+                                Notification::make()
+                                    ->success()
+                                    ->title('Data updated successfully')
+                                    ->body('The record has been saved.')
+                                    ->send();
+                            } catch (\Exception $e) {
+                                DB::rollBack();
+                                Notification::make()
+                                    ->danger()
+                                    ->title('An error occurred')
+                                    ->body($e->getMessage())
+                                    ->send();
                             }
-                            DB::commit();
+                        })
+                        ->slideOver(),
+                    Tables\Actions\Action::make('reset_password')
+                        ->icon('heroicon-o-lock-closed')
+                        ->color('warning')
+                        ->modalWidth(MaxWidth::Medium)
+                        ->slideOver()
+                        ->form([
+                            Forms\Components\TextInput::make('password')
+                                ->password()
+                                ->required()
+                                ->label('New Password')
+                                ->same('password_confirmation') // validate against confirmation
+                                ->dehydrateStateUsing(
+                                    fn($state) => ! empty($state) ? Hash::make($state) : null
+                                )
+                                ->dehydrated(fn($state) => ! empty($state)),
+
+                            Forms\Components\TextInput::make('password_confirmation')
+                                ->password()
+                                ->required()
+                                ->label('Confirm Password')
+                                ->dehydrated(false), // don't save this field
+                        ])
+                        ->action(function (array $data, $record) {
+                            $record->password = $data['password'];
+                            $record->save();
                             Notification::make()
                                 ->success()
-                                ->title('Data updated successfully')
-                                ->body('The record has been saved.')
+                                ->title('Password Reset Successful')
+                                ->body("The password for user **{$record->name}** has been successfully reset.")
                                 ->send();
-                        } catch (\Exception $e) {
-                            DB::rollBack();
-                            Notification::make()
-                                ->danger()
-                                ->title('An error occurred')
-                                ->body($e->getMessage())
-                                ->send();
-                        }
-                    })
-                    ->slideOver(),
+                        }),
+                    Tables\Actions\DeleteAction::make()
+                ])
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

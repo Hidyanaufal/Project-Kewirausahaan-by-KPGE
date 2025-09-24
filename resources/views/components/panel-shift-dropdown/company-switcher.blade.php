@@ -4,6 +4,8 @@
 ])
 
 @php
+    $companies = \App\Models\Company::where('id', '!=', $currentTenant->id)->get();
+
     $currentTenantName = filament()->getTenantName($currentTenant);
     $currentCompany = auth()->user()->currentCompany;
     $currentCompanyOwner = $currentCompany->owner;
@@ -21,6 +23,8 @@
         filament()->getUserTenants(filament()->auth()->user()),
         fn (\Illuminate\Database\Eloquent\Model $tenant): bool => ! $tenant->is($currentTenant),
     ));
+
+    $hasAccessToCreateTenant = auth()->user()->is_super_admin;
 @endphp
 
 
@@ -32,15 +36,15 @@
         :label="$currentTenantName"
     />
 @endif
-@if($canSwitchTenants)
-    @foreach($tenants as $tenant)
-        <x-panel-shift-dropdown.item
-            :url="filament()->getUrl($tenant)"
-            :label="filament()->getTenantName($tenant)"
-        />
-    @endforeach
-@endif
-@if($hasRegistrationItem)
+
+@foreach($companies as $tenant)
+    <x-panel-shift-dropdown.item
+        :url="filament()->getUrl($tenant)"
+        :label="filament()->getTenantName($tenant)"
+    />
+@endforeach
+
+@if($hasRegistrationItem and $hasAccessToCreateTenant)
     <x-panel-shift-dropdown.item
         :url="$registrationItemUrl ?? filament()->getTenantRegistrationUrl()"
         :label="$registrationItem?->getLabel() ?? filament()->getTenantRegistrationPage()::getLabel()"

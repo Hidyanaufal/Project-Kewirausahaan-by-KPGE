@@ -37,12 +37,6 @@
     icon="heroicon-m-cog-6-tooth"
 />
 
-<x-panel-shift-dropdown.item
-    :url="$profileItemUrl ?? filament()->getTenantProfileUrl()"
-    :label="$profileItem?->getLabel() ?? filament()->getTenantProfilePage()::getLabel()"
-    icon="heroicon-m-briefcase"
-/>
-
 <x-panel-shift-dropdown.toggle
     label="Switch Company"
     icon="heroicon-m-arrows-right-left"

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Clusters\Settings\Pages;
 
+use App\Concerns\HasPermissionCheck;
 use App\Enums\Setting\EntityType;
 use App\Filament\Company\Clusters\Settings;
 use App\Filament\Forms\Components\AddressFields;
@@ -37,6 +38,7 @@ use function Filament\authorize;
  */
 class CompanyProfile extends Page
 {
+    use HasPermissionCheck;
     use InteractsWithFormActions;
 
     protected static ?string $title = 'Company Profile';
@@ -79,7 +81,7 @@ class CompanyProfile extends Page
     public function fillForm(): void
     {
         $data = $this->record->attributesToArray();
-
+        $data['name'] = $this->record->company->name;
         $this->form->fill($data);
     }
 
@@ -87,7 +89,8 @@ class CompanyProfile extends Page
     {
         try {
             $data = $this->form->getState();
-
+            $this->record->company->name = $data['name'];
+            $this->record->company->save();
             $this->handleRecordUpdate($this->record, $data);
         } catch (Halt $exception) {
             return;
@@ -151,6 +154,9 @@ class CompanyProfile extends Page
             ->schema([
                 Group::make()
                     ->schema([
+                        TextInput::make('name')
+                            ->maxLength(255)
+                            ->softRequired(),
                         TextInput::make('email')
                             ->email()
                             ->localizeLabel()
@@ -175,7 +181,7 @@ class CompanyProfile extends Page
                     ->uploadButtonPosition('center bottom')
                     ->uploadProgressIndicatorPosition('center bottom')
                     ->getUploadedFileNameForStorageUsing(
-                        static fn (TemporaryUploadedFile $file): string => (string) str($file->getClientOriginalName())
+                        static fn(TemporaryUploadedFile $file): string => (string) str($file->getClientOriginalName())
                             ->prepend(Auth::user()->currentCompany->id . '_'),
                     )
                     ->extraAttributes(['class' => 'w-32 h-32'])
@@ -189,7 +195,7 @@ class CompanyProfile extends Page
             ->warning()
             ->title('Address information incomplete')
             ->description('Please complete the required address information for proper business operations.')
-            ->visible(fn (CompanyProfileModel $record) => $record->address->isIncomplete())
+            ->visible(fn(CompanyProfileModel $record) => $record->address->isIncomplete())
             ->columnSpanFull();
     }
 

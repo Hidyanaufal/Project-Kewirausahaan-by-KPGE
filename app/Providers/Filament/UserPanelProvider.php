@@ -65,11 +65,11 @@ class UserPanelProvider extends PanelProvider
                 provider: GoogleFontProvider::class
             )
             ->colors([
-                'primary' => Color::Blue,
+                'primary' => Color::Green,
             ])
             ->brandLogo('/image/system.logo.png')
             ->darkModeBrandLogo('/image/system.logo.alt.png')
-            ->brandLogoHeight('50px')
+            ->brandLogoHeight('100px')
             ->navigation(false)
             ->viteTheme('resources/css/filament/user/theme.css')
             ->discoverResources(in: app_path('Filament/User/Resources'), for: 'App\\Filament\\User\\Resources')

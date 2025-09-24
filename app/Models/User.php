@@ -14,10 +14,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasPermissions;
 use Spatie\Permission\Traits\HasRoles;
 use Wallo\FilamentCompanies\FilamentCompanies;
 use Wallo\FilamentCompanies\HasCompanies;
@@ -46,7 +48,9 @@ class User extends Authenticatable implements FilamentUser, HasAvatar, HasDefaul
         'email',
         'password',
         'company_id',
-        'is_super_admin'
+        'is_super_admin',
+        'company_id',
+        'current_company_id',
     ];
 
     /**
@@ -146,5 +150,11 @@ class User extends Authenticatable implements FilamentUser, HasAvatar, HasDefaul
     public function positions(): MorphMany
     {
         return $this->morphMany(ModelHasRole::class, 'model');
+    }
+
+    public function roles(): MorphToMany
+    {
+        return $this->morphToMany(Role::class, 'model', 'model_has_roles', 'model_id', 'role_id')
+            ->wherePivot('company_id', auth()->user()->company_id ?? null);
     }
 }
