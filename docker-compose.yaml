@@ -12,7 +12,7 @@ services:
     volumes:
       - ./:/var/www
       - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
-      - mykpg_storage:/var/www/storage
+      - mykpg_storage:/var/www/storage/app
     networks:
       - mykpg_network
 
@@ -30,7 +30,7 @@ services:
     volumes:
       - ./:/var/www
       - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
-      - mykpg_storage:/var/www/storage
+      - mykpg_storage:/var/www/storage/app
     depends_on:
       - db
     networks:
@@ -46,7 +46,7 @@ services:
     volumes:
       - ./:/var/www
       - ./nginx/conf.d/:/etc/nginx/conf.d/
-      - mykpg_storage:/var/www/storage
+      - mykpg_storage:/var/www/storage/app
     networks:
       - mykpg_network
 
