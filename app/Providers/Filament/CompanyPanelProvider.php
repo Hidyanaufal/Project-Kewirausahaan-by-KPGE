@@ -75,6 +75,7 @@ use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use pxlrbt\FilamentSpotlight\SpotlightPlugin;
+use Rmsramos\Activitylog\ActivitylogPlugin;
 use Wallo\FilamentCompanies\Actions\GenerateRedirectForProvider;
 use Wallo\FilamentCompanies\FilamentCompanies;
 
@@ -99,6 +100,7 @@ class CompanyPanelProvider extends PanelProvider
             ->spa(true)
             ->tenantMenu(false)
             ->plugins([
+                ActivitylogPlugin::make(),
                 SpotlightPlugin::make(),
                 AuthUIEnhancerPlugin::make()
                     ->formPanelPosition('right')

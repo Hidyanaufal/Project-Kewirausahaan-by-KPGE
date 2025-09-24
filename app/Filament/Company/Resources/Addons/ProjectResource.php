@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Rmsramos\Activitylog\Actions\ActivityLogTimelineTableAction;
 
 class ProjectResource extends Resource
 {
@@ -68,8 +69,7 @@ class ProjectResource extends Resource
                     Forms\Components\TextInput::make('number')
                         ->label('Project Number')
                         ->hiddenOn(['create'])
-                        ->disabledOn(['edit'])
-                        ->required(),
+                        ->disabledOn(['edit']),
 
                     Forms\Components\DatePicker::make('request_number_date')
                         ->hiddenOn(['create'])
@@ -206,10 +206,9 @@ class ProjectResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ActionGroup::make([
-                    Tables\Actions\ActionGroup::make([
-                        Tables\Actions\EditAction::make(),
-                        Tables\Actions\ViewAction::make(),
-                    ])->dropdown(false),
+                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\ViewAction::make()->color('warning'),
+                    ActivityLogTimelineTableAction::make('Activities')->color('info'),
                     Tables\Actions\DeleteAction::make(),
                 ]),
             ])

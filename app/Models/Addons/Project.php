@@ -14,12 +14,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Project extends Model
 {
     use CompanyOwned;
     use SoftDeletes;
     use HasAttacments;
+    use LogsActivity;
 
     protected $fillable = [
         'company_id',
@@ -42,6 +45,26 @@ class Project extends Model
         'end_date' => 'date',
         'status' => ProjectStatus::class,
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'project_type_id',
+                'client_id',
+                'pic_id',
+                'number',
+                'name',
+                'description',
+                'request_number_date',
+                'project_value',
+                'start_date',
+                'end_date',
+                'work_basis',
+                'status',
+            ]);
+    }
+
 
     public function type(): BelongsTo
     {
