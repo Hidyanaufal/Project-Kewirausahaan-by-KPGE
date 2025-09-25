@@ -70,6 +70,11 @@
                     @endif
                     <td class="py-3 pl-4 text-left border border-black">
                         {{ $item->name }}
+                        <br>
+                        <small>
+                            {{ $item->description }}
+                        </small>
+
                     </td>
                     <td class="py-3 pr-4 text-right border border-black">
                         {{ $item->subtotal }}

@@ -44,6 +44,12 @@ class CreateInvoice extends CreateRecord
         }
     }
 
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        $data['header'] = 'Invoice';
+        return $data;
+    }
+
     public function getMaxContentWidth(): MaxWidth | string | null
     {
         return MaxWidth::Full;

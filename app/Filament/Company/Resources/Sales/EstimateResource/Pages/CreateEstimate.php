@@ -44,6 +44,12 @@ class CreateEstimate extends CreateRecord
         }
     }
 
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        $data['header'] = 'Quotation';
+        return $data;
+    }
+
     public function getMaxContentWidth(): MaxWidth | string | null
     {
         return MaxWidth::Full;
