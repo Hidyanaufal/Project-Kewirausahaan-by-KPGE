@@ -5,12 +5,15 @@ namespace App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 use App\Concerns\HandlePageRedirect;
 use App\Concerns\ManagesLineItems;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
+use App\Models\Accounting\Adjustment;
 use App\Models\Accounting\Invoice;
 use App\Models\Addons\Project;
 use App\Models\Common\Client;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\MaxWidth;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Url;
 
 class CreateInvoice extends CreateRecord
@@ -57,15 +60,47 @@ class CreateInvoice extends CreateRecord
 
     protected function handleRecordCreation(array $data): Model
     {
-        /** @var Invoice $record */
-        $record = parent::handleRecordCreation($data);
+        try {
+            DB::beginTransaction();
+            /** @var Invoice $record */
+            $record = parent::handleRecordCreation($data);
+            $this->handleLineItems($record, collect($data['lineItems'] ?? []));
+            $totals = $this->updateDocumentTotals($record, $data);
+            $record->updateQuietly($totals);
 
-        $this->handleLineItems($record, collect($data['lineItems'] ?? []));
+            // Greater than 10jt switch using PPn WAPU
+            if ($record->total > 10000000) {
+                $wapuAdjusment = Adjustment::where([
+                    'name' => 'PPN WAPU'
+                ])->first();
 
-        $totals = $this->updateDocumentTotals($record, $data);
+                if (!$wapuAdjusment) {
+                    throw new \Exception('This transaction exceeds 10,000,000. Please configure PPN WAPU in the adjustment settings before proceeding.');
+                }
 
-        $record->updateQuietly($totals);
+                $items = [];
+                foreach ($data['lineItems'] as $item) {
+                    $item['salesTaxes'] = [$wapuAdjusment->id];
+                    $items[] = $item;
+                }
 
-        return $record;
+                $lineItems = collect($items);
+                $this->deleteRemovedLineItems($record, $lineItems);
+                $this->handleLineItems($record, $lineItems);
+                $totals = $this->updateDocumentTotals($record, $data);
+                $record->updateQuietly($totals);
+            }
+
+            DB::commit();
+            return $record;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Notification::make()
+                ->danger()
+                ->title('Something went wrong')
+                ->body($e->getMessage())
+                ->send();
+            $this->halt();
+        }
     }
 }

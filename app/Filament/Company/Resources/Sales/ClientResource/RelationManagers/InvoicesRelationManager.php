@@ -4,7 +4,6 @@ namespace App\Filament\Company\Resources\Sales\ClientResource\RelationManagers;
 
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Tables;
 use Filament\Tables\Table;
 
 class InvoicesRelationManager extends RelationManager

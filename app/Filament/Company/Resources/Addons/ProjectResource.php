@@ -167,8 +167,7 @@ class ProjectResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: false),
 
                 Tables\Columns\TextColumn::make('status')
-                    ->badge()
-                    ->toggleable(),
+                    ->badge(),
 
                 Tables\Columns\TextColumn::make('project_value')
                     ->label('Value')
@@ -185,11 +184,6 @@ class ProjectResource extends Resource
                 Tables\Columns\TextColumn::make('end_date')
                     ->label('End Date')
                     ->date()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                Tables\Columns\TextColumn::make('status')
-                    ->badge()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
