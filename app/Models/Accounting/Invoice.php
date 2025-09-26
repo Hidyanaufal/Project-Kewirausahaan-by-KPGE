@@ -120,11 +120,109 @@ class Invoice extends Document
         return $numberPrefix;
     }
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::updating(function (Invoice $record) {
+            // Debug: log when updating is triggered
+            Log::debug("Invoice updating event triggered for ID: {$record->id}");
+
+            // Check if the 'status' field is being changed
+            if ($record->isDirty('status')) {
+                $old = $record->getOriginal('status');
+                $new = $record->status;
+
+                Log::debug("Invoice #{$record->id} status change detected", [
+                    'old_status' => $old,
+                    'new_status' => $new,
+                ]);
+
+                // Check if the new status is 'Paid' and the invoice is Wapu
+                if (
+                    $new === InvoiceStatus::Paid
+                    && $record->isWapu()
+                ) {
+                    Log::debug("Invoice #{$record->id} is marked as Paid and is Wapu");
+
+                    // Retrieve Wapu account
+                    $accountWapu = Account::getAccountsWapu();
+                    Log::debug("Wapu account retrieved", ['account_id' => $accountWapu?->id]);
+
+                    // Retrieve the latest payment transaction
+                    $latestTransaction = Transaction::where([
+                        'transactionable_type' => Invoice::class,
+                        'transactionable_id'   => $record->id,
+                        'is_payment'           => true,
+                    ])->orderBy('id', 'desc')->first();
+
+                    Log::debug("Latest payment transaction retrieved", [
+                        'transaction_id' => $latestTransaction?->id,
+                    ]);
+
+                    // Retrieve the approval transaction (non-payment)
+                    $approvalTransaction = Transaction::where([
+                        'is_payment'           => false,
+                        'transactionable_type' => Invoice::class,
+                        'transactionable_id'   => $record->id,
+                    ])->first();
+
+                    Log::debug("Approval transaction retrieved", [
+                        'transaction_id' => $approvalTransaction?->id,
+                    ]);
+
+                    // Retrieve all journal entries linked to approval transaction
+                    $approvalJournalEntries = JournalEntry::where([
+                        'transaction_id' => $approvalTransaction->id,
+                    ])->get();
+
+                    Log::debug("Approval journal entries found", [
+                        'count' => $approvalJournalEntries->count(),
+                    ]);
+
+                    foreach ($approvalJournalEntries as $journal) {
+                        Log::debug("Checking journal entry", [
+                            'journal_id'  => $journal->id,
+                            'account_id'  => $journal->account_id,
+                            'type'        => $journal->type,
+                            'amount'      => $journal->amount,
+                        ]);
+
+                        // If journal matches Wapu account and is a Credit type, create Debit journal
+                        if ($journal->account_id == $accountWapu->id && $journal->type == JournalEntryType::Credit) {
+                            Log::debug("Match found - creating debit journal entry for invoice", [
+                                'invoice_id'   => $record->id,
+                                'transaction_id' => $latestTransaction->id,
+                                'amount'       => abs($journal->amount * 100),
+                            ]);
+
+                            JournalEntry::create([
+                                'transaction_id' => $latestTransaction->id,
+                                'account_id'     => $accountWapu->id,
+                                'type'           => JournalEntryType::Debit,
+                                'amount'         => $journal->amount,
+                                'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                            ]);
+
+                            Log::info("Debit journal entry created for Invoice #{$record->id}");
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+
     protected function logoUrl(): Attribute
     {
         return Attribute::get(static function (mixed $value, array $attributes): ?string {
             return $attributes['logo'] ? Storage::disk('public')->url($attributes['logo']) : null;
         });
+    }
+
+    public function isWapu(): bool
+    {
+        return $this->total > 1000000000; // Greater than 10jt
     }
 
     public function client(): BelongsTo

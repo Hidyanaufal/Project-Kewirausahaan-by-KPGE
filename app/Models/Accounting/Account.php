@@ -150,6 +150,15 @@ class Account extends Model
         return $this->hasMany(JournalEntry::class, 'account_id');
     }
 
+    public static function getAccountsWapu(?int $companyId = null): self
+    {
+        return self::where('name', 'PPN WAPU')
+            ->when($companyId, function (Builder $query) use ($companyId) {
+                $query->where('company_id', $companyId);
+            })
+            ->firstOrFail();
+    }
+
     public static function getAccountsReceivableAccount(?int $companyId = null): self
     {
         return self::where('name', 'Account Receivable IDR')

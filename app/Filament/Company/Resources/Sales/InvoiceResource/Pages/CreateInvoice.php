@@ -14,6 +14,7 @@ use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\MaxWidth;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Url;
 
 class CreateInvoice extends CreateRecord
@@ -62,6 +63,7 @@ class CreateInvoice extends CreateRecord
     {
         try {
             DB::beginTransaction();
+
             /** @var Invoice $record */
             $record = parent::handleRecordCreation($data);
             $this->handleLineItems($record, collect($data['lineItems'] ?? []));
@@ -69,7 +71,7 @@ class CreateInvoice extends CreateRecord
             $record->updateQuietly($totals);
 
             // Greater than 10jt switch using PPn WAPU
-            if ($record->total > 10000000) {
+            if ($record->isWapu()) {
                 $wapuAdjusment = Adjustment::where([
                     'name' => 'PPN WAPU'
                 ])->first();

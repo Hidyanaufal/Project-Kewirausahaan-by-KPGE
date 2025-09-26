@@ -382,7 +382,6 @@ class InvoiceResource extends Resource
                             ->columnSpanFull(),
                     ]),
                 Forms\Components\Section::make('Tax Detail')
-                    ->collapsible()
                     ->columns(3)
                     ->schema([
                         Forms\Components\Select::make('tax_code_id')
