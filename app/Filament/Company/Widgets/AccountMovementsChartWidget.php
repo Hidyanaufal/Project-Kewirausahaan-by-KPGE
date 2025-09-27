@@ -7,7 +7,9 @@ use Filament\Widgets\ChartWidget;
 
 class AccountMovementsChartWidget extends ChartWidget
 {
-    protected static ?string $heading = 'Account Movements';
+    protected static ?string $heading = 'Top Account Movements';
+
+    protected static ?string $description = 'Highlights accounts with the largest financial activity';
 
     protected int | string | array $columnSpan = 'full';
 
@@ -51,20 +53,5 @@ class AccountMovementsChartWidget extends ChartWidget
     protected function getType(): string
     {
         return 'bar';
-    }
-
-    protected function getOptions(): array
-    {
-        return [
-            'indexAxis' => 'y',
-            'plugins' => [
-                'legend' => ['display' => false],
-            ],
-            'scales' => [
-                'y' => [
-                    'beginAtZero' => true,
-                ],
-            ],
-        ];
     }
 }

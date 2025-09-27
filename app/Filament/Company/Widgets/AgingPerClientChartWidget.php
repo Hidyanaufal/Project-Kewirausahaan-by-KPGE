@@ -7,7 +7,9 @@ use Filament\Widgets\ChartWidget;
 
 class AgingPerClientChartWidget extends ChartWidget
 {
-    protected static ?string $heading = 'Aging Report per Client';
+    protected static ?string $heading = 'Aging Receivables';
+
+    protected static ?string $description = 'Breaks down outstanding invoices by aging periods for each client.';
 
     protected int | string | array $columnSpan = 2;
 

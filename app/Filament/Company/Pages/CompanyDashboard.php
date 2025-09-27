@@ -47,8 +47,12 @@ class CompanyDashboard extends Dashboard
         return [
             Widgets\IncomeOverview::class,
             Widgets\AgingPerClientChartWidget::class,
-            Widgets\TopClientsOutstandingWidget::class,
+            Widgets\CollectionsTrendChartWidget::class,
             Widgets\AccountMovementsChartWidget::class,
+            Widgets\RevenueBreakdownByCategory::class,
+            Widgets\ExpenseBreakdownByCategory::class,
+            Widgets\AssetBreakdownByCategory::class,
+            Widgets\EquityBreakdownByCategory::class,
         ];
     }
 }
