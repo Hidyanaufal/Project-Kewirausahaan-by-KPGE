@@ -259,3 +259,23 @@ if (!function_exists('extract_iframe_src')) {
         return null;
     }
 }
+
+if (!function_exists('formatCurrencyShort')) {
+    function formatCurrencyShort(string $value): string
+    {
+        // Bersihkan format Rp
+        $numeric = str_replace(['Rp', '.', ' '], '', $value);
+        $numeric = str_replace(',', '.', $numeric); // ubah koma ke titik untuk desimal
+        $numeric = (float) $numeric; // convert ke float
+
+        if ($numeric >= 1_000_000_000_000) {
+            return 'Rp' . number_format($numeric / 1_000_000_000_000, 2, ',', '.') . ' T';
+        } elseif ($numeric >= 1_000_000_000) {
+            return 'Rp' . number_format($numeric / 1_000_000_000, 2, ',', '.') . ' M';
+        } elseif ($numeric >= 1_000_000) {
+            return 'Rp' . number_format($numeric / 1_000_000, 2, ',', '.') . ' Jt';
+        }
+
+        return 'Rp' . number_format($numeric, 0, ',', '.');
+    }
+}

@@ -17,6 +17,17 @@ enum AccountCategory: string implements HasLabel
         return $this->name;
     }
 
+    public function getColor(): string
+    {
+        return match ($this) {
+            self::Asset     => '#1d4ed8', // biru
+            self::Liability => '#dc2626', // merah
+            self::Equity    => '#059669', // hijau
+            self::Revenue   => '#d97706', // oranye
+            self::Expense   => '#9333ea', // ungu
+        };
+    }
+
     public function getPluralLabel(): ?string
     {
         return match ($this) {

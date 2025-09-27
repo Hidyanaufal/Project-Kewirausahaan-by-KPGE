@@ -14,7 +14,7 @@ class IncomeOverview extends BaseWidget
 
     protected function getColumns(): int
     {
-        return 2;
+        return 4;
     }
 
     protected function getStats(): array
@@ -32,22 +32,22 @@ class IncomeOverview extends BaseWidget
         $summary = $transformer->getSummary();
 
         return [
-            Stat::make('Revenue', $summary[0]['value'] ?? 'Rp0,00')
+            Stat::make('Revenue', formatCurrencyShort($summary[0]['value']) ?? 'Rp0,00')
                 ->icon('heroicon-o-currency-dollar')
                 ->color($summary[0]['value'] > 0 ? 'success' : 'danger')
                 ->description('Total Revenue'),
 
-            Stat::make('COGS', $summary[1]['value'] ?? 'Rp0,00')
+            Stat::make('COGS', formatCurrencyShort($summary[1]['value']) ?? 'Rp0,00')
                 ->icon('heroicon-o-shopping-cart')
                 ->color($summary[1]['value'] > 0 ? 'success' : 'danger')
                 ->description('Cost of Goods Sold'),
 
-            Stat::make('Expenses', $summary[2]['value'] ?? 'Rp0,00')
+            Stat::make('Expenses', formatCurrencyShort($summary[2]['value']) ?? 'Rp0,00')
                 ->icon('heroicon-o-banknotes')
                 ->color($summary[2]['value'] > 0 ? 'success' : 'danger')
                 ->description('Operating Expenses'),
 
-            Stat::make('Net Earnings', $summary[3]['value'] ?? 'Rp0,00')
+            Stat::make('Net Earnings', formatCurrencyShort($summary[3]['value']) ?? 'Rp0,00')
                 ->icon('heroicon-o-chart-bar')
                 ->color($summary[3]['value'] > 0 ? 'success' : 'danger')
                 ->description('Final Net Earnings'),
