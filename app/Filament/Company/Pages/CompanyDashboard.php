@@ -47,6 +47,7 @@ class CompanyDashboard extends Dashboard
         return [
             Widgets\IncomeOverview::class,
             Widgets\AgingPerClientChartWidget::class,
+            Widgets\TopClientsOutstandingWidget::class,
             Widgets\AccountMovementsChartWidget::class,
         ];
     }
