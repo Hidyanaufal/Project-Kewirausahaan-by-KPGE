@@ -112,7 +112,7 @@ class AccountService
         ];
 
         // Return balances, filtering out any null values
-        return array_filter($balances, static fn ($value) => $value !== null);
+        return array_filter($balances, static fn($value) => $value !== null);
     }
 
     public function getTransactionDetailsSubquery(string $startDate, string $endDate, ?string $entityId = null): Closure
@@ -149,8 +149,12 @@ class AccountService
         };
     }
 
-    public function getAccountBalances(string $startDate, string $endDate, array $accountIds = []): Builder
-    {
+    public function getAccountBalances(
+        string $startDate,
+        string $endDate,
+        array $accountIds = [],
+        ?int $projectId = null
+    ): Builder {
         $accountIds = array_map('intval', $accountIds);
 
         $query = Account::query()
@@ -205,6 +209,22 @@ class AccountService
 
         if (! empty($accountIds)) {
             $query->whereIn('accounts.id', $accountIds);
+        }
+
+        if ($projectId) {
+            $query
+                ->leftJoin('invoices', function ($join) {
+                    $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                        ->where('transactions.transactionable_type', '=', Invoice::class);
+                })
+                ->leftJoin('bills', function ($join) {
+                    $join->on('bills.id', '=', 'transactions.transactionable_id')
+                        ->where('transactions.transactionable_type', '=', Bill::class);
+                })
+                ->where(function ($q) use ($projectId) {
+                    $q->where('invoices.project_id', $projectId)
+                        ->orWhere('bills.project_id', $projectId);
+                });
         }
 
         $query->addBinding([$startDate, $startDate, $startDate, $startDate, $startDate, $endDate, $startDate, $endDate], 'select');

@@ -58,13 +58,13 @@ class Reports extends Page
                     ->description('Key financial statements that provide an overview of your company’s financial health and performance.')
                     ->extraAttributes(['class' => 'es-report-card'])
                     ->schema([
-                        // ReportEntry::make('income_statement')
-                        //     ->hiddenLabel()
-                        //     ->heading('Income Statement')
-                        //     ->description('Shows revenue, expenses, and net earnings over a period, indicating overall financial performance.')
-                        //     ->icon('heroicon-o-chart-bar')
-                        //     ->iconColor(Color::Purple)
-                        //     ->url(IncomeStatement::getUrl()),
+                        ReportEntry::make('income_statement')
+                            ->hiddenLabel()
+                            ->heading('Income Statement')
+                            ->description('Shows revenue, expenses, and net earnings over a period, indicating overall financial performance.')
+                            ->icon('heroicon-o-chart-bar')
+                            ->iconColor(Color::Purple)
+                            ->url(IncomeStatement::getUrl()),
                         ReportEntry::make('balance_sheet')
                             ->hiddenLabel()
                             ->heading('Balance Sheet')

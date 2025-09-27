@@ -5,10 +5,13 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
+use App\Filament\Company\Resources\Addons\ProjectResource;
+use App\Models\Addons\Project;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
 use App\Transformers\IncomeStatementReportTransformer;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
 use Filament\Support\Enums\Alignment;
 use Guava\FilamentClusters\Forms\Cluster;
@@ -35,7 +38,6 @@ class IncomeStatement extends BaseReportPage
         return [
             Column::make('account_code')
                 ->label('ACCOUNT CODE')
-                ->toggleable(isToggledHiddenByDefault: true)
                 ->alignment(Alignment::Left),
             Column::make('account_name')
                 ->label('ACCOUNTS')
@@ -49,9 +51,12 @@ class IncomeStatement extends BaseReportPage
     public function filtersForm(Form $form): Form
     {
         return $form
-            ->inlineLabel()
-            ->columns()
+            ->inlineLabel(false)
+            ->columns(1)
             ->schema([
+                ProjectResource::options()
+                    ->inlineLabel(false)
+                    ->columnSpanFull(),
                 $this->getDateRangeFormComponent(),
                 Cluster::make([
                     $this->getStartDateFormComponent(),
@@ -62,7 +67,12 @@ class IncomeStatement extends BaseReportPage
 
     protected function buildReport(array $columns): ReportDTO
     {
-        return $this->reportService->buildIncomeStatementReport($this->getFormattedStartDate(), $this->getFormattedEndDate(), $columns);
+        return $this->reportService->buildIncomeStatementReport(
+            $this->getFormattedStartDate(),
+            $this->getFormattedEndDate(),
+            $columns,
+            $this->getFilterState('project_id')
+        );
     }
 
     protected function getTransformer(ReportDTO $reportDTO): ExportableReport

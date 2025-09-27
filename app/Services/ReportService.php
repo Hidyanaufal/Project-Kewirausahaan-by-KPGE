@@ -383,20 +383,24 @@ class ReportService
         return ['debit_balance' => abs($endingBalance), 'credit_balance' => 0];
     }
 
-    public function buildIncomeStatementReport(string $startDate, string $endDate, array $columns = []): ReportDTO
-    {
+    public function buildIncomeStatementReport(
+        string $startDate,
+        string $endDate,
+        array $columns = [],
+        ?int $projectId = null
+    ): ReportDTO {
         // Query only relevant accounts and sort them at the query level
-        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate)
+        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId)
             ->where('category', AccountCategory::Revenue)
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $cogsAccounts = $this->accountService->getAccountBalances($startDate, $endDate)
+        $cogsAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId)
             ->whereRelation('subtype', 'name', 'Cost of Goods Sold')
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate)
+        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId)
             ->where('category', AccountCategory::Expense)
             ->whereRelation('subtype', 'name', '!=', 'Cost of Goods Sold')
             ->orderByRaw('LENGTH(code), code')
