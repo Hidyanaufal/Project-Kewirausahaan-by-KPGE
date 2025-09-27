@@ -143,6 +143,8 @@ class ViewTransaction extends ViewRecord
                             ->badge()
                             ->formatStateUsing(static fn(bool $state): string => $state ? 'Reviewed' : 'Not Reviewed')
                             ->color(static fn(bool $state): string => $state ? 'success' : 'warning'),
+                        TextEntry::make('project.name')
+                            ->label('Project'),
                         TextEntry::make('notes')
                             ->label('Notes')
                             ->columnSpan(2)

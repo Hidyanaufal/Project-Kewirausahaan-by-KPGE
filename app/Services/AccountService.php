@@ -223,7 +223,8 @@ class AccountService
                 })
                 ->where(function ($q) use ($projectId) {
                     $q->where('invoices.project_id', $projectId)
-                        ->orWhere('bills.project_id', $projectId);
+                        ->orWhere('bills.project_id', $projectId)
+                        ->orWhere('transactions.project_id', $projectId);
                 });
         }
 

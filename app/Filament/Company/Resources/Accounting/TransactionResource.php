@@ -100,7 +100,7 @@ class TransactionResource extends Resource
                     ->sortable()
                     ->currency(static fn(Transaction $transaction) => $transaction->bankAccount?->account->currency_code),
             ])
-            ->defaultSort('posted_at', 'desc')
+            ->defaultSort('id', 'desc')
             ->filters([
                 Tables\Filters\SelectFilter::make('bank_account_id')
                     ->label('Account')

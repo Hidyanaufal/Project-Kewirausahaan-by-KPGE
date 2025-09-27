@@ -4,6 +4,7 @@ namespace App\Concerns;
 
 use App\Enums\Accounting\JournalEntryType;
 use App\Enums\Accounting\TransactionType;
+use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Filament\Forms\Components\CustomTableRepeater;
 use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Transaction;
@@ -110,6 +111,7 @@ trait HasTransactionAction
                     ->options(fn(Forms\Get $get, ?Transaction $transaction) => Transaction::getTransactionAccountOptions(type: TransactionType::parse($get('type')), currentAccountId: $transaction?->account_id))
                     ->searchable()
                     ->required(),
+                ProjectResource::options(),
                 Forms\Components\Textarea::make('notes')
                     ->label('Notes')
                     ->autosize()
