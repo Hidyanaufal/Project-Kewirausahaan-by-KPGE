@@ -125,29 +125,16 @@ class Invoice extends Document
         parent::boot();
 
         static::updating(function (Invoice $record) {
-            // Debug: log when updating is triggered
-            Log::debug("Invoice updating event triggered for ID: {$record->id}");
-
-            // Check if the 'status' field is being changed
             if ($record->isDirty('status')) {
-                $old = $record->getOriginal('status');
                 $new = $record->status;
 
-                Log::debug("Invoice #{$record->id} status change detected", [
-                    'old_status' => $old,
-                    'new_status' => $new,
-                ]);
-
-                // Check if the new status is 'Paid' and the invoice is Wapu
+                // Check if the new status is 'Paid'
                 if (
                     $new === InvoiceStatus::Paid
-                    && $record->isWapu()
                 ) {
-                    Log::debug("Invoice #{$record->id} is marked as Paid and is Wapu");
-
-                    // Retrieve Wapu account
-                    $accountWapu = Account::getAccountsWapu();
-                    Log::debug("Wapu account retrieved", ['account_id' => $accountWapu?->id]);
+                    // Retrieve account
+                    $accountWapu    = Account::getAccountsWapu();
+                    $accountPPh23   = Account::getAccountsPPh23();
 
                     // Retrieve the latest payment transaction
                     $latestTransaction = Transaction::where([
@@ -156,10 +143,6 @@ class Invoice extends Document
                         'is_payment'           => true,
                     ])->orderBy('id', 'desc')->first();
 
-                    Log::debug("Latest payment transaction retrieved", [
-                        'transaction_id' => $latestTransaction?->id,
-                    ]);
-
                     // Retrieve the approval transaction (non-payment)
                     $approvalTransaction = Transaction::where([
                         'is_payment'           => false,
@@ -167,35 +150,17 @@ class Invoice extends Document
                         'transactionable_id'   => $record->id,
                     ])->first();
 
-                    Log::debug("Approval transaction retrieved", [
-                        'transaction_id' => $approvalTransaction?->id,
-                    ]);
-
                     // Retrieve all journal entries linked to approval transaction
                     $approvalJournalEntries = JournalEntry::where([
                         'transaction_id' => $approvalTransaction->id,
                     ])->get();
 
-                    Log::debug("Approval journal entries found", [
-                        'count' => $approvalJournalEntries->count(),
-                    ]);
-
                     foreach ($approvalJournalEntries as $journal) {
-                        Log::debug("Checking journal entry", [
-                            'journal_id'  => $journal->id,
-                            'account_id'  => $journal->account_id,
-                            'type'        => $journal->type,
-                            'amount'      => $journal->amount,
-                        ]);
-
-                        // If journal matches Wapu account and is a Credit type, create Debit journal
-                        if ($journal->account_id == $accountWapu->id && $journal->type == JournalEntryType::Credit) {
-                            Log::debug("Match found - creating debit journal entry for invoice", [
-                                'invoice_id'   => $record->id,
-                                'transaction_id' => $latestTransaction->id,
-                                'amount'       => abs($journal->amount * 100),
-                            ]);
-
+                        // PPn WAPU
+                        if (
+                            $journal->account_id == $accountWapu->id
+                            && $journal->type == JournalEntryType::Credit
+                        ) {
                             JournalEntry::create([
                                 'transaction_id' => $latestTransaction->id,
                                 'account_id'     => $accountWapu->id,
@@ -203,15 +168,26 @@ class Invoice extends Document
                                 'amount'         => $journal->amount,
                                 'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
                             ]);
+                        }
 
-                            Log::info("Debit journal entry created for Invoice #{$record->id}");
+                        // PPh 23
+                        if (
+                            $journal->account_id == $accountPPh23->id
+                            && $journal->type == JournalEntryType::Credit
+                        ) {
+                            JournalEntry::create([
+                                'transaction_id' => $latestTransaction->id,
+                                'account_id'     => $accountPPh23->id,
+                                'type'           => JournalEntryType::Debit,
+                                'amount'         => $journal->amount,
+                                'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                            ]);
                         }
                     }
                 }
             }
         });
     }
-
 
     protected function logoUrl(): Attribute
     {
@@ -531,7 +507,14 @@ class Invoice extends Document
             $journalEntryData[] = [
                 'type' => JournalEntryType::Credit,
                 'account_id' => $lineItem->offering->income_account_id,
-                'amount_in_invoice_currency' => $lineItemSubtotalInInvoiceCurrency,
+                'amount_in_invoice_currency' => $lineItemSubtotalInInvoiceCurrency * 0.98,
+                'description' => $lineItemDescription,
+            ];
+
+            $journalEntryData[] = [
+                'type' => JournalEntryType::Credit,
+                'account_id' => Account::getAccountsPPh23()->id,
+                'amount_in_invoice_currency' => $lineItemSubtotalInInvoiceCurrency * 0.2,
                 'description' => $lineItemDescription,
             ];
 
@@ -614,6 +597,10 @@ class Invoice extends Document
             'posted_at' => $this->date,
             'amount' => $totalDebitsInDefaultCurrency,
             'description' => 'Invoice Approval for Invoice #' . $this->invoice_number,
+        ]);
+
+        Log::debug('debug journal entry data ' . __FILE__, [
+            'journalEntry' => $journalEntryData
         ]);
 
         // Create all journal entries

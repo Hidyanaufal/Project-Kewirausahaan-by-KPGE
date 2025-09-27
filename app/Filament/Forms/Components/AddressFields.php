@@ -28,8 +28,9 @@ class AddressFields extends Grid
                 ->label('Address line 2')
                 ->maxLength(255),
             CountrySelect::make('country_code')
-                ->required()
-                ->clearStateField(),
+                ->softRequired()
+                ->clearStateField()
+                ->default(fn() => 'ID'),
             StateSelect::make('state_id'),
             TextInput::make('city')
                 ->label('City')

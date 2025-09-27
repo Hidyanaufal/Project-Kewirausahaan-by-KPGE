@@ -33,7 +33,7 @@ class EditTransactionAction extends EditAction
 
         $this->modalWidth(function (): MaxWidth {
             return match ($this->getTransactionType()) {
-                TransactionType::Journal => MaxWidth::Screen,
+                TransactionType::Journal => MaxWidth::ThreeExtraLarge,
                 default => MaxWidth::ThreeExtraLarge,
             };
         });

@@ -37,51 +37,49 @@ class ViewTransaction extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            EditTransactionAction::make()
-                ->outlined()
-                ->after(fn () => $this->dispatch('refresh')),
-            Actions\ViewAction::make('viewAssociatedDocument')
-                ->outlined()
-                ->icon('heroicon-o-document-text')
-                ->hidden(static fn (Transaction $record): bool => ! $record->transactionable_id)
-                ->label(static function (Transaction $record) {
-                    if (! $record->transactionable_type) {
-                        return 'View document';
-                    }
-
-                    return 'View ' . get_model_label($record->transactionable_type);
-                })
-                ->url(static function (Transaction $record) {
-                    return match ($record->transactionable_type) {
-                        Bill::class => ViewBill::getUrl(['record' => $record->transactionable_id]),
-                        Invoice::class => ViewInvoice::getUrl(['record' => $record->transactionable_id]),
-                        default => null,
-                    };
-                }),
             Actions\ActionGroup::make([
-                Actions\ActionGroup::make([
-                    Actions\Action::make('markAsReviewed')
-                        ->label(static fn (Transaction $record) => $record->reviewed ? 'Mark as unreviewed' : 'Mark as reviewed')
-                        ->icon(static fn (Transaction $record) => $record->reviewed ? 'heroicon-s-check-circle' : 'heroicon-o-check-circle')
-                        ->hidden(fn (Transaction $record): bool => $record->isUncategorized())
-                        ->action(fn (Transaction $record) => $record->update(['reviewed' => ! $record->reviewed])),
-                    Actions\ReplicateAction::make()
-                        ->excludeAttributes(['created_by', 'updated_by', 'created_at', 'updated_at'])
-                        ->modal(false)
-                        ->beforeReplicaSaved(static function (Transaction $replica) {
-                            $replica->description = '(Copy of) ' . $replica->description;
-                        })
-                        ->hidden(static fn (Transaction $transaction) => $transaction->transactionable_id)
-                        ->after(static function (Transaction $original, Transaction $replica) {
-                            $original->journalEntries->each(function (JournalEntry $entry) use ($replica) {
-                                $entry->replicate([
-                                    'transaction_id',
-                                ])->fill([
-                                    'transaction_id' => $replica->id,
-                                ])->save();
-                            });
-                        }),
-                ])->dropdown(false),
+                EditTransactionAction::make()
+                    ->outlined()
+                    ->after(fn() => $this->dispatch('refresh')),
+                Actions\ViewAction::make('viewAssociatedDocument')
+                    ->outlined()
+                    ->icon('heroicon-o-document-text')
+                    ->hidden(static fn(Transaction $record): bool => ! $record->transactionable_id)
+                    ->label(static function (Transaction $record) {
+                        if (! $record->transactionable_type) {
+                            return 'View document';
+                        }
+
+                        return 'View ' . get_model_label($record->transactionable_type);
+                    })
+                    ->url(static function (Transaction $record) {
+                        return match ($record->transactionable_type) {
+                            Bill::class => ViewBill::getUrl(['record' => $record->transactionable_id]),
+                            Invoice::class => ViewInvoice::getUrl(['record' => $record->transactionable_id]),
+                            default => null,
+                        };
+                    }),
+                Actions\Action::make('markAsReviewed')
+                    ->label(static fn(Transaction $record) => $record->reviewed ? 'Mark as unreviewed' : 'Mark as reviewed')
+                    ->icon(static fn(Transaction $record) => $record->reviewed ? 'heroicon-s-check-circle' : 'heroicon-o-check-circle')
+                    ->hidden(fn(Transaction $record): bool => $record->isUncategorized())
+                    ->action(fn(Transaction $record) => $record->update(['reviewed' => ! $record->reviewed])),
+                Actions\ReplicateAction::make()
+                    ->excludeAttributes(['created_by', 'updated_by', 'created_at', 'updated_at'])
+                    ->modal(false)
+                    ->beforeReplicaSaved(static function (Transaction $replica) {
+                        $replica->description = '(Copy of) ' . $replica->description;
+                    })
+                    ->hidden(static fn(Transaction $transaction) => $transaction->transactionable_id)
+                    ->after(static function (Transaction $original, Transaction $replica) {
+                        $original->journalEntries->each(function (JournalEntry $entry) use ($replica) {
+                            $entry->replicate([
+                                'transaction_id',
+                            ])->fill([
+                                'transaction_id' => $replica->id,
+                            ])->save();
+                        });
+                    }),
                 Actions\DeleteAction::make(),
             ])
                 ->label('Actions')
@@ -101,7 +99,7 @@ class ViewTransaction extends ViewRecord
                     ->warning()
                     ->title('Transaction uncategorized')
                     ->description('You must categorize this transaction before you can mark it as reviewed.')
-                    ->visible(fn (Transaction $record) => $record->isUncategorized())
+                    ->visible(fn(Transaction $record) => $record->isUncategorized())
                     ->columnSpanFull(),
                 Section::make('Transaction Details')
                     ->columns(3)
@@ -118,10 +116,10 @@ class ViewTransaction extends ViewRecord
                             ->label('Description'),
                         TextEntry::make('bankAccount.account.name')
                             ->label('Account')
-                            ->hidden(static fn (Transaction $record): bool => ! $record->bankAccount),
+                            ->hidden(static fn(Transaction $record): bool => ! $record->bankAccount),
                         TextEntry::make('payeeable.name')
                             ->label('Payee')
-                            ->hidden(static fn (Transaction $record): bool => ! $record->payeeable_type)
+                            ->hidden(static fn(Transaction $record): bool => ! $record->payeeable_type)
                             ->url(static function (Transaction $record): ?string {
                                 if (! $record->payeeable_type || ! $record->payeeable_id) {
                                     return null;
@@ -136,19 +134,19 @@ class ViewTransaction extends ViewRecord
                             ->link(),
                         TextEntry::make('account.name')
                             ->label('Category')
-                            ->hidden(static fn (Transaction $record): bool => ! $record->account),
+                            ->hidden(static fn(Transaction $record): bool => ! $record->account),
                         TextEntry::make('amount')
                             ->label('Amount')
-                            ->currency(static fn (Transaction $record) => $record->bankAccount?->account->currency_code ?? CurrencyAccessor::getDefaultCurrency()),
+                            ->currency(static fn(Transaction $record) => $record->bankAccount?->account->currency_code ?? CurrencyAccessor::getDefaultCurrency()),
                         TextEntry::make('reviewed')
                             ->label('Status')
                             ->badge()
-                            ->formatStateUsing(static fn (bool $state): string => $state ? 'Reviewed' : 'Not Reviewed')
-                            ->color(static fn (bool $state): string => $state ? 'success' : 'warning'),
+                            ->formatStateUsing(static fn(bool $state): string => $state ? 'Reviewed' : 'Not Reviewed')
+                            ->color(static fn(bool $state): string => $state ? 'success' : 'warning'),
                         TextEntry::make('notes')
                             ->label('Notes')
                             ->columnSpan(2)
-                            ->visible(static fn (Transaction $record): bool => filled($record->notes)),
+                            ->visible(static fn(Transaction $record): bool => filled($record->notes)),
                     ]),
             ]);
     }
