@@ -46,7 +46,6 @@ class CreateEstimate extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        $data['header'] = 'Quotation';
         return $data;
     }
 

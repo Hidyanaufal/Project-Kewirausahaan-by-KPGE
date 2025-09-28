@@ -80,8 +80,8 @@ readonly class DocumentDTO
         $projectName = $document->project->name;
 
         return new self(
-            header: $document->header,
-            subheader: $document->subheader,
+            header: $document->header ?? $settings->header,
+            subheader: $document->subheader ?? $settings->header,
             footer: $document->footer,
             terms: $document->terms,
             logo: $document->logo_url ?? $settings->logo_url,

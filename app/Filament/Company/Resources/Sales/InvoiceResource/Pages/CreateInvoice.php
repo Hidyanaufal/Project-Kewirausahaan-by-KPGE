@@ -50,7 +50,6 @@ class CreateInvoice extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        $data['header'] = 'Invoice';
         return $data;
     }
 
