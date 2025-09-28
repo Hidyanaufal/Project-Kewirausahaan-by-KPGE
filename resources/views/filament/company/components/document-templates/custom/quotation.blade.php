@@ -42,34 +42,41 @@
         <table class="w-full text-xs leading-tight border-1 border-black border-collapse">
             <thead>
                 <tr>
-                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-left">No.</th>
-                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-left">Description</th>
+                    <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-left">No.</th>
+                    <th style="background: {{ $document->accentColor }}" class="w-2/6 px-2 py-1 text-left">Description</th>
                     <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Qty</th>
                     <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Satuan</th>
-                    <th style="background: {{ $document->accentColor }}" class="w-3/6 px-2 py-1 text-center">Unit Price</th>
+                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Unit Price</th>
                     <th style="background: {{ $document->accentColor }}" class="w-3/6 px-2 py-1 text-center">Amount</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($document->lineItems as $index => $item)
                     <tr>
-                <td class="py-1 pl-2 text-left border border-black">
-                    {{ $item->name }}
-                    @if ($item->description)
-                        <div class="text-[10px] text-gray-600 leading-snug">
-                            {{ $item->description }}
-                        </div>
-                    @endif
-                </td>
-                <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                    {{ $item->subtotal }}
-                </td>
-                </tr>
+                        <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                            {{ $index + 1 }}.
+                        </td>
+                        <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                            {{ $item->subtotal }}
+                        </td>
+                        <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                            {{ $item->subtotal }}
+                        </td>
+                        <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                            {{ $item->subtotal }}
+                        </td>
+                        <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                            {{ $item->subtotal }}
+                        </td>
+                        <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                            {{ $item->subtotal }}
+                        </td>
+                    </tr>
                 @endforeach
 
                 <!-- Jumlah -->
                 <tr>
-                    <td colspan="2" class="px-2 text-right border-t border-black">JUMLAH</td>
+                    <td colspan="5" class="px-2 text-right border-t border-black">JUMLAH</td>
                     <td class="px-2 text-right border-t border-black">
                         {{ $document->subtotal }}
                     </td>
@@ -77,7 +84,7 @@
 
                 <!-- PPN -->
                 <tr>
-                    <td colspan="2" class="px-2 text-right">PROFIT</td>
+                    <td colspan="5" class="px-2 text-right">PROFIT</td>
                     <td class="px-2 text-right">
                         {{ $document->tax }}
                     </td>
@@ -85,7 +92,7 @@
 
                 <!-- Total -->
                 <tr>
-                    <td colspan="2" class="px-2 font-semibold text-right">Total</td>
+                    <td colspan="5" class="px-2 font-semibold text-right">TOTAL</td>
                     <td class="px-2 font-semibold text-right">
                         {{ $document->total }}
                     </td>
