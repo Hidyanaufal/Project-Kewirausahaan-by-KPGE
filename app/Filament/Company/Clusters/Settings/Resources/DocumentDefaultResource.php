@@ -137,90 +137,92 @@ class DocumentDefaultResource extends Resource
     public static function getColumnLabelsSchema(): array
     {
         return [
-            Forms\Components\Select::make('item_name.option')
-                ->softRequired()
-                ->localizeLabel('Item name')
-                ->options(DocumentDefault::getAvailableItemNameOptions())
-                ->afterStateUpdated(static function (Get $get, Set $set, $state, $old) {
-                    if ($state !== 'other' && $old === 'other' && filled($get('item_name.custom'))) {
-                        $set('item_name.old_custom', $get('item_name.custom'));
-                        $set('item_name.custom', null);
-                    }
+            Forms\Components\Group::make([
+                Forms\Components\Select::make('item_name.option')
+                    ->softRequired()
+                    ->localizeLabel('Item name')
+                    ->options(DocumentDefault::getAvailableItemNameOptions())
+                    ->afterStateUpdated(static function (Get $get, Set $set, $state, $old) {
+                        if ($state !== 'other' && $old === 'other' && filled($get('item_name.custom'))) {
+                            $set('item_name.old_custom', $get('item_name.custom'));
+                            $set('item_name.custom', null);
+                        }
 
-                    if ($state === 'other' && $old !== 'other') {
-                        $set('item_name.custom', $get('item_name.old_custom'));
-                    }
-                }),
-            Forms\Components\TextInput::make('item_name.custom')
-                ->hiddenLabel()
-                ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
-                    'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
-                ])
-                ->disabled(static fn(callable $get) => $get('item_name.option') !== 'other')
-                ->nullable(),
-            Forms\Components\Select::make('unit_name.option')
-                ->softRequired()
-                ->localizeLabel('Unit name')
-                ->options(DocumentDefault::getAvailableUnitNameOptions())
-                ->afterStateUpdated(static function (Get $get, Set $set, $state, $old) {
-                    if ($state !== 'other' && $old === 'other' && filled($get('unit_name.custom'))) {
-                        $set('unit_name.old_custom', $get('unit_name.custom'));
-                        $set('unit_name.custom', null);
-                    }
+                        if ($state === 'other' && $old !== 'other') {
+                            $set('item_name.custom', $get('item_name.old_custom'));
+                        }
+                    }),
+                Forms\Components\TextInput::make('item_name.custom')
+                    ->hiddenLabel()
+                    ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
+                        'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
+                    ])
+                    ->disabled(static fn(callable $get) => $get('item_name.option') !== 'other')
+                    ->nullable(),
+                Forms\Components\Select::make('unit_name.option')
+                    ->softRequired()
+                    ->localizeLabel('Unit name')
+                    ->options(DocumentDefault::getAvailableUnitNameOptions())
+                    ->afterStateUpdated(static function (Get $get, Set $set, $state, $old) {
+                        if ($state !== 'other' && $old === 'other' && filled($get('unit_name.custom'))) {
+                            $set('unit_name.old_custom', $get('unit_name.custom'));
+                            $set('unit_name.custom', null);
+                        }
 
-                    if ($state === 'other' && $old !== 'other') {
-                        $set('unit_name.custom', $get('unit_name.old_custom'));
-                    }
-                }),
-            Forms\Components\TextInput::make('unit_name.custom')
-                ->hiddenLabel()
-                ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
-                    'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
-                ])
-                ->disabled(static fn(callable $get) => $get('unit_name.option') !== 'other')
-                ->nullable(),
-            Forms\Components\Select::make('price_name.option')
-                ->softRequired()
-                ->localizeLabel('Price name')
-                ->options(DocumentDefault::getAvailablePriceNameOptions())
-                ->afterStateUpdated(static function (Get $get, Set $set, $state, $old) {
-                    if ($state !== 'other' && $old === 'other' && filled($get('price_name.custom'))) {
-                        $set('price_name.old_custom', $get('price_name.custom'));
-                        $set('price_name.custom', null);
-                    }
+                        if ($state === 'other' && $old !== 'other') {
+                            $set('unit_name.custom', $get('unit_name.old_custom'));
+                        }
+                    }),
+                Forms\Components\TextInput::make('unit_name.custom')
+                    ->hiddenLabel()
+                    ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
+                        'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
+                    ])
+                    ->disabled(static fn(callable $get) => $get('unit_name.option') !== 'other')
+                    ->nullable(),
+                Forms\Components\Select::make('price_name.option')
+                    ->softRequired()
+                    ->localizeLabel('Price name')
+                    ->options(DocumentDefault::getAvailablePriceNameOptions())
+                    ->afterStateUpdated(static function (Get $get, Set $set, $state, $old) {
+                        if ($state !== 'other' && $old === 'other' && filled($get('price_name.custom'))) {
+                            $set('price_name.old_custom', $get('price_name.custom'));
+                            $set('price_name.custom', null);
+                        }
 
-                    if ($state === 'other' && $old !== 'other') {
-                        $set('price_name.custom', $get('price_name.old_custom'));
-                    }
-                }),
-            Forms\Components\TextInput::make('price_name.custom')
-                ->hiddenLabel()
-                ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
-                    'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
-                ])
-                ->disabled(static fn(callable $get) => $get('price_name.option') !== 'other')
-                ->nullable(),
-            Forms\Components\Select::make('amount_name.option')
-                ->softRequired()
-                ->localizeLabel('Amount name')
-                ->options(DocumentDefault::getAvailableAmountNameOptions())
-                ->afterStateUpdated(static function (Get $get, Set $set, $state, $old) {
-                    if ($state !== 'other' && $old === 'other' && filled($get('amount_name.custom'))) {
-                        $set('amount_name.old_custom', $get('amount_name.custom'));
-                        $set('amount_name.custom', null);
-                    }
+                        if ($state === 'other' && $old !== 'other') {
+                            $set('price_name.custom', $get('price_name.old_custom'));
+                        }
+                    }),
+                Forms\Components\TextInput::make('price_name.custom')
+                    ->hiddenLabel()
+                    ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
+                        'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
+                    ])
+                    ->disabled(static fn(callable $get) => $get('price_name.option') !== 'other')
+                    ->nullable(),
+                Forms\Components\Select::make('amount_name.option')
+                    ->softRequired()
+                    ->localizeLabel('Amount name')
+                    ->options(DocumentDefault::getAvailableAmountNameOptions())
+                    ->afterStateUpdated(static function (Get $get, Set $set, $state, $old) {
+                        if ($state !== 'other' && $old === 'other' && filled($get('amount_name.custom'))) {
+                            $set('amount_name.old_custom', $get('amount_name.custom'));
+                            $set('amount_name.custom', null);
+                        }
 
-                    if ($state === 'other' && $old !== 'other') {
-                        $set('amount_name.custom', $get('amount_name.old_custom'));
-                    }
-                }),
-            Forms\Components\TextInput::make('amount_name.custom')
-                ->hiddenLabel()
-                ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
-                    'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
-                ])
-                ->disabled(static fn(callable $get) => $get('amount_name.option') !== 'other')
-                ->nullable(),
+                        if ($state === 'other' && $old !== 'other') {
+                            $set('amount_name.custom', $get('amount_name.old_custom'));
+                        }
+                    }),
+                Forms\Components\TextInput::make('amount_name.custom')
+                    ->hiddenLabel()
+                    ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
+                        'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
+                    ])
+                    ->disabled(static fn(callable $get) => $get('amount_name.option') !== 'other')
+                    ->nullable(),
+            ])->hidden(fn(Get $get) => !in_array($get('template'), ['default', 'classic', 'modern']))
         ];
     }
 

@@ -38,9 +38,9 @@
         <table class="w-full text-xs leading-tight border-1 border-black border-collapse">
             <thead>
                 <tr>
-                    <th class="w-1/6 px-2 py-1 text-center border border-black">Tanggal</th>
-                    <th class="w-4/6 px-2 py-1 text-left border border-black">Keterangan</th>
-                    <th class="w-1/6 px-2 py-1 text-center border border-black">Jumlah (Rp.)</th>
+                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Tanggal</th>
+                    <th style="background: {{ $document->accentColor }}" class="w-4/6 px-2 py-1 text-left">Keterangan</th>
+                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Jumlah (Rp.)</th>
                 </tr>
             </thead>
             <tbody>
