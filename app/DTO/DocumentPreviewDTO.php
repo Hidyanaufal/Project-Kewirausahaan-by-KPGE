@@ -52,7 +52,8 @@ readonly class DocumentPreviewDTO extends DocumentDTO
             accountName: $settings->account_name,
             accountNumber: $settings->account_number,
             beneficiaryName: $settings->beneficiary_name,
-            beneficiaryTitle: $settings->beneficiary_title
+            beneficiaryTitle: $settings->beneficiary_title,
+            contactName: 'John Doe',
         );
     }
 

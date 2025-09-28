@@ -375,7 +375,7 @@ class EstimateResource extends Resource
                             ->columnSpanFull(),
                     ]),
                 DocumentFooterSection::make('Quotation Footer')
-                    ->visible(false)
+                    ->visible(true)
                     ->defaultFooter($settings->footer),
             ]);
     }

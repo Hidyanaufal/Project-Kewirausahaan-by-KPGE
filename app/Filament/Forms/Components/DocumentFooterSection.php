@@ -21,12 +21,9 @@ class DocumentFooterSection extends Section
     {
         parent::setUp();
 
-        $this->collapsible();
-        $this->collapsed();
-
         $this->schema([
             Textarea::make('footer')
-                ->default(fn () => $this->getDefaultFooter())
+                ->default(fn() => $this->getDefaultFooter())
                 ->columnSpanFull(),
         ]);
     }

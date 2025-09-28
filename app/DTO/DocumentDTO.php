@@ -44,11 +44,12 @@ readonly class DocumentDTO
         public ?string $terbilang,
         public ?string $dpp,
         public ?string $project,
-        public ?string $bankName = '',
-        public ?string $accountName = '',
-        public ?string $accountNumber = '',
-        public ?string $beneficiaryName = '',
-        public ?string $beneficiaryTitle = '',
+        public ?string $bankName,
+        public ?string $accountName,
+        public ?string $accountNumber,
+        public ?string $beneficiaryName,
+        public ?string $beneficiaryTitle,
+        public ?string $contactName,
     ) {}
 
     public static function fromModel(Document $document): self
@@ -110,7 +111,8 @@ readonly class DocumentDTO
             accountName: $settings->account_name,
             accountNumber: $settings->account_number,
             beneficiaryName: $settings->beneficiary_name,
-            beneficiaryTitle: $settings->beneficiary_title
+            beneficiaryTitle: $settings->beneficiary_title,
+            contactName: $document->client->primaryContact->first_name . ' ' . $document->client->primaryContact->last_name ?? '-',
         );
     }
 

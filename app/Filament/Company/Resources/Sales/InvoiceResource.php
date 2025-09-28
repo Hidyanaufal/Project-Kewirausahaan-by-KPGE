@@ -403,7 +403,7 @@ class InvoiceResource extends Resource
                     ]),
                 DocumentFooterSection::make('Invoice Footer')
                     ->defaultFooter($settings->footer)
-                    ->visible(false),
+                    ->visible(true),
             ]);
     }
 

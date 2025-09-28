@@ -17,24 +17,39 @@
 
     {{-- Title --}}
     <div class="my-4 text-center">
-        <h2 class="text-lg font-bold">{{ $document->header }}</h2>
+        <h2 class="text-lg font-bold uppercase">{{ $document->header }}</h2>
         @if ($document->subheader)
-            <p class="text-xs text-gray-600">{{ $document->subheader }}</p>
+            <p class="italic text-sm">{{ $document->subheader }}</p>
         @endif
-        <div class="mt-1 text-xs">No. {{ $document->number }}</div>
     </div>
 
     {{-- Metadata --}}
-    <div class="space-y-1 metadata">
-        <div class="flex mb-2 gap-5">
-            <div class="text-xs">Kepada :</div>
-            <div class="text-xs">
-                <p class="font-semibold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
-                @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
-                    {!! $formattedAddress !!}
-                @endif
-            </div>
+    <div class="flex justify-between text-xs mb-6">
+        <div>
+            <p><strong>From</strong></p>
+            <p class="font-bold">{{ $document->company?->name }}</p>
+            <p>{{ $document->company?->addressLine1}}</p>
+            <p>{{ $document->company?->addressLine2}}</p>
+            <p>{{ $document->company?->city}}</p>
         </div>
+        <div>
+            <p>No. : {{ $document->number ?? '-' }}</p>
+            <p>Date: {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}</p>
+        </div>
+    </div>
+
+    <div class="text-xs mb-6">
+        <p><strong>To</strong></p>
+        <p class="font-bold">{{ $document->client?->name }}</p>
+        @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
+            {!! $formattedAddress !!}
+        @endif
+        <p class="mt-2"><strong>UP :</strong></p>
+        <p class="font-bold">{{$document->contactName}}</p>
+    </div>
+
+    <div class="text-xs">
+        Dengan ini kami sampaikan penawaran spesifikasi barang/pekerjaan jasa dan harga yang bapak/ibu butuhkan :
     </div>
 
     {{-- Line Items --}}
@@ -43,14 +58,27 @@
             <thead>
                 <tr>
                     <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-left">No.</th>
-                    <th style="background: {{ $document->accentColor }}" class="w-2/6 px-2 py-1 text-left">Description</th>
+                    <th style="background: {{ $document->accentColor }}" class="w-2/6 px-2 py-1 text-left">Description
+                    </th>
                     <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Qty</th>
-                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Satuan</th>
-                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Unit Price</th>
-                    <th style="background: {{ $document->accentColor }}" class="w-3/6 px-2 py-1 text-center">Amount</th>
+                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Satuan
+                    </th>
+                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Unit Price
+                    </th>
+                    <th style="background: {{ $document->accentColor }}" class="w-3/6 px-2 py-1 text-center">Amount
+                    </th>
                 </tr>
             </thead>
             <tbody>
+                <tr>
+                    <td colspan="6">
+                        @isset($document->project)
+                            <div class="py-1 pl-2 font-semibold text-left">
+                                {{ $document->project }}
+                            </div>
+                        @endisset
+                    </td>
+                </tr>
                 @foreach ($document->lineItems as $index => $item)
                     <tr>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
@@ -118,12 +146,26 @@
         @endif
 
         {{-- Signature --}}
-        <div class="w-64 ml-auto text-left">
-            {{ $document->accountName }}<br>
-            Jakarta, {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}<br><br><br>
-            <div class="mt-6 font-semibold">{{ $document->beneficiaryName }}</div>
-            <div>{{ $document->beneficiaryTitle }}</div>
+        <div class="flex justify-between mt-16 text-xs">
+            {{-- Left side (Pihak Penerima) --}}
+            <div class="text-center w-1/2">
+                <p>{{ $document->client?->name }}</p>
+                <div class="mt-20">
+                    <p>(.................................................)</p>
+                </div>
+            </div>
+
+            {{-- Right side (Pihak Pengirim) --}}
+            <div class="text-center w-1/2">
+                <p>{{ $document->company->name }}</p>
+                <div class="mt-2">
+                    <div class="h-16"></div>
+                </div>
+                <p class="mt-2 font-bold">{{ $document->beneficiaryName }}</p>
+                <p>{{ $document->beneficiaryTitle }}</p>
+            </div>
         </div>
+
     </div>
 </div>
 
