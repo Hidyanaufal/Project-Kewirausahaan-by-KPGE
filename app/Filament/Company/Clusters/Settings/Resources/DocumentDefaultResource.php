@@ -139,13 +139,15 @@ class DocumentDefaultResource extends Resource
     {
         return [
             Forms\Components\Group::make([
-                Forms\Components\TextInput::make('bank_name')->live(),
+                Forms\Components\TextInput::make('bank_name'),
                 Forms\Components\TextInput::make('account_name'),
                 Forms\Components\TextInput::make('account_number'),
+            ])->hidden(fn(Get $get) => !in_array($get('template'), ['custom.invoice'])),
+
+            Forms\Components\Group::make([
                 Forms\Components\TextInput::make('beneficiary_name'),
                 Forms\Components\TextInput::make('beneficiary_title'),
-            ])
-                ->hidden(fn(Get $get) => in_array($get('template'), ['default', 'classic', 'modern']))
+            ])->hidden(fn(Get $get) => !in_array($get('template'), ['custom.invoice', 'custom.quotation']))
         ];
     }
 
@@ -250,8 +252,6 @@ class DocumentDefaultResource extends Resource
                 Tables\Columns\TextColumn::make('number_prefix'),
                 Tables\Columns\TextColumn::make('template')
                     ->badge(),
-                Tables\Columns\IconColumn::make('show_logo')
-                    ->boolean(),
             ])
             ->filters([
                 //

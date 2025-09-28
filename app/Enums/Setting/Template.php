@@ -17,6 +17,7 @@ enum Template: string implements HasLabel
     case Classic = 'classic';
     case Modern = 'modern';
     case CustomInvoice = 'custom.invoice';
+    case CustomQuotation = 'custom.quotation';
 
     public function getLabel(): ?string
     {
@@ -29,6 +30,7 @@ enum Template: string implements HasLabel
             self::Classic => 'Classic',
             self::Modern => 'Modern',
             self::CustomInvoice => 'Custom Invoice',
+            self::CustomQuotation => 'Custom Quotation',
         };
     }
 }
