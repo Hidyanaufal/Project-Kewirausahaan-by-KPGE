@@ -9,8 +9,6 @@ use Illuminate\Contracts\Support\Htmlable;
 
 class EditDocumentDefault extends EditRecord
 {
-    use HandlePageRedirect;
-
     protected static string $resource = DocumentDefaultResource::class;
 
     public function getRecordTitle(): string | Htmlable

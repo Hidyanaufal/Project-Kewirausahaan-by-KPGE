@@ -48,6 +48,11 @@ class DocumentDefault extends Model
         'amount_name',
         'created_by',
         'updated_by',
+        'bank_name',
+        'account_name',
+        'account_number',
+        'beneficiary_name',
+        'beneficiary_title',
     ];
 
     protected $casts = [

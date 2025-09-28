@@ -44,6 +44,11 @@ readonly class DocumentDTO
         public ?string $terbilang,
         public ?string $dpp,
         public ?string $project,
+        public ?string $bankName = '',
+        public ?string $accountName = '',
+        public ?string $accountNumber = '',
+        public ?string $beneficiaryName = '',
+        public ?string $beneficiaryTitle = '',
     ) {}
 
     public static function fromModel(Document $document): self
@@ -101,6 +106,11 @@ readonly class DocumentDTO
             terbilang: self::generateTerbilang($amountDue),
             dpp: self::generateDpp($document->subtotal),
             project: $projectName,
+            bankName: $document->bank_name,
+            accountName: $document->account_name,
+            accountNumber: $document->account_number,
+            beneficiaryName: $document->beneficiary_name,
+            beneficiaryTitle: $document->beneficiary_title
         );
     }
 

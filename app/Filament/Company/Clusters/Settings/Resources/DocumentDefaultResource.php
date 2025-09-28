@@ -117,6 +117,7 @@ class DocumentDefaultResource extends Resource
                             ->localizeLabel()
                             ->options(Template::class),
                         ...static::getColumnLabelsSchema(),
+                        ...static::getCustomLabelsSchema(),
                     ])->columnSpan(1),
                 DocumentPreview::make()
                     ->template(static fn(Get $get) => Template::parse($get('template')))
@@ -132,6 +133,20 @@ class DocumentDefaultResource extends Resource
         return Forms\Components\Section::make('Column Labels')
             ->visible(static fn(DocumentDefault $record) => $record->type === DocumentType::Bill)
             ->schema(static::getColumnLabelsSchema())->columns();
+    }
+
+    public static function getCustomLabelsSchema(): array
+    {
+        return [
+            Forms\Components\Group::make([
+                Forms\Components\TextInput::make('bank_name')->live(),
+                Forms\Components\TextInput::make('account_name'),
+                Forms\Components\TextInput::make('account_number'),
+                Forms\Components\TextInput::make('beneficiary_name'),
+                Forms\Components\TextInput::make('beneficiary_title'),
+            ])
+                ->hidden(fn(Get $get) => in_array($get('template'), ['default', 'classic', 'modern']))
+        ];
     }
 
     public static function getColumnLabelsSchema(): array

@@ -1,3 +1,7 @@
+@php
+    // dd($document);
+@endphp
+
 <div class="p-6 text-gray-800 bg-white rounded-md shadow-sm invoice-container">
     {{-- Header --}}
     <div class="mb-4">
@@ -15,16 +19,16 @@
     <div class="my-4 text-center">
         <h2 class="text-lg font-bold">{{ $document->header }}</h2>
         @if ($document->subheader)
-            <p class="text-sm text-gray-600">{{ $document->subheader }}</p>
+            <p class="text-xs text-gray-600">{{ $document->subheader }}</p>
         @endif
-        <div class="mt-1 text-sm">No. {{ $document->number }}</div>
+        <div class="mt-1 text-xs">No. {{ $document->number }}</div>
     </div>
 
     {{-- Metadata --}}
     <div class="space-y-1 metadata">
         <div class="flex mb-2 gap-5">
-            <div class="text-sm">Kepada :</div>
-            <div class="text-sm">
+            <div class="text-xs">Kepada :</div>
+            <div class="text-xs">
                 <p class="font-semibold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
                 @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
                     {!! $formattedAddress !!}
@@ -133,33 +137,33 @@
 
 
     {{-- Footer Notes --}}
-    <div class="mt-2 text-sm footer">
+    <div class="mt-2 text-xs footer">
         @if ($document->terms)
             <div class="leading-relaxed">Terms and Condition:</div>
-            <div class="mb-4 text-sm font-semibold">
+            <div class="mb-4 text-xs font-semibold">
                 {{ $document->terms }}
             </div>
         @endif
 
         @if ($document->footer)
-            <div class="mb-4 text-sm" style="font-style: italic">
+            <div class="mb-4 text-xs" style="font-style: italic">
                 {{ $document->footer }}
             </div>
         @endif
 
         <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>
-        <div class="mb-2 text-sm font-semibold">
-            PT. BANK MANDIRI (PERSERO) KCP JKT SARINAH<br>
-            A/n. KOPERASI PERTAMINA GEOTHERMAL<br>
-            ACCOUNT NO. 1030004629511
+        <div class="mb-2 text-xs font-semibold">
+            {{ $document->bankName }}<br>
+            A/n. {{ $document->accountName }}<br>
+            ACCOUNT NO. {{ $document->accountNumber }}
         </div>
 
         {{-- Signature --}}
         <div class="w-64 ml-auto text-left">
-            KOPERASI PERTAMINA GEOTHERMAL<br>
+            {{ $document->accountName }}<br>
             Jakarta, {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}<br><br><br>
-            <div class="mt-6 font-semibold">{{ $document->signatureName ?? 'Robby Wijayadi' }}</div>
-            <div>{{ $document->signatureTitle ?? 'Direktur' }}</div>
+            <div class="mt-6 font-semibold">{{ $document->beneficiaryName }}</div>
+            <div>{{ $document->beneficiaryTitle }}</div>
         </div>
     </div>
 </div>

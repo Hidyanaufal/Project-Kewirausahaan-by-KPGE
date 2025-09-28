@@ -48,6 +48,11 @@ readonly class DocumentPreviewDTO extends DocumentDTO
             terbilang: self::generateTerbilang($amountDue),
             dpp: self::generateDpp(95000),
             project: 'Pengadaan Jasa',
+            bankName: $settings->bank_name,
+            accountName: $settings->account_name,
+            accountNumber: $settings->account_number,
+            beneficiaryName: $settings->beneficiary_name,
+            beneficiaryTitle: $settings->beneficiary_title
         );
     }
 
