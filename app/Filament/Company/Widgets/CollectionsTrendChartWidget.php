@@ -16,9 +16,9 @@ class CollectionsTrendChartWidget extends ChartWidget
     protected function getData(): array
     {
         $data = Invoice::selectRaw("
-                DATE_FORMAT(paid_at, '%Y-%m') as month,
-                SUM(amount_paid) as total_collections
-            ")
+            DATE_FORMAT(paid_at, '%Y-%m') as month,
+            SUM(amount_paid) / 100 as total_collections
+        ")
             ->whereNotNull('paid_at')
             ->groupBy('month')
             ->orderBy('month')
@@ -36,6 +36,7 @@ class CollectionsTrendChartWidget extends ChartWidget
             'labels' => $data->keys()->toArray(),
         ];
     }
+
 
     protected function getType(): string
     {

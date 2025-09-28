@@ -16,13 +16,13 @@ class AgingPerClientChartWidget extends ChartWidget
     protected function getData(): array
     {
         $data = Invoice::selectRaw("
-            client_id,
-            SUM(CASE WHEN DATEDIFF(NOW(), due_date) <= 0 THEN total - amount_paid ELSE 0 END) as current,
-            SUM(CASE WHEN DATEDIFF(NOW(), due_date) BETWEEN 1 AND 30 THEN total - amount_paid ELSE 0 END) as period_1,
-            SUM(CASE WHEN DATEDIFF(NOW(), due_date) BETWEEN 31 AND 60 THEN total - amount_paid ELSE 0 END) as period_2,
-            SUM(CASE WHEN DATEDIFF(NOW(), due_date) BETWEEN 61 AND 90 THEN total - amount_paid ELSE 0 END) as period_3,
-            SUM(CASE WHEN DATEDIFF(NOW(), due_date) > 90 THEN total - amount_paid ELSE 0 END) as over_periods
-        ")
+                client_id,
+                SUM(CASE WHEN DATEDIFF(NOW(), due_date) <= 0 THEN (total - amount_paid) / 100 ELSE 0 END) as current,
+                SUM(CASE WHEN DATEDIFF(NOW(), due_date) BETWEEN 1 AND 30 THEN (total - amount_paid) / 100 ELSE 0 END) as period_1,
+                SUM(CASE WHEN DATEDIFF(NOW(), due_date) BETWEEN 31 AND 60 THEN (total - amount_paid) / 100 ELSE 0 END) as period_2,
+                SUM(CASE WHEN DATEDIFF(NOW(), due_date) BETWEEN 61 AND 90 THEN (total - amount_paid) / 100 ELSE 0 END) as period_3,
+                SUM(CASE WHEN DATEDIFF(NOW(), due_date) > 90 THEN (total - amount_paid) / 100 ELSE 0 END) as over_periods
+            ")
             ->with('client:id,name')
             ->groupBy('client_id')
             ->get();
