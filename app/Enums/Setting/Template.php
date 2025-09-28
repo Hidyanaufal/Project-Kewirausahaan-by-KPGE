@@ -16,11 +16,19 @@ enum Template: string implements HasLabel
     case Default = 'default';
     case Classic = 'classic';
     case Modern = 'modern';
-
-    public const KPP = self::Kppb->value;
+    case CustomInvoice = 'custom.invoice';
 
     public function getLabel(): ?string
     {
-        return translate($this->name);
+        return match ($this) {
+            self::Jes => 'JES',
+            self::Kppb => 'KPPB',
+            self::Kpg => 'KPG',
+            self::Kppe => 'KPPE',
+            self::Default => 'Default',
+            self::Classic => 'Classic',
+            self::Modern => 'Modern',
+            self::CustomInvoice => 'Custom Invoice',
+        };
     }
 }

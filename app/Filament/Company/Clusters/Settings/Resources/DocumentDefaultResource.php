@@ -60,7 +60,7 @@ class DocumentDefaultResource extends Resource
     public static function getContentSection(): Forms\Components\Component
     {
         return Forms\Components\Section::make('Content')
-            ->hidden(static fn (DocumentDefault $record) => $record->type === DocumentType::Bill)
+            ->hidden(static fn(DocumentDefault $record) => $record->type === DocumentType::Bill)
             ->schema([
                 Forms\Components\TextInput::make('header')
                     ->localizeLabel()
@@ -81,7 +81,7 @@ class DocumentDefaultResource extends Resource
     {
         return Forms\Components\Section::make('Template')
             ->description('Choose the template and edit the column names.')
-            ->hidden(static fn (DocumentDefault $record) => $record->type === DocumentType::Bill)
+            ->hidden(static fn(DocumentDefault $record) => $record->type === DocumentType::Bill)
             ->schema([
                 Forms\Components\Grid::make(1)
                     ->schema([
@@ -91,8 +91,6 @@ class DocumentDefaultResource extends Resource
                             ->openable()
                             ->directory('logos/document')
                             ->image()
-                            ->imageCropAspectRatio('3:2')
-                            ->panelAspectRatio('3:2')
                             ->panelLayout('compact')
                             ->extraAttributes([
                                 'class' => 'es-file-upload document-logo-preview',
@@ -110,7 +108,7 @@ class DocumentDefaultResource extends Resource
                             ->allowHtml()
                             ->options(
                                 collect(Font::cases())
-                                    ->mapWithKeys(static fn ($case) => [
+                                    ->mapWithKeys(static fn($case) => [
                                         $case->value => "<span style='font-family:{$case->getLabel()}'>{$case->getLabel()}</span>",
                                     ]),
                             ),
@@ -121,7 +119,7 @@ class DocumentDefaultResource extends Resource
                         ...static::getColumnLabelsSchema(),
                     ])->columnSpan(1),
                 DocumentPreview::make()
-                    ->template(static fn (Get $get) => Template::parse($get('template')))
+                    ->template(static fn(Get $get) => Template::parse($get('template')))
                     ->preview()
                     ->columnSpan([
                         'lg' => 2,
@@ -132,7 +130,7 @@ class DocumentDefaultResource extends Resource
     public static function getBillColumnLabelsSection(): Component
     {
         return Forms\Components\Section::make('Column Labels')
-            ->visible(static fn (DocumentDefault $record) => $record->type === DocumentType::Bill)
+            ->visible(static fn(DocumentDefault $record) => $record->type === DocumentType::Bill)
             ->schema(static::getColumnLabelsSchema())->columns();
     }
 
@@ -155,10 +153,10 @@ class DocumentDefaultResource extends Resource
                 }),
             Forms\Components\TextInput::make('item_name.custom')
                 ->hiddenLabel()
-                ->extraFieldWrapperAttributes(static fn (DocumentDefault $record) => [
+                ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
                     'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
                 ])
-                ->disabled(static fn (callable $get) => $get('item_name.option') !== 'other')
+                ->disabled(static fn(callable $get) => $get('item_name.option') !== 'other')
                 ->nullable(),
             Forms\Components\Select::make('unit_name.option')
                 ->softRequired()
@@ -176,10 +174,10 @@ class DocumentDefaultResource extends Resource
                 }),
             Forms\Components\TextInput::make('unit_name.custom')
                 ->hiddenLabel()
-                ->extraFieldWrapperAttributes(static fn (DocumentDefault $record) => [
+                ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
                     'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
                 ])
-                ->disabled(static fn (callable $get) => $get('unit_name.option') !== 'other')
+                ->disabled(static fn(callable $get) => $get('unit_name.option') !== 'other')
                 ->nullable(),
             Forms\Components\Select::make('price_name.option')
                 ->softRequired()
@@ -197,10 +195,10 @@ class DocumentDefaultResource extends Resource
                 }),
             Forms\Components\TextInput::make('price_name.custom')
                 ->hiddenLabel()
-                ->extraFieldWrapperAttributes(static fn (DocumentDefault $record) => [
+                ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
                     'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
                 ])
-                ->disabled(static fn (callable $get) => $get('price_name.option') !== 'other')
+                ->disabled(static fn(callable $get) => $get('price_name.option') !== 'other')
                 ->nullable(),
             Forms\Components\Select::make('amount_name.option')
                 ->softRequired()
@@ -218,10 +216,10 @@ class DocumentDefaultResource extends Resource
                 }),
             Forms\Components\TextInput::make('amount_name.custom')
                 ->hiddenLabel()
-                ->extraFieldWrapperAttributes(static fn (DocumentDefault $record) => [
+                ->extraFieldWrapperAttributes(static fn(DocumentDefault $record) => [
                     'class' => $record->type === DocumentType::Bill ? 'report-hidden-label' : '',
                 ])
-                ->disabled(static fn (callable $get) => $get('amount_name.option') !== 'other')
+                ->disabled(static fn(callable $get) => $get('amount_name.option') !== 'other')
                 ->nullable(),
         ];
     }
