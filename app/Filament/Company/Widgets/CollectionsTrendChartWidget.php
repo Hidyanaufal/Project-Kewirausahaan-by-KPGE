@@ -58,6 +58,11 @@ class CollectionsTrendChartWidget extends ChartWidget
                     'title' => ['display' => true, 'text' => 'Month'],
                 ],
             ],
+            'elements' => [
+                'bar' => [
+                    'borderWidth' => 0,
+                ],
+            ],
         ];
     }
 }

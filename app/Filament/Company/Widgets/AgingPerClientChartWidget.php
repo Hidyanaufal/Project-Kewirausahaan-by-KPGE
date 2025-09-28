@@ -35,31 +35,26 @@ class AgingPerClientChartWidget extends ChartWidget
                     'label' => 'Current',
                     'data' => $data->pluck('current')->toArray(),
                     'backgroundColor' => '#4CAF50', // hijau → masih bisa ditagih
-                    'borderColor' => '#4CAF50',
                 ],
                 [
                     'label' => '1-30',
                     'data' => $data->pluck('period_1')->toArray(),
                     'backgroundColor' => '#FFC107', // kuning → mulai overdue
-                    'borderColor' => '#FFC107',
                 ],
                 [
                     'label' => '31-60',
                     'data' => $data->pluck('period_2')->toArray(),
                     'backgroundColor' => '#FF9800', // oranye
-                    'borderColor' => '#FF9800',
                 ],
                 [
                     'label' => '61-90',
                     'data' => $data->pluck('period_3')->toArray(),
                     'backgroundColor' => '#F44336', // merah
-                    'borderColor' => '#F44336',
                 ],
                 [
                     'label' => 'Over 90',
                     'data' => $data->pluck('over_periods')->toArray(),
                     'backgroundColor' => '#B71C1C', // merah tua
-                    'borderColor' => '#B71C1C',
                 ],
             ],
             'labels' => $clients,
@@ -77,6 +72,11 @@ class AgingPerClientChartWidget extends ChartWidget
             'scales' => [
                 'x' => ['stacked' => true],
                 'y' => ['stacked' => true],
+            ],
+            'elements' => [
+                'bar' => [
+                    'borderWidth' => 0,
+                ],
             ],
         ];
     }

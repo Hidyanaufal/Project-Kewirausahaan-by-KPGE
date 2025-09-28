@@ -51,7 +51,7 @@ abstract class BaseAccountCategoryChartWidget extends ChartWidget
 
     protected function getType(): string
     {
-        return 'bar'; // bisa diubah jadi pie kalau subclass butuh
+        return 'bar';
     }
 
     protected function getOptions(): array
@@ -63,6 +63,11 @@ abstract class BaseAccountCategoryChartWidget extends ChartWidget
             ],
             'scales' => [
                 'y' => ['beginAtZero' => true],
+            ],
+            'elements' => [
+                'bar' => [
+                    'borderWidth' => 0,
+                ],
             ],
         ];
     }

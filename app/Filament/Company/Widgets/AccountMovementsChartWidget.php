@@ -54,4 +54,22 @@ class AccountMovementsChartWidget extends ChartWidget
     {
         return 'bar';
     }
+
+    protected function getOptions(): array
+    {
+        return [
+            'indexAxis' => 'y',
+            'plugins' => [
+                'legend' => ['display' => false],
+            ],
+            'scales' => [
+                'y' => ['beginAtZero' => true],
+            ],
+            'elements' => [
+                'bar' => [
+                    'borderWidth' => 0,
+                ],
+            ],
+        ];
+    }
 }
