@@ -106,11 +106,11 @@ readonly class DocumentDTO
             terbilang: self::generateTerbilang($amountDue),
             dpp: self::generateDpp($document->subtotal),
             project: $projectName,
-            bankName: $document->bank_name,
-            accountName: $document->account_name,
-            accountNumber: $document->account_number,
-            beneficiaryName: $document->beneficiary_name,
-            beneficiaryTitle: $document->beneficiary_title
+            bankName: $settings->bank_name,
+            accountName: $settings->account_name,
+            accountNumber: $settings->account_number,
+            beneficiaryName: $settings->beneficiary_name,
+            beneficiaryTitle: $settings->beneficiary_title
         );
     }
 

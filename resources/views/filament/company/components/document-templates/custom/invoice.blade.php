@@ -120,7 +120,7 @@
                 <tr>
                     <td colspan="2" class="px-2 font-semibold text-right">Total setelah PPN</td>
                     <td class="px-2 font-semibold text-right">
-                        {{ $document->amountDue }}
+                        {{ $document->total }}
                     </td>
                 </tr>
 
