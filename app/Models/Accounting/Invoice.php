@@ -514,7 +514,7 @@ class Invoice extends Document
             $journalEntryData[] = [
                 'type' => JournalEntryType::Credit,
                 'account_id' => Account::getAccountsPPh23()->id,
-                'amount_in_invoice_currency' => $lineItemSubtotalInInvoiceCurrency * 0.2,
+                'amount_in_invoice_currency' => $lineItemSubtotalInInvoiceCurrency * 0.02,
                 'description' => $lineItemDescription,
             ];
 

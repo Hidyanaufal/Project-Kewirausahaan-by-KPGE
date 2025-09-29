@@ -60,7 +60,7 @@
                     <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-left">No.</th>
                     <th style="background: {{ $document->accentColor }}" class="w-2/6 px-2 py-1 text-left">Description
                     </th>
-                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Qty</th>
+                    <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-center">Qty</th>
                     <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Satuan
                     </th>
                     <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Unit Price
@@ -85,16 +85,16 @@
                             {{ $index + 1 }}.
                         </td>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                            {{ $item->subtotal }}
+                            {{ $item->name }}
                         </td>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                            {{ $item->subtotal }}
+                            {{ $item->quantity }}
                         </td>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                            {{ $item->subtotal }}
+                            {{ $item->unitPrice }}
                         </td>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                            {{ $item->subtotal }}
+                            pcs
                         </td>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
                             {{ $item->subtotal }}
