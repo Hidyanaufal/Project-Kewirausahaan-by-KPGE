@@ -16,6 +16,12 @@ class CurrentCompanyScope implements Scope
      */
     public function apply(Builder $builder, Model $model): void
     {
+        $excludedTables = ['roles', 'role_has_permissions']; // daftar tabel yang tidak di-filter
+
+        if (in_array($model->getTable(), $excludedTables, true)) {
+            return;
+        }
+
         $companyId = session('current_company_id');
 
         if (! $companyId && app()->runningInConsole()) {
@@ -30,7 +36,6 @@ class CurrentCompanyScope implements Scope
             $builder->where("{$model->getTable()}.company_id", $companyId);
         } else {
             Log::error('CurrentCompanyScope: No company_id found for user ' . Auth::id());
-
             throw new ModelNotFoundException('CurrentCompanyScope: No company_id set in the session or on the user.');
         }
     }

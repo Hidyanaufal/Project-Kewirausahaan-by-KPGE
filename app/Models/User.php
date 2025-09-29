@@ -157,4 +157,11 @@ class User extends Authenticatable implements FilamentUser, HasAvatar, HasDefaul
         return $this->morphToMany(Role::class, 'model', 'model_has_roles', 'model_id', 'role_id')
             ->wherePivot('company_id', auth()->user()->company_id ?? null);
     }
+
+    public function companies()
+    {
+        return $this->belongsToMany(Company::class)
+            ->withPivot('role')
+            ->withTimestamps();
+    }
 }
