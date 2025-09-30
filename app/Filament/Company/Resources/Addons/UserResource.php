@@ -58,7 +58,6 @@ class UserResource extends Resource
                     ->preload()
                     ->options(fn() => Role::where('company_id', AuthHelper::currentCompany())->get()->pluck('name', 'id'))
                     ->searchable(),
-
                 Forms\Components\CheckboxList::make('companies')
                     ->label('Company Access')
                     ->options(

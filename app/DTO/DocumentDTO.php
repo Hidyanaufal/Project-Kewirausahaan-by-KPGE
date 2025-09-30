@@ -78,6 +78,8 @@ readonly class DocumentDTO
             null;
 
         $projectName = $document->project->name;
+        $contactName = $document->client?->primaryContact?->first_name . ' ' . $document->client?->primaryContact?->last_name;
+        $isEmptyContactName = trim($contactName) === '';
 
         return new self(
             header: $document->header ?? $settings->header,
@@ -112,21 +114,15 @@ readonly class DocumentDTO
             accountNumber: $settings->account_number,
             beneficiaryName: $settings->beneficiary_name,
             beneficiaryTitle: $settings->beneficiary_title,
-            contactName: $document->client->primaryContact->first_name . ' ' . $document->client->primaryContact->last_name ?? '-',
+            contactName: $isEmptyContactName ? '-' : $contactName,
         );
     }
 
     protected static function sanitizeRupiah($nilai)
     {
-        // Hilangkan simbol "Rp" dan spasi
         $nilai = str_replace(['Rp', 'rp', ' '], '', $nilai);
-
-        // Ganti koma dengan titik (ubah desimal lokal ke format internasional)
         $nilai = str_replace(',00', '', $nilai);
-
-        // Hilangkan pemisah ribuan (titik)
         $nilai = str_replace('.', '', $nilai);
-
         return (float)$nilai;
     }
 
