@@ -45,6 +45,8 @@ class Client extends Model
         if (isset($data['primaryContact'], $data['primaryContact']['first_name'])) {
             $client->primaryContact()->create([
                 'is_primary' => true,
+                'title' => $data['primaryContact']['title'],
+                'position' => $data['primaryContact']['position'],
                 'first_name' => $data['primaryContact']['first_name'],
                 'last_name' => $data['primaryContact']['last_name'],
                 'email' => $data['primaryContact']['email'],
@@ -57,6 +59,8 @@ class Client extends Model
                 if (isset($contactData['first_name'])) {
                     $client->secondaryContacts()->create([
                         'is_primary' => false,
+                        'title' => $data['title'],
+                        'position' => $data['position'],
                         'first_name' => $contactData['first_name'],
                         'last_name' => $contactData['last_name'],
                         'email' => $contactData['email'],
@@ -128,6 +132,8 @@ class Client extends Model
             $this->primaryContact()->updateOrCreate(
                 ['is_primary' => true],
                 [
+                    'title' => $data['primaryContact']['title'],
+                    'position' => $data['primaryContact']['position'],
                     'first_name' => $data['primaryContact']['first_name'],
                     'last_name' => $data['primaryContact']['last_name'],
                     'email' => $data['primaryContact']['email'],
@@ -147,6 +153,8 @@ class Client extends Model
                     $this->secondaryContacts()->updateOrCreate(
                         ['id' => $contactData['id'] ?? null],
                         [
+                            'title' => $contactData['title'],
+                            'position' => $contactData['position'],
                             'is_primary' => false,
                             'first_name' => $contactData['first_name'],
                             'last_name' => $contactData['last_name'],

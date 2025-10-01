@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Resources\Sales;
 
+use App\Enums\Addons\ContactTitle;
 use App\Filament\Company\Resources\Sales\ClientResource\Pages;
 use App\Filament\Exports\Common\ClientExporter;
 use App\Filament\Forms\Components\AddressFields;
@@ -57,6 +58,13 @@ class ClientResource extends Resource
                             ->schema([
                                 Forms\Components\Hidden::make('is_primary')
                                     ->default(true),
+                                Forms\Components\Select::make('title')
+                                    ->required()
+                                    ->searchable()
+                                    ->options(ContactTitle::class),
+                                Forms\Components\TextInput::make('position')
+                                    ->label('Job Position')
+                                    ->maxLength(255),
                                 Forms\Components\TextInput::make('first_name')
                                     ->label('First name')
                                     ->maxLength(255),
@@ -139,6 +147,13 @@ class ClientResource extends Resource
                             })
                             ->addActionLabel('Add Contact')
                             ->schema([
+                                Forms\Components\Select::make('title')
+                                    ->required()
+                                    ->searchable()
+                                    ->options(ContactTitle::class),
+                                Forms\Components\TextInput::make('position')
+                                    ->label('Job Position')
+                                    ->maxLength(255),
                                 Forms\Components\TextInput::make('first_name')
                                     ->label('First name')
                                     ->live(onBlur: true)

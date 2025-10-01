@@ -19,9 +19,9 @@ class IncomeOverview extends BaseWidget
 
     protected function getStats(): array
     {
-        $reportService = app(ReportService::class);
-        $startDate = now()->startOfMonth()->toDateString();
+        $startDate = now()->startOfYear()->toDateString();
         $endDate   = now()->endOfMonth()->toDateString();
+        $reportService = app(ReportService::class);
         $reportDTO = $reportService->buildIncomeStatementReport($startDate, $endDate, [
             'account_code',
             'account_name',

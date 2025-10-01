@@ -107,7 +107,7 @@ class ViewProject extends ViewRecord
                     TextEntry::make('client.name')
                         ->label('Client'),
                     TextEntry::make('pic.name')
-                        ->label('PIC'),
+                        ->label('PIC Internal'),
                 ]),
 
             Section::make('Timeline & Value')

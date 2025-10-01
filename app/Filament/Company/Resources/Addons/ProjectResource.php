@@ -87,9 +87,14 @@ class ProjectResource extends Resource
                         ->required(),
 
                     Forms\Components\Select::make('pic_id')
-                        ->label('PIC')
+                        ->label('PIC Internal')
                         ->relationship('pic', 'name')
                         ->required(),
+
+                    // Forms\Components\Select::make('pic_client_id')
+                    //     ->label('PIC Client')
+                    //     ->relationship('pic_client', 'first_name')
+                    //     ->required(),
 
                     Forms\Components\TextInput::make('name')
                         ->label('Project Name')

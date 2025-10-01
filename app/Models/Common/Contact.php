@@ -30,6 +30,8 @@ class Contact extends Model
         'is_primary',
         'created_by',
         'updated_by',
+        'title',
+        'position',
     ];
 
     protected $casts = [

@@ -14,7 +14,7 @@ abstract class BaseAccountCategoryChartWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $startDate = now()->startOfMonth();
+        $startDate = now()->startOfYear();
         $endDate   = now()->endOfMonth();
 
         // Query total per akun berdasarkan category (Asset, Liability, etc.)

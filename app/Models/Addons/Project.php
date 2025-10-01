@@ -9,6 +9,7 @@ use App\Models\Accounting\Bill;
 use App\Models\Accounting\Estimate;
 use App\Models\Accounting\Invoice;
 use App\Models\Common\Client;
+use App\Models\Common\Contact;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -38,6 +39,7 @@ class Project extends Model
         'end_date',
         'work_basis',
         'status',
+        'pic_client_id',
     ];
 
     protected $casts = [
@@ -74,6 +76,16 @@ class Project extends Model
     public function pic(): BelongsTo
     {
         return $this->belongsTo(User::class, 'pic_id');
+    }
+
+    public function pic_client(): BelongsTo
+    {
+        return $this
+            ->belongsTo(Contact::class, 'pic_client_id')
+            ->where([
+                'contactable_type' => Client::class,
+                'contactable_id' => $this->client->id
+            ]);
     }
 
     public function client(): BelongsTo

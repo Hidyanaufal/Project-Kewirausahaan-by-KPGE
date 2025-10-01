@@ -15,7 +15,7 @@ class AccountMovementsChartWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $startDate = now()->startOfMonth();
+        $startDate = now()->startOfYear();
         $endDate   = now()->endOfMonth();
 
         $data = JournalEntry::selectRaw("
