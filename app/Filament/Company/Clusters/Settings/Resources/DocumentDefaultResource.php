@@ -66,8 +66,7 @@ class DocumentDefaultResource extends Resource
                 Forms\Components\TextInput::make('subheader')
                     ->localizeLabel()
                     ->nullable(),
-                Forms\Components\Textarea::make('terms')
-                    ->localizeLabel()
+                Forms\Components\RichEditor::make('terms')
                     ->nullable(),
                 Forms\Components\Textarea::make('footer')
                     ->localizeLabel('Footer')

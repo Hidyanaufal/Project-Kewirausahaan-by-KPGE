@@ -13,6 +13,7 @@ use App\Enums\Accounting\EstimateStatus;
 use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Company\Resources\Sales\EstimateResource;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
+use App\Helpers\AuthHelper;
 use App\Models\Addons\Project;
 use App\Models\Common\Client;
 use App\Models\Company;
@@ -207,7 +208,7 @@ class Estimate extends Document
 
     public function canBeApproved(): bool
     {
-        return $this->isDraft() && ! $this->wasApproved();
+        return $this->isDraft() && ! $this->wasApproved() && AuthHelper::isAdmin();
     }
 
     public function canBeConverted(): bool

@@ -370,7 +370,7 @@ class EstimateResource extends Resource
                             ]),
                         DocumentTotals::make()
                             ->type(DocumentType::Estimate),
-                        Forms\Components\Textarea::make('terms')
+                        Forms\Components\RichEditor::make('terms')
                             ->default($settings->terms)
                             ->columnSpanFull(),
                     ]),

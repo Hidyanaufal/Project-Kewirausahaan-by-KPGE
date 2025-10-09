@@ -82,11 +82,11 @@ readonly class DocumentDTO
         $isEmptyContactName = trim($contactName) === '';
 
         return new self(
-            header: $document->header ?? $settings->header,
-            subheader: $document->subheader ?? $settings->header,
+            header: $settings->header,
+            subheader: $settings->header,
             footer: $document->footer,
             terms: $document->terms,
-            logo: $document->logo_url ?? $settings->logo_url,
+            logo: $settings->logo_url,
             number: $document->documentNumber(),
             referenceNumber: $document->referenceNumber(),
             date: $document->documentDate(),

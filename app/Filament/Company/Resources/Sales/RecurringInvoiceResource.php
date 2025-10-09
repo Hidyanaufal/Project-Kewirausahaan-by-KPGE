@@ -294,7 +294,7 @@ class RecurringInvoiceResource extends Resource
                             ]),
                         DocumentTotals::make()
                             ->type(DocumentType::Invoice),
-                        Forms\Components\Textarea::make('terms')
+                        Forms\Components\RichEditor::make('terms')
                             ->default($settings->terms)
                             ->columnSpanFull(),
                     ]),

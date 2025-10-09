@@ -134,8 +134,8 @@
     <div class="mt-2 text-xs footer">
         @if ($document->terms)
             <div class="leading-relaxed">Terms and Condition:</div>
-            <div class="mb-4 text-xs font-semibold">
-                {{ $document->terms }}
+             <div class="prose prose-sm max-w-none text-xs">
+                {!! $document->terms !!}
             </div>
         @endif
 
@@ -151,7 +151,6 @@
             <div class="text-center w-1/2">
                 <p>{{ $document->client?->name }}</p>
                 <div class="mt-20">
-                    <p>(.................................................)</p>
                 </div>
             </div>
 

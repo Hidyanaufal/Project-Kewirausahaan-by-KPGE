@@ -13,6 +13,7 @@ use App\Enums\Accounting\InvoiceStatus;
 use App\Enums\Accounting\JournalEntryType;
 use App\Enums\Accounting\TransactionType;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
+use App\Helpers\AuthHelper;
 use App\Models\Addons\Project;
 use App\Models\Banking\BankAccount;
 use App\Models\Common\Client;
@@ -373,7 +374,7 @@ class Invoice extends Document
 
     public function canBeApproved(): bool
     {
-        return $this->isDraft() && ! $this->wasApproved();
+        return $this->isDraft() && ! $this->wasApproved() && AuthHelper::isAdmin();
     }
 
     public function canBeMarkedAsSent(): bool
