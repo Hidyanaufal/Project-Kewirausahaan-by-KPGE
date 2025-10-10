@@ -61,6 +61,7 @@ class Bill extends Document
         'total',
         'amount_paid',
         'notes',
+        'terms',
         'created_by',
         'updated_by',
         'project_id',

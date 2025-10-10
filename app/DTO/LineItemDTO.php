@@ -12,6 +12,7 @@ readonly class LineItemDTO
         public string $description,
         public int $quantity,
         public string $unitPrice,
+        public string $unit,
         public string $subtotal,
     ) {}
 
@@ -21,6 +22,7 @@ readonly class LineItemDTO
             name: $lineItem->offering->name ?? '',
             description: $lineItem->description ?? '',
             quantity: $lineItem->quantity,
+            unit: $lineItem->unit,
             unitPrice: self::formatToMoney($lineItem->unit_price, $lineItem->documentable->currency_code),
             subtotal: self::formatToMoney($lineItem->subtotal, $lineItem->documentable->currency_code),
         );

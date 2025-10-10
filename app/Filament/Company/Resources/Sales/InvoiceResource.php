@@ -25,6 +25,7 @@ use App\Filament\Forms\Components\DocumentTotals;
 use App\Filament\Tables\Actions\ReplicateBulkAction;
 use App\Filament\Tables\Columns;
 use App\Filament\Tables\Filters\DateRangeFilter;
+use App\Helpers\AuthHelper;
 use App\Models\Accounting\Adjustment;
 use App\Models\Accounting\DocumentLineItem;
 use App\Models\Accounting\Invoice;
@@ -177,7 +178,7 @@ class InvoiceResource extends Resource
                                         }
                                     }),
                                 Forms\Components\Select::make('discount_method')
-                                    ->label('Discount method')
+                                    ->label('Discount method')->hidden()
                                     ->options(DocumentDiscountMethod::class)
                                     ->softRequired()
                                     ->default($settings->discount_method)
@@ -288,12 +289,18 @@ class InvoiceResource extends Resource
                                         ->placeholder('Enter item description')
                                         ->hiddenLabel(),
                                 ])->columnSpan(1),
-                                Forms\Components\TextInput::make('quantity')
-                                    ->required()
-                                    ->numeric()
-                                    ->live()
-                                    ->maxValue(9999999999.99)
-                                    ->default(1),
+                                Forms\Components\Group::make([
+                                    Forms\Components\TextInput::make('quantity')
+                                        ->required()
+                                        ->numeric()
+                                        ->live()
+                                        ->hiddenLabel()
+                                        ->maxValue(9999999999.99)
+                                        ->default(1),
+                                    Forms\Components\TextInput::make('unit')
+                                        ->placeholder('Enter unit description')
+                                        ->hiddenLabel(),
+                                ]),
                                 Forms\Components\TextInput::make('unit_price')
                                     ->hiddenLabel()
                                     ->money(useAffix: false)
@@ -383,6 +390,7 @@ class InvoiceResource extends Resource
                     ]),
                 Forms\Components\Section::make('Tax Detail')
                     ->columns(3)
+                    ->visible(fn() => AuthHelper::isAdmin())
                     ->schema([
                         Forms\Components\Select::make('tax_code_id')
                             ->label('Tax Code')

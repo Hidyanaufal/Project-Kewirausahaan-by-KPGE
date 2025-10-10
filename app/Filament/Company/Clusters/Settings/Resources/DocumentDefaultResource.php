@@ -67,9 +67,11 @@ class DocumentDefaultResource extends Resource
                     ->localizeLabel()
                     ->nullable(),
                 Forms\Components\RichEditor::make('terms')
+                    ->columnSpanFull()
                     ->nullable(),
                 Forms\Components\Textarea::make('footer')
                     ->localizeLabel('Footer')
+                    ->columnSpanFull()
                     ->nullable(),
             ])->columns();
     }

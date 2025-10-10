@@ -94,7 +94,7 @@ class RecurringInvoiceResource extends Resource
                                     ->default($settings->payment_terms)
                                     ->live(),
                                 Forms\Components\Select::make('discount_method')
-                                    ->label('Discount method')
+                                    ->label('Discount method')->hidden()
                                     ->options(DocumentDiscountMethod::class)
                                     ->softRequired()
                                     ->default($settings->discount_method)
@@ -205,12 +205,18 @@ class RecurringInvoiceResource extends Resource
                                         ->placeholder('Enter item description')
                                         ->hiddenLabel(),
                                 ])->columnSpan(1),
-                                Forms\Components\TextInput::make('quantity')
-                                    ->required()
-                                    ->numeric()
-                                    ->live()
-                                    ->maxValue(9999999999.99)
-                                    ->default(1),
+                                Forms\Components\Group::make([
+                                    Forms\Components\TextInput::make('quantity')
+                                        ->required()
+                                        ->numeric()
+                                        ->live()
+                                        ->hiddenLabel()
+                                        ->maxValue(9999999999.99)
+                                        ->default(1),
+                                    Forms\Components\TextInput::make('unit')
+                                        ->placeholder('Enter unit description')
+                                        ->hiddenLabel(),
+                                ]),
                                 Forms\Components\TextInput::make('unit_price')
                                     ->hiddenLabel()
                                     ->money(useAffix: false)

@@ -16,6 +16,7 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\IconPosition;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\HtmlString;
 
 class ViewEstimate extends ViewRecord
@@ -25,6 +26,11 @@ class ViewEstimate extends ViewRecord
     protected $listeners = [
         'refresh' => '$refresh',
     ];
+
+    public function getTitle(): string|Htmlable
+    {
+        return $this->getRecord()->estimate_number;
+    }
 
     protected function getHeaderActions(): array
     {

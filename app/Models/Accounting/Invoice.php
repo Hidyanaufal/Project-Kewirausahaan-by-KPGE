@@ -86,6 +86,9 @@ class Invoice extends Document
         'tax_code_id',
         'tax_number',
         'tax_date',
+        'profit_computation',
+        'profit_rate',
+        'profit_total',
     ];
 
     protected $casts = [
@@ -99,6 +102,8 @@ class Invoice extends Document
         'discount_method' => DocumentDiscountMethod::class,
         'discount_computation' => AdjustmentComputation::class,
         'discount_rate' => RateCast::class,
+        'profit_computation' => AdjustmentComputation::class,
+        'profit_rate' => RateCast::class,
     ];
 
     protected $appends = [

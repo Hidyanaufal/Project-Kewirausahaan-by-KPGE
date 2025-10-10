@@ -29,6 +29,7 @@ readonly class DocumentDTO
         public string $currencyCode,
         public ?string $subtotal,
         public ?string $discount,
+        public ?string $profit,
         public ?string $tax,
         public string $total,
         public ?string $amountDue,
@@ -69,6 +70,10 @@ readonly class DocumentDTO
             ? self::formatToMoney($document->tax_total, $currencyCode)
             : null;
 
+        $profit = $document->profit_total > 0
+            ? self::formatToMoney($document->profit_total, $currencyCode)
+            : null;
+
         $subtotal = ($discount || $tax)
             ? self::formatToMoney($document->subtotal, $currencyCode)
             : null;
@@ -83,7 +88,7 @@ readonly class DocumentDTO
 
         return new self(
             header: $settings->header,
-            subheader: $settings->header,
+            subheader: $settings->subheader,
             footer: $document->footer,
             terms: $document->terms,
             logo: $settings->logo_url,
@@ -95,6 +100,7 @@ readonly class DocumentDTO
             subtotal: $subtotal,
             discount: $discount,
             tax: $tax,
+            profit: $profit,
             total: self::formatToMoney($document->total, $currencyCode),
             amountDue: $amountDue,
             company: CompanyDTO::fromModel($document->company),

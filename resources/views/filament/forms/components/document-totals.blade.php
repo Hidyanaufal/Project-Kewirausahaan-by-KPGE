@@ -7,6 +7,14 @@
     $type = $getType();
     $viewModel = new DocumentTotalViewModel($data, $type);
     extract($viewModel->buildViewData(), EXTR_SKIP);
+
+    $components = $getChildComponentContainer()->getComponents();
+
+    $profitComponents = collect($components)
+        ->filter(fn($component) => Str::startsWith($component->getName(), 'profit_'));
+
+    $discountComponents = collect($components)
+        ->filter(fn($component) => Str::startsWith($component->getName(), 'discount_'));
 @endphp
 
 <div class="totals-summary w-full lg:pl-[4rem] lg:pr-[6rem] py-8 lg:py-0">
@@ -34,12 +42,23 @@
                 <td class="text-sm p-2">{{ $taxTotal }}</td>
             </tr>
         @endif
+        {{-- <tr>
+            <td colspan="3" class="text-sm p-2">Profit:</td>
+            <td colspan="2" class="text-sm p-2">
+                <div class="flex justify-between space-x-2">
+                    @foreach($profitComponents as $component)
+                        <div class="flex-1 text-left">{{ $component }}</div>
+                    @endforeach
+                </div>
+            </td>
+            <td class="text-sm p-2">({{ $profitTotal }})</td>
+        </tr> --}}
         @if($isPerDocumentDiscount)
             <tr>
                 <td colspan="3" class="text-sm p-2">Discount:</td>
                 <td colspan="2" class="text-sm p-2">
                     <div class="flex justify-between space-x-2">
-                        @foreach($getChildComponentContainer()->getComponents() as $component)
+                        @foreach($discountComponents as $component)
                             <div class="flex-1 text-left">{{ $component }}</div>
                         @endforeach
                     </div>

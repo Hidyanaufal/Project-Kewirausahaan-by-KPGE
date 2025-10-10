@@ -17,6 +17,8 @@ use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers;
 use App\Helpers\AuthHelper;
 use App\Models\Addons\Project;
 use Filament\Notifications\Notification;
+use Rmsramos\Activitylog\Actions\ActivityLogTimelineSimpleAction;
+use Rmsramos\Activitylog\Actions\ActivityLogTimelineTableAction;
 
 class ViewProject extends ViewRecord
 {
@@ -72,6 +74,7 @@ class ViewProject extends ViewRecord
         return [
             ActionGroup::make([
                 $this->getApproveAction(),
+                ActivityLogTimelineSimpleAction::make('Activities')->color('info'),
                 Actions\EditAction::make()
                     ->color('primary')
                     ->label('Edit Project')
@@ -108,6 +111,8 @@ class ViewProject extends ViewRecord
                         ->label('Client'),
                     TextEntry::make('pic.name')
                         ->label('PIC Internal'),
+                    TextEntry::make('pic_client.first_name')
+                        ->label('PIC Client'),
                 ]),
 
             Section::make('Timeline & Value')

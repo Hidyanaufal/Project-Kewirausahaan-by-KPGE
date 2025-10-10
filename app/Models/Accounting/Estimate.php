@@ -72,6 +72,9 @@ class Estimate extends Document
         'created_by',
         'updated_by',
         'project_id',
+        'profit_computation',
+        'profit_rate',
+        'profit_total',
     ];
 
     protected $casts = [
@@ -86,6 +89,8 @@ class Estimate extends Document
         'discount_method' => DocumentDiscountMethod::class,
         'discount_computation' => AdjustmentComputation::class,
         'discount_rate' => RateCast::class,
+        'profit_computation' => AdjustmentComputation::class,
+        'profit_rate' => RateCast::class,
     ];
 
     protected $appends = [

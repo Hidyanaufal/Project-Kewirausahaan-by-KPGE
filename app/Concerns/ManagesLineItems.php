@@ -25,6 +25,7 @@ trait ManagesLineItems
                 'offering_id' => $itemData['offering_id'],
                 'description' => $itemData['description'],
                 'quantity' => $itemData['quantity'],
+                'unit' => $itemData['unit'] ?? 'pcs',
                 'unit_price' => $itemData['unit_price'],
                 'line_number' => $index + 1,
             ]);
@@ -35,8 +36,8 @@ trait ManagesLineItems
 
             $lineItem->save();
 
-            $this->handleLineItemAdjustments($lineItem, $itemData, $record->discount_method);
-            $this->updateLineItemTotals($lineItem, $record->discount_method);
+            $this->handleLineItemAdjustments($lineItem, $itemData, $record->discount_method ?? DocumentDiscountMethod::PerDocument);
+            $this->updateLineItemTotals($lineItem, $record->discount_method ?? DocumentDiscountMethod::PerDocument);
         }
     }
 
@@ -50,12 +51,15 @@ trait ManagesLineItems
             $record
                 ->lineItems()
                 ->whereIn('id', $lineItemsToDelete)
-                ->each(fn (DocumentLineItem $lineItem) => $lineItem->delete());
+                ->each(fn(DocumentLineItem $lineItem) => $lineItem->delete());
         }
     }
 
-    protected function handleLineItemAdjustments(DocumentLineItem $lineItem, array $itemData, DocumentDiscountMethod $discountMethod): void
-    {
+    protected function handleLineItemAdjustments(
+        DocumentLineItem $lineItem,
+        array $itemData,
+        DocumentDiscountMethod $discountMethod
+    ): void {
         $isBill = $lineItem->documentable instanceof Bill;
 
         $taxType = $isBill ? 'purchaseTaxes' : 'salesTaxes';
@@ -82,6 +86,7 @@ trait ManagesLineItems
 
     protected function updateDocumentTotals(Model $record, array $data): array
     {
+        $data['discount_method'] = $dta['discount_method'] ?? DocumentDiscountMethod::PerDocument;
         $currencyCode = $data['currency_code'] ?? $record->currency_code ?? CurrencyAccessor::getDefaultCurrency();
         $subtotalCents = $record->lineItems()->sum('subtotal');
         $taxTotalCents = $record->lineItems()->sum('tax_total');
@@ -93,15 +98,35 @@ trait ManagesLineItems
             $record,
             $currencyCode,
         );
+        $profitTotal = $this->calculateProfitTotal(
+            $record,
+            $subtotalCents,
+            $currencyCode,
+        );
 
-        $grandTotalCents = $subtotalCents + $taxTotalCents - $discountTotalCents;
+        $grandTotalCents = $subtotalCents + $taxTotalCents - $discountTotalCents + $profitTotal;
 
         return [
             'subtotal' => $subtotalCents,
             'tax_total' => $taxTotalCents,
             'discount_total' => $discountTotalCents,
+            'profit_total' => $profitTotal,
             'total' => $grandTotalCents,
         ];
+    }
+
+    protected function calculateProfitTotal(
+        Model $record,
+        int $subtotalCents,
+        string $currencyCode
+    ): int {
+        $result = 0;
+        if ($record->profit_computation == 'percentage') {
+            $result = $subtotalCents * ($record->profit_rate / 100);
+        } else {
+            $result = $record->profit_rate;
+        }
+        return CurrencyConverter::convertToCents($result, $currencyCode);
     }
 
     protected function calculateDiscountTotal(

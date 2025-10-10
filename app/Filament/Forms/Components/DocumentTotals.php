@@ -20,21 +20,33 @@ class DocumentTotals extends Grid
         parent::setUp();
 
         $this->schema([
+            // Select::make('profit_computation')
+            //     ->hiddenLabel()
+            //     ->options(AdjustmentComputation::class)
+            //     ->default(AdjustmentComputation::Percentage)
+            //     ->selectablePlaceholder(false)
+            //     ->live(),
+            // TextInput::make('profit_rate')
+            //     ->hiddenLabel()
+            //     ->live()
+            //     ->extraInputAttributes(['class' => 'text-right'])
+            //     ->rate(
+            //         computation: static fn(Get $get) => $get('profit_computation'),
+            //         currency: static fn(Get $get) => $get('currency_code'),
+            //     ),
             Select::make('discount_computation')
-                ->label('Discount computation')
                 ->hiddenLabel()
                 ->options(AdjustmentComputation::class)
                 ->default(AdjustmentComputation::Percentage)
                 ->selectablePlaceholder(false)
                 ->live(),
             TextInput::make('discount_rate')
-                ->label('Discount rate')
                 ->hiddenLabel()
                 ->live()
                 ->extraInputAttributes(['class' => 'text-right'])
                 ->rate(
-                    computation: static fn (Get $get) => $get('discount_computation'),
-                    currency: static fn (Get $get) => $get('currency_code'),
+                    computation: static fn(Get $get) => $get('discount_computation'),
+                    currency: static fn(Get $get) => $get('currency_code'),
                 ),
         ]);
     }

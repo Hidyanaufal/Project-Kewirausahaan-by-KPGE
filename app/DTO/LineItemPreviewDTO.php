@@ -11,6 +11,7 @@ readonly class LineItemPreviewDTO extends LineItemDTO
                 name: 'Professional Services',
                 description: 'Consulting and strategic planning',
                 quantity: 2,
+                unit: 'pcs',
                 unitPrice: self::formatToMoney(15000, null), // $150.00
                 subtotal: self::formatToMoney(30000, null),  // $300.00
             ),
@@ -18,6 +19,7 @@ readonly class LineItemPreviewDTO extends LineItemDTO
                 name: 'Software License',
                 description: 'Annual subscription and support',
                 quantity: 3,
+                unit: 'pcs',
                 unitPrice: self::formatToMoney(20000, null), // $200.00
                 subtotal: self::formatToMoney(60000, null),  // $600.00
             ),
@@ -25,6 +27,7 @@ readonly class LineItemPreviewDTO extends LineItemDTO
                 name: 'Training Session',
                 description: 'Team onboarding and documentation',
                 quantity: 1,
+                unit: 'pcs',
                 unitPrice: self::formatToMoney(10000, null), // $100.00
                 subtotal: self::formatToMoney(10000, null),  // $100.00
             ),

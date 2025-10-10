@@ -32,6 +32,7 @@ class DocumentLineItem extends Model
         'offering_id',
         'description',
         'quantity',
+        'unit',
         'unit_price',
         'tax_total',
         'discount_total',

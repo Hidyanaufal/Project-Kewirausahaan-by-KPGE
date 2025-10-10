@@ -8,6 +8,8 @@ use App\Enums\Addons\ProjectStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource\Pages;
 use App\Models\Addons\Project;
 use App\Models\Addons\ProjectType;
+use App\Models\Common\Client;
+use App\Models\Common\Contact;
 use Filament\Forms;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
@@ -41,6 +43,14 @@ class ProjectResource extends Resource
             ->label($label)
             ->createOptionModalHeading($modalHeading)
             ->searchable()
+            ->options(function () use ($id) {
+                return Project::orderBy('id', 'desc')
+                    ->limit(50)
+                    ->get()
+                    ->mapWithKeys(fn($item) => [
+                        $item->$id => "{$item->number} - {$item->name}",
+                    ]);
+            })
             ->getSearchResultsUsing(function (string $search) use ($id) {
                 return static::getModel()::query()
                     ->where('number', 'like', "%{$search}%")
@@ -58,7 +68,6 @@ class ProjectResource extends Resource
             ->preload()
             ->required();
     }
-
 
     public static function form(Form $form): Form
     {
@@ -84,6 +93,8 @@ class ProjectResource extends Resource
                     Forms\Components\Select::make('client_id')
                         ->label('Client')
                         ->relationship('client', 'name')
+                        ->reactive()
+                        ->afterStateUpdated(fn(callable $set) => $set('pic_client_id', null))
                         ->required(),
 
                     Forms\Components\Select::make('pic_id')
@@ -91,10 +102,22 @@ class ProjectResource extends Resource
                         ->relationship('pic', 'name')
                         ->required(),
 
-                    // Forms\Components\Select::make('pic_client_id')
-                    //     ->label('PIC Client')
-                    //     ->relationship('pic_client', 'first_name')
-                    //     ->required(),
+                    Forms\Components\Select::make('pic_client_id')
+                        ->label('PIC Client')
+                        ->options(function (callable $get) {
+                            $clientId = $get('client_id');
+
+                            if (!$clientId) {
+                                return [];
+                            }
+
+                            return Contact::query()
+                                ->where('contactable_type', Client::class)
+                                ->where('contactable_id', $clientId)
+                                ->pluck('first_name', 'id');
+                        })
+                        ->searchable()
+                        ->preload(),
 
                     Forms\Components\TextInput::make('name')
                         ->label('Project Name')

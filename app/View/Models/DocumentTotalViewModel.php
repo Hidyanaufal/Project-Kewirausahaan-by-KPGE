@@ -25,15 +25,13 @@ class DocumentTotalViewModel
 
         $lineItems = collect($this->data['lineItems'] ?? []);
 
-        $subtotalInCents = $lineItems->sum(fn ($item) => $this->calculateLineSubtotalInCents($item, $currencyCode));
-
+        $subtotalInCents = $lineItems->sum(fn($item) => $this->calculateLineSubtotalInCents($item, $currencyCode));
         $taxTotalInCents = $this->calculateAdjustmentsTotalInCents($lineItems, $this->documentType->getTaxKey(), $currencyCode);
         $discountTotalInCents = $this->calculateDiscountTotalInCents($lineItems, $subtotalInCents, $currencyCode);
+        $profitTotalInCents = $this->calculateProfitTotalInCents($subtotalInCents, $currencyCode);
 
-        $grandTotalInCents = $subtotalInCents + ($taxTotalInCents - $discountTotalInCents);
-
+        $grandTotalInCents = $subtotalInCents + $profitTotalInCents + ($taxTotalInCents - $discountTotalInCents);
         $amountDueInCents = $this->calculateAmountDueInCents($grandTotalInCents, $currencyCode);
-
         $conversionMessage = $this->buildConversionMessage($grandTotalInCents, $currencyCode, $defaultCurrencyCode);
 
         $discountMethod = DocumentDiscountMethod::parse($this->data['discount_method']);
@@ -47,7 +45,11 @@ class DocumentTotalViewModel
             ? CurrencyConverter::formatCentsToMoney($discountTotalInCents, $currencyCode)
             : null;
 
-        $subtotal = ($taxTotal || $discountTotal)
+        $profitTotal = $profitTotalInCents > 0
+            ? CurrencyConverter::formatCentsToMoney($profitTotalInCents, $currencyCode)
+            : null;
+
+        $subtotal = ($taxTotal || $discountTotal || $profitTotal)
             ? CurrencyConverter::formatCentsToMoney($subtotalInCents, $currencyCode)
             : null;
 
@@ -61,6 +63,7 @@ class DocumentTotalViewModel
             'subtotal' => $subtotal,
             'taxTotal' => $taxTotal,
             'discountTotal' => $discountTotal,
+            'profitTotal' => $profitTotal,
             'grandTotal' => $grandTotal,
             'amountDue' => $amountDue,
             'currencyCode' => $currencyCode,
@@ -121,15 +124,32 @@ class DocumentTotalViewModel
 
         if ($discountComputation->isPercentage()) {
             $scaledDiscountRate = RateCalculator::parseLocalizedRate($discountRate);
-
             return RateCalculator::calculatePercentage($subtotalInCents, $scaledDiscountRate);
         }
 
-        if (! CurrencyConverter::isValidAmount($discountRate, $currencyCode)) {
+        if (!CurrencyConverter::isValidAmount($discountRate, $currencyCode)) {
             $discountRate = '0';
         }
 
         return CurrencyConverter::convertToCents($discountRate, $currencyCode);
+    }
+
+    private function calculateProfitTotalInCents(int $subtotalInCents, string $currencyCode): int
+    {
+        return 0;
+        //         $profitComputation = AdjustmentComputation::parse($this->data['profit_computation']) ?? AdjustmentComputation::Percentage;
+        //         $profitRate = blank($this->data['profit_rate']) ? '0' : $this->data['profit_rate'];
+        // 
+        //         if ($profitComputation->isPercentage()) {
+        //             $scaledProfitRate = RateCalculator::parseLocalizedRate($profitRate);
+        //             return RateCalculator::calculatePercentage($subtotalInCents, $scaledProfitRate);
+        //         }
+        // 
+        //         if (!CurrencyConverter::isValidAmount($profitRate, $currencyCode)) {
+        //             $profitRate = '0';
+        //         }
+        // 
+        //         return CurrencyConverter::convertToCents($profitRate, $currencyCode);
     }
 
     private function buildConversionMessage(int $grandTotalInCents, string $currencyCode, string $defaultCurrencyCode): ?string
@@ -158,7 +178,6 @@ class DocumentTotalViewModel
     private function calculateAmountDueInCents(int $grandTotalInCents, string $currencyCode): int
     {
         $amountPaidInCents = $this->data['amount_paid'] ?? 0;
-
         return $grandTotalInCents - $amountPaidInCents;
     }
 }

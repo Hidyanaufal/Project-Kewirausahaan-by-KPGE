@@ -84,7 +84,6 @@ class Project extends Model
             ->belongsTo(Contact::class, 'pic_client_id')
             ->where([
                 'contactable_type' => Client::class,
-                'contactable_id' => $this->client->id
             ]);
     }
 

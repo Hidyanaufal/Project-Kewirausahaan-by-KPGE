@@ -91,10 +91,10 @@
                             {{ $item->quantity }}
                         </td>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                            {{ $item->unitPrice }}
+                            {{ $item->unit }}
                         </td>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                            pcs
+                             {{ $item->unitPrice }}
                         </td>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
                             {{ $item->subtotal }}
@@ -110,13 +110,21 @@
                     </td>
                 </tr>
 
-                <!-- PPN -->
+                <!-- Pajak -->
                 <tr>
-                    <td colspan="5" class="px-2 text-right">PROFIT</td>
+                    <td colspan="5" class="px-2 text-right">PAJAK</td>
                     <td class="px-2 text-right">
                         {{ $document->tax }}
                     </td>
                 </tr>
+
+                <!-- Profit -->
+                {{-- <tr>
+                    <td colspan="5" class="px-2 text-right">PROFIT</td>
+                    <td class="px-2 text-right">
+                        {{ $document->profit }}
+                    </td>
+                </tr> --}}
 
                 <!-- Total -->
                 <tr>
@@ -146,7 +154,7 @@
         @endif
 
         {{-- Signature --}}
-        <div class="flex justify-between mt-16 text-xs">
+        <div class="flex justify-between text-xs" style="margin-top: 50px">
             {{-- Left side (Pihak Penerima) --}}
             <div class="text-center w-1/2">
                 <p>{{ $document->client?->name }}</p>
@@ -161,7 +169,7 @@
                     <div class="h-16"></div>
                 </div>
                 <p class="mt-2 font-bold">{{ $document->beneficiaryName }}</p>
-                <p>{{ $document->beneficiaryTitle }}</p>
+                {{-- <p>{{ $document->beneficiaryTitle }}</p> --}}
             </div>
         </div>
 
