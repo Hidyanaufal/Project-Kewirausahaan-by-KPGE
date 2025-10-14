@@ -4,6 +4,9 @@ namespace App\Models;
 
 use App\Enums\Accounting\DocumentType;
 use App\Models\Accounting\AccountSubtype;
+use App\Models\Addons\Asset;
+use App\Models\Addons\AssetGroup;
+use App\Models\Addons\DepreciationRecord;
 use App\Models\Addons\Project;
 use App\Models\Addons\ProjectType;
 use App\Models\Banking\BankAccount;
@@ -222,5 +225,20 @@ class Company extends FilamentCompaniesCompany implements HasAvatar
     public function projects(): HasMany
     {
         return $this->hasMany(Project::class, 'company_id');
+    }
+
+    public function assets(): HasMany
+    {
+        return $this->hasMany(Asset::class, 'company_id');
+    }
+
+    public function assetGroups(): HasMany
+    {
+        return $this->hasMany(AssetGroup::class, 'company_id');
+    }
+
+    public function depreciationRecords(): HasMany
+    {
+        return $this->hasMany(DepreciationRecord::class, 'company_id');
     }
 }

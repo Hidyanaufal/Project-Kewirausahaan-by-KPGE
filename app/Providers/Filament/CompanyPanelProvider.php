@@ -28,6 +28,9 @@ use App\Filament\Company\Pages\Reports;
 use App\Filament\Company\Pages\Service\ConnectedAccount;
 use App\Filament\Company\Pages\Service\LiveCurrency;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
+use App\Filament\Company\Resources\Addons\AssetGroupResource;
+use App\Filament\Company\Resources\Addons\AssetResource;
+use App\Filament\Company\Resources\Addons\DepreciationRecordResource;
 use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Filament\Company\Resources\Addons\ProjectTypeResource;
 use App\Filament\Company\Resources\Addons\RoleResource;
@@ -173,6 +176,15 @@ class CompanyPanelProvider extends PanelProvider
                             ->items([
                                 ...NavigationHelper::filterNavigationByPermissions(AccountChart::class),
                                 ...NavigationHelper::filterNavigationByPermissions(TransactionResource::class),
+                            ]),
+
+                        NavigationGroup::make('Asset')
+                            ->label('Asset')
+                            ->icon('heroicon-o-banknotes')
+                            ->items([
+                                ...NavigationHelper::filterNavigationByPermissions(AssetGroupResource::class),
+                                ...NavigationHelper::filterNavigationByPermissions(AssetResource::class),
+                                ...NavigationHelper::filterNavigationByPermissions(DepreciationRecordResource::class),
                             ]),
 
                         NavigationGroup::make('Banking')
