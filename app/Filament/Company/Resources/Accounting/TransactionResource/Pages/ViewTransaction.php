@@ -23,6 +23,7 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\IconPosition;
+use Illuminate\Contracts\Support\Htmlable;
 
 use function Filament\Support\get_model_label;
 
@@ -33,6 +34,12 @@ class ViewTransaction extends ViewRecord
     protected $listeners = [
         'refresh' => '$refresh',
     ];
+
+    public function getTitle(): string|Htmlable
+    {
+        $record = $this->getRecord();
+        return $record->code ?? $record->description ?? 'View Transaction';
+    }
 
     protected function getHeaderActions(): array
     {

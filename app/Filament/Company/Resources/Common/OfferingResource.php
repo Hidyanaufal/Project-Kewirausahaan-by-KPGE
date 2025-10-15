@@ -27,8 +27,6 @@ class OfferingResource extends Resource
 
     protected static ?string $model = Offering::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-square-3-stack-3d';
-
     public static function form(Form $form): Form
     {
         return $form

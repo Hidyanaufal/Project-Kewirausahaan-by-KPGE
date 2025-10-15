@@ -131,29 +131,32 @@ class AssetResource extends Resource
                     ->modalWidth(\Filament\Support\Enums\MaxWidth::ThreeExtraLarge),
             ])
             ->bulkActions([
-                Tables\Actions\BulkAction::make('generateYear')
-                    ->label('Generate Depreciation (Current Year)')
-                    ->icon('heroicon-o-calculator')
-                    ->requiresConfirmation()
-                    ->action(function ($records) {
-                        $created = 0;
-                        $skipped = 0;
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('generateYear')
+                        ->label('Generate Depreciation')
+                        ->icon('heroicon-s-calculator')
+                        ->color('primary')
+                        ->requiresConfirmation()
+                        ->action(function ($records) {
+                            $created = 0;
+                            $skipped = 0;
 
-                        foreach ($records as $asset) {
-                            $result = GenerateYearlyForAsset::run(asset: $asset);
-                            $created += count($result['created'] ?? []);
-                            $skipped += count($result['skipped'] ?? []);
-                        }
+                            foreach ($records as $asset) {
+                                $result = GenerateYearlyForAsset::run(asset: $asset);
+                                $created += count($result['created'] ?? []);
+                                $skipped += count($result['skipped'] ?? []);
+                            }
 
-                        Notification::make()
-                            ->success()
-                            ->title('Depreciation Generated')
-                            ->body("Successfully processed depreciation for the selected assets.  
-**{$created}** record(s) created, **{$skipped}** skipped (already exist or fully depreciated).")
-                            ->send();
-                    }),
+                            Notification::make()
+                                ->success()
+                                ->title('Depreciation Generated')
+                                ->body("Successfully processed depreciation for the selected assets.  
+    **{$created}** record(s) created, **{$skipped}** skipped (already exist or fully depreciated).")
+                                ->send();
+                        }),
 
-                Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make(),
+                ])
             ]);
     }
 

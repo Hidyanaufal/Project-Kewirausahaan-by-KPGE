@@ -153,7 +153,7 @@ class AccountService
         string $startDate,
         string $endDate,
         array $accountIds = [],
-        ?int $projectId = null
+        $projectId = null
     ): Builder {
         $accountIds = array_map('intval', $accountIds);
 

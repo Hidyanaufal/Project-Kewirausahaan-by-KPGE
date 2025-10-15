@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 
+use App\Concerns\HideFromSpotlight;
 use App\Enums\Accounting\DocumentType;
 use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers\AttachmentsRelationManager;
 use App\Filament\Company\Resources\Sales\ClientResource;
@@ -21,6 +22,8 @@ use Illuminate\Support\HtmlString;
 
 class ViewInvoice extends ViewRecord
 {
+    use HideFromSpotlight;
+
     protected static string $resource = InvoiceResource::class;
 
     protected $listeners = [

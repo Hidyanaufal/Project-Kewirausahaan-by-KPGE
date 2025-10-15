@@ -3,6 +3,7 @@
 namespace App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 
 use App\Concerns\HandlePageRedirect;
+use App\Concerns\HideFromSpotlight;
 use App\Concerns\ManagesLineItems;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Models\Accounting\Invoice;
@@ -15,6 +16,7 @@ class EditInvoice extends EditRecord
 {
     use HandlePageRedirect;
     use ManagesLineItems;
+    use HideFromSpotlight;
 
     protected static string $resource = InvoiceResource::class;
 

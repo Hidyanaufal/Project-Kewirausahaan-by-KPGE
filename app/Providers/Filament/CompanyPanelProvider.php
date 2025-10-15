@@ -180,7 +180,7 @@ class CompanyPanelProvider extends PanelProvider
 
                         NavigationGroup::make('Asset')
                             ->label('Asset')
-                            ->icon('heroicon-o-banknotes')
+                            ->icon('heroicon-o-presentation-chart-bar')
                             ->items([
                                 ...NavigationHelper::filterNavigationByPermissions(AssetGroupResource::class),
                                 ...NavigationHelper::filterNavigationByPermissions(AssetResource::class),

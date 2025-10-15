@@ -63,7 +63,6 @@ trait HasTransactionAction
     {
         return [
             'type' => $journalEntryType,
-            'account_id' => Transaction::getUncategorizedAccountByType($journalEntryType->isDebit() ? TransactionType::Withdrawal : TransactionType::Deposit)?->id,
             'amount' => '0.00',
         ];
     }
@@ -74,7 +73,6 @@ trait HasTransactionAction
             'type' => $type,
             'bank_account_id' => BankAccount::where('enabled', true)->first()?->id,
             'amount' => '0.00',
-            // 'account_id' => ! $type->isTransfer() ? Transaction::getUncategorizedAccountByType($type)->id : null,
         ];
     }
 
@@ -82,6 +80,10 @@ trait HasTransactionAction
     {
         return $form
             ->schema([
+                Forms\Components\Hidden::make('id'),
+                Forms\Components\TextInput::make('code')
+                    ->required(false)
+                    ->hidden(fn(Forms\Get $get) => empty($get('id'))),
                 Forms\Components\DatePicker::make('posted_at')
                     ->label('Date')
                     ->required(),
@@ -111,7 +113,7 @@ trait HasTransactionAction
                     ->options(fn(Forms\Get $get, ?Transaction $transaction) => Transaction::getTransactionAccountOptions(type: TransactionType::parse($get('type')), currentAccountId: $transaction?->account_id))
                     ->searchable()
                     ->required(),
-                ProjectResource::options(),
+                ProjectResource::options()->required(false),
                 Forms\Components\Textarea::make('notes')
                     ->label('Notes')
                     ->autosize()
@@ -125,6 +127,10 @@ trait HasTransactionAction
     {
         return $form
             ->schema([
+                Forms\Components\Hidden::make('id'),
+                Forms\Components\TextInput::make('code')
+                    ->required(false)
+                    ->hidden(fn(Forms\Get $get) => empty($get('id'))),
                 Forms\Components\DatePicker::make('posted_at')
                     ->label('Date')
                     ->required(),

@@ -29,22 +29,7 @@ class AccountCode
     public static function getRangeForType(AccountType $type): array
     {
         return match ($type) {
-            AccountType::CurrentAsset => [1000, 1499],
-            AccountType::NonCurrentAsset => [1500, 1899],
-            AccountType::ContraAsset => [1900, 1999],
-            AccountType::CurrentLiability => [2000, 2499],
-            AccountType::NonCurrentLiability => [2500, 2899],
-            AccountType::ContraLiability => [2900, 2999],
-            AccountType::Equity => [3000, 3899],
-            AccountType::ContraEquity => [3900, 3999],
-            AccountType::OperatingRevenue => [4000, 4499],
-            AccountType::NonOperatingRevenue => [4500, 4899],
-            AccountType::ContraRevenue => [4900, 4949],
-            AccountType::UncategorizedRevenue => [4950, 4999],
-            AccountType::OperatingExpense => [5000, 5499],
-            AccountType::NonOperatingExpense => [5500, 5899],
-            AccountType::ContraExpense => [5900, 5949],
-            AccountType::UncategorizedExpense => [5950, 5999],
+            default => [0, 9999999999999]
         };
     }
 

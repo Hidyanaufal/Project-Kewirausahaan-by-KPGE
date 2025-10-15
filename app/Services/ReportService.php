@@ -387,7 +387,7 @@ class ReportService
         string $startDate,
         string $endDate,
         array $columns = [],
-        ?int $projectId = null
+        $projectId = null
     ): ReportDTO {
         // Query only relevant accounts and sort them at the query level
         $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId)

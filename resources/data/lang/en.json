@@ -247,5 +247,7 @@
     "CustomInvoice": "CustomInvoice",
     "Asset Details": "Asset Details",
     "Asset Group": "Asset Group",
-    "Depreciation Details": "Depreciation Details"
+    "Depreciation Details": "Depreciation Details",
+    "Asset": "Asset",
+    "Depreciation Record": "Depreciation Record"
 }

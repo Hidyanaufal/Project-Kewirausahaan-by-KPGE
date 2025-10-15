@@ -56,6 +56,7 @@ class Transaction extends Model
         'updated_by',
         'meta',
         'project_id',
+        'code',
     ];
 
     protected $casts = [
@@ -66,6 +67,35 @@ class Transaction extends Model
         'posted_at' => 'date',
         'meta' => 'array',
     ];
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            $date = $model->posted_at ?? now();
+            $prefix = match ($model->type) {
+                TransactionType::Deposit => 'BM', // Bank Masuk
+                TransactionType::Withdrawal => 'BK', // Bank Keluar
+                default => 'TRX',
+            };
+
+            $companyCode = 'MAN';
+            if ($model->company && property_exists($model->company, 'code')) {
+                $companyCode = strtoupper($model->company->code ?? 'MAN');
+            }
+
+            $ym = $date->format('ym');
+
+            $count = static::where('type', $model->type)
+                ->whereYear('posted_at', $date->year)
+                ->whereMonth('posted_at', $date->month)
+                ->count() + 1;
+
+            $sequence = str_pad($count, 3, '0', STR_PAD_LEFT);
+            $model->code = "{$companyCode}/{$prefix}/{$ym}/{$sequence}";
+        });
+    }
 
     public function account(): BelongsTo
     {

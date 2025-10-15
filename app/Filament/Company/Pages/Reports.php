@@ -72,13 +72,13 @@ class Reports extends Page
                             ->icon('heroicon-o-clipboard-document-list')
                             ->iconColor(Color::Teal)
                             ->url(BalanceSheet::getUrl()),
-                        // ReportEntry::make('cash_flow_statement')
-                        //     ->hiddenLabel()
-                        //     ->heading('Cash Flow Statement')
-                        //     ->description('Tracks cash inflows and outflows, giving insight into liquidity and cash management over a period.')
-                        //     ->icon('heroicon-o-document-currency-dollar')
-                        //     ->iconColor(Color::Cyan)
-                        //     ->url(CashFlowStatement::getUrl()),
+                        ReportEntry::make('cash_flow_statement')
+                            ->hiddenLabel()
+                            ->heading('Cash Flow Statement')
+                            ->description('Tracks cash inflows and outflows, giving insight into liquidity and cash management over a period.')
+                            ->icon('heroicon-o-document-currency-dollar')
+                            ->iconColor(Color::Cyan)
+                            ->url(CashFlowStatement::getUrl()),
                     ]),
                 Section::make('Client Reports')
                     ->aside()

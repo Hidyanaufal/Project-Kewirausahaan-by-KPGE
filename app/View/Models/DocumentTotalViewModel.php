@@ -28,7 +28,7 @@ class DocumentTotalViewModel
         $subtotalInCents = $lineItems->sum(fn($item) => $this->calculateLineSubtotalInCents($item, $currencyCode));
         $taxTotalInCents = $this->calculateAdjustmentsTotalInCents($lineItems, $this->documentType->getTaxKey(), $currencyCode);
         $discountTotalInCents = $this->calculateDiscountTotalInCents($lineItems, $subtotalInCents, $currencyCode);
-        $profitTotalInCents = $this->calculateProfitTotalInCents($subtotalInCents, $currencyCode);
+        $profitTotalInCents = $this->calculateProfitTotalInCents($subtotalInCents, $currencyCode) ?? 0;
 
         $grandTotalInCents = $subtotalInCents + $profitTotalInCents + ($taxTotalInCents - $discountTotalInCents);
         $amountDueInCents = $this->calculateAmountDueInCents($grandTotalInCents, $currencyCode);
@@ -45,9 +45,7 @@ class DocumentTotalViewModel
             ? CurrencyConverter::formatCentsToMoney($discountTotalInCents, $currencyCode)
             : null;
 
-        $profitTotal = $profitTotalInCents > 0
-            ? CurrencyConverter::formatCentsToMoney($profitTotalInCents, $currencyCode)
-            : null;
+        $profitTotal = CurrencyConverter::formatCentsToMoney($profitTotalInCents, $currencyCode);
 
         $subtotal = ($taxTotal || $discountTotal || $profitTotal)
             ? CurrencyConverter::formatCentsToMoney($subtotalInCents, $currencyCode)
@@ -136,20 +134,20 @@ class DocumentTotalViewModel
 
     private function calculateProfitTotalInCents(int $subtotalInCents, string $currencyCode): int
     {
-        return 0;
-        //         $profitComputation = AdjustmentComputation::parse($this->data['profit_computation']) ?? AdjustmentComputation::Percentage;
-        //         $profitRate = blank($this->data['profit_rate']) ? '0' : $this->data['profit_rate'];
-        // 
-        //         if ($profitComputation->isPercentage()) {
-        //             $scaledProfitRate = RateCalculator::parseLocalizedRate($profitRate);
-        //             return RateCalculator::calculatePercentage($subtotalInCents, $scaledProfitRate);
-        //         }
-        // 
-        //         if (!CurrencyConverter::isValidAmount($profitRate, $currencyCode)) {
-        //             $profitRate = '0';
-        //         }
-        // 
-        //         return CurrencyConverter::convertToCents($profitRate, $currencyCode);
+        $profitComputation = AdjustmentComputation::parse($this->data['profit_computation']) ?? AdjustmentComputation::Percentage;
+        $profitRate = blank($this->data['profit_rate']) ? '0' : $this->data['profit_rate'];
+
+        if ($profitComputation->isPercentage()) {
+            $scaledProfitRate = RateCalculator::parseLocalizedRate($profitRate);
+            $result = RateCalculator::calculatePercentage($subtotalInCents, $scaledProfitRate);
+            return $result;
+        }
+
+        if (!CurrencyConverter::isValidAmount($profitRate, $currencyCode)) {
+            $profitRate = '0';
+        }
+
+        return CurrencyConverter::convertToCents($profitRate, $currencyCode);
     }
 
     private function buildConversionMessage(int $grandTotalInCents, string $currencyCode, string $defaultCurrencyCode): ?string

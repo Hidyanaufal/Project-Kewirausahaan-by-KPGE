@@ -60,6 +60,9 @@ class TransactionResource extends Resource
             })
             ->columns([
                 Columns::id(),
+                Tables\Columns\TextColumn::make('code')
+                    ->label('Code')
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('posted_at')
                     ->label('Date')
                     ->sortable()

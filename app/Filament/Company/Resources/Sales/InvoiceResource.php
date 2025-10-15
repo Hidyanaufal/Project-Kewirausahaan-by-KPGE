@@ -378,7 +378,6 @@ class InvoiceResource extends Resource
 
                                         // Final total
                                         $totalInCents = $subtotalInCents + ($taxAmountInCents - $discountAmountInCents);
-
                                         return CurrencyConverter::formatCentsToMoney($totalInCents, $currencyCode);
                                     }),
                             ]),

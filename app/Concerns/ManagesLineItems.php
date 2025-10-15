@@ -121,8 +121,8 @@ trait ManagesLineItems
         string $currencyCode
     ): int {
         $result = 0;
-        if ($record->profit_computation == 'percentage') {
-            $result = $subtotalCents * ($record->profit_rate / 100);
+        if ($record->profit_computation == AdjustmentComputation::Percentage) {
+            $result = $subtotalCents * ($record->profit_rate / 10000);
         } else {
             $result = $record->profit_rate;
         }

@@ -42,7 +42,7 @@
                 <td class="text-sm p-2">{{ $taxTotal }}</td>
             </tr>
         @endif
-        {{-- <tr>
+        <tr>
             <td colspan="3" class="text-sm p-2">Profit:</td>
             <td colspan="2" class="text-sm p-2">
                 <div class="flex justify-between space-x-2">
@@ -52,7 +52,7 @@
                 </div>
             </td>
             <td class="text-sm p-2">({{ $profitTotal }})</td>
-        </tr> --}}
+        </tr>
         @if($isPerDocumentDiscount)
             <tr>
                 <td colspan="3" class="text-sm p-2">Discount:</td>

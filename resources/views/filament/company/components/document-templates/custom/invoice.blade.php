@@ -116,6 +116,14 @@
                     </td>
                 </tr>
 
+                <!-- Profit -->
+                <tr>
+                    <td colspan="2" class="px-2 text-right">Profit</td>
+                    <td class="px-2 text-right">
+                        {{ $document->profit }}
+                    </td>
+                </tr>
+
                 <!-- Total -->
                 <tr>
                     <td colspan="2" class="px-2 font-semibold text-right">Total setelah PPN</td>
