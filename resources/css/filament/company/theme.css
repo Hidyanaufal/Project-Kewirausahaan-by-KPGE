@@ -247,3 +247,7 @@
     backdrop-filter: blur(8px);
     filter: saturate(2);
 }
+
+.opacity-50 {
+    opacity: 0.9;
+}
