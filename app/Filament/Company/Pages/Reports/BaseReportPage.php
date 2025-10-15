@@ -225,6 +225,9 @@ abstract class BaseReportPage extends Page
     {
         return [
             ActionGroup::make([
+                Action::make('exportXLSX')
+                    ->label('XLSX')
+                    ->action(fn() => $this->exportXLSX()),
                 Action::make('exportCSV')
                     ->label('CSV')
                     ->action(fn() => $this->exportCSV()),

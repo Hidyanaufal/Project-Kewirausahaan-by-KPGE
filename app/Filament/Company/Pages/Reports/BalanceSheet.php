@@ -13,6 +13,7 @@ use App\Support\Column;
 use App\Transformers\BalanceSheetReportTransformer;
 use Filament\Forms\Form;
 use Filament\Support\Enums\Alignment;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BalanceSheet extends BaseReportPage
@@ -82,5 +83,10 @@ class BalanceSheet extends BaseReportPage
     public function exportPDF(): StreamedResponse
     {
         return $this->exportService->exportToPdf($this->company, $this->report, endDate: $this->getFilterState('asOfDate'), activeTab: $this->getActiveTab());
+    }
+
+    public function exportXLSX(): BinaryFileResponse
+    {
+        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'), $this->getActiveTab());
     }
 }

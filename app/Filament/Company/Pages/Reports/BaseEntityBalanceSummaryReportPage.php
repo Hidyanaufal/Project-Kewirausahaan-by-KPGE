@@ -13,6 +13,7 @@ use App\Transformers\EntityBalanceSummaryReportTransformer;
 use Filament\Forms\Form;
 use Filament\Support\Enums\Alignment;
 use Guava\FilamentClusters\Forms\Cluster;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 abstract class BaseEntityBalanceSummaryReportPage extends BaseReportPage
@@ -101,5 +102,10 @@ abstract class BaseEntityBalanceSummaryReportPage extends BaseReportPage
             $this->getFilterState('startDate'),
             $this->getFilterState('endDate')
         );
+    }
+
+    public function exportXLSX(): BinaryFileResponse
+    {
+        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
     }
 }

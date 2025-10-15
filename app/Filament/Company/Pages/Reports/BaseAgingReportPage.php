@@ -15,6 +15,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\RawJs;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 abstract class BaseAgingReportPage extends BaseReportPage
@@ -136,5 +137,10 @@ abstract class BaseAgingReportPage extends BaseReportPage
             $this->report,
             endDate: $this->getFilterState('asOfDate')
         );
+    }
+
+    public function exportXLSX(): BinaryFileResponse
+    {
+        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
     }
 }

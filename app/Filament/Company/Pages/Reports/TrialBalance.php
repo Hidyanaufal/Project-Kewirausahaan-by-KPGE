@@ -13,6 +13,7 @@ use App\Transformers\TrialBalanceReportTransformer;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
 use Filament\Support\Enums\Alignment;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TrialBalance extends BaseReportPage
@@ -94,5 +95,10 @@ class TrialBalance extends BaseReportPage
     public function exportPDF(): StreamedResponse
     {
         return $this->exportService->exportToPdf($this->company, $this->report, endDate: $this->getFilterState('asOfDate'));
+    }
+
+    public function exportXLSX(): BinaryFileResponse
+    {
+        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
     }
 }

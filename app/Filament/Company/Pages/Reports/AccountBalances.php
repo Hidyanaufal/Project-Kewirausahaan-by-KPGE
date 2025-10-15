@@ -12,6 +12,7 @@ use App\Transformers\AccountBalanceReportTransformer;
 use Filament\Forms\Form;
 use Filament\Support\Enums\Alignment;
 use Guava\FilamentClusters\Forms\Cluster;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AccountBalances extends BaseReportPage
@@ -98,5 +99,10 @@ class AccountBalances extends BaseReportPage
     public function exportPDF(): StreamedResponse
     {
         return $this->exportService->exportToPdf($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
+    }
+
+    public function exportXLSX(): BinaryFileResponse
+    {
+        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
     }
 }
