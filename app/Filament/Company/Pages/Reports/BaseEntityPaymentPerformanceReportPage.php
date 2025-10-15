@@ -6,6 +6,7 @@ use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Enums\Accounting\DocumentEntityType;
 use App\Enums\Accounting\DocumentType;
+use App\Filament\Forms\Addons\FilterProjectCompany;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
@@ -73,14 +74,16 @@ abstract class BaseEntityPaymentPerformanceReportPage extends BaseReportPage
     public function filtersForm(Form $form): Form
     {
         return $form
-            ->inlineLabel()
-            ->columns()
+            ->columns(4)
             ->schema([
                 $this->getDateRangeFormComponent(),
                 Cluster::make([
                     $this->getStartDateFormComponent(),
                     $this->getEndDateFormComponent(),
-                ])->hiddenLabel(),
+                ])->extraFieldWrapperAttributes([
+                    'class' => 'report-hidden-label',
+                ]),
+                ...FilterProjectCompany::make(),
             ]);
     }
 

@@ -7,6 +7,7 @@ use Filament\Forms\Form;
 use Filament\Pages\Dashboard;
 use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
 use App\Filament\Company\Widgets;
+use App\Filament\Forms\Addons\FilterProjectCompany;
 
 class CompanyDashboard extends Dashboard
 {
@@ -32,13 +33,13 @@ class CompanyDashboard extends Dashboard
         return $form->schema([
             DatePicker::make('start_date')
                 ->label('Start Date')
-                ->native(false)
+                ->native(true)
                 ->default(now()->startOfMonth()),
-
             DatePicker::make('end_date')
                 ->label('End Date')
-                ->native(false)
+                ->native(true)
                 ->default(now()->endOfMonth()),
+            ...FilterProjectCompany::make()
         ]);
     }
 

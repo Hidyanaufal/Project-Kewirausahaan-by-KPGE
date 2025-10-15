@@ -146,13 +146,13 @@ class Reports extends Page
                             ->icon('heroicon-o-calculator')
                             ->iconColor(Color::Slate)
                             ->url(AccountBalances::getUrl()),
-                        // ReportEntry::make('trial_balance')
-                        //     ->hiddenLabel()
-                        //     ->heading('Trial Balance')
-                        //     ->description('Summarizes all account debits and credits on a specific date to verify the ledger is balanced.')
-                        //     ->icon('heroicon-o-scale')
-                        //     ->iconColor(Color::Sky)
-                        //     ->url(TrialBalance::getUrl()),
+                        ReportEntry::make('trial_balance')
+                            ->hiddenLabel()
+                            ->heading('Trial Balance')
+                            ->description('Summarizes all account debits and credits on a specific date to verify the ledger is balanced.')
+                            ->icon('heroicon-o-scale')
+                            ->iconColor(Color::Sky)
+                            ->url(TrialBalance::getUrl()),
                         ReportEntry::make('account_transactions')
                             ->hiddenLabel()
                             ->heading('Account Transactions')

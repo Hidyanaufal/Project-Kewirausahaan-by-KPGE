@@ -40,6 +40,7 @@ class Company extends FilamentCompaniesCompany implements HasAvatar
      */
     protected $casts = [
         'personal_company' => 'boolean',
+        'is_primary' => 'boolean',
     ];
 
     /**
@@ -50,6 +51,7 @@ class Company extends FilamentCompaniesCompany implements HasAvatar
     protected $fillable = [
         'name',
         'personal_company',
+        'is_primary'
     ];
 
     /**

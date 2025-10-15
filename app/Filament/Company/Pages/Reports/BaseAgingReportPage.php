@@ -5,6 +5,7 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Enums\Accounting\DocumentEntityType;
+use App\Filament\Forms\Addons\FilterProjectCompany;
 use App\Filament\Forms\Components\DateRangeSelect;
 use App\Services\ExportService;
 use App\Services\ReportService;
@@ -99,6 +100,7 @@ abstract class BaseAgingReportPage extends BaseReportPage
                     ->mask(RawJs::make(<<<'JS'
                         $input > 10 ? '10' : '99'
                     JS)),
+                ...FilterProjectCompany::make(),
             ]);
     }
 

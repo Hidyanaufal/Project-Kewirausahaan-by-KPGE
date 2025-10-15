@@ -5,6 +5,7 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
+use App\Filament\Forms\Addons\FilterProjectCompany;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
@@ -49,14 +50,17 @@ class CashFlowStatement extends BaseReportPage
     public function filtersForm(Form $form): Form
     {
         return $form
-            ->inlineLabel()
-            ->columns()
+            ->inlineLabel(false)
+            ->columns(4)
             ->schema([
                 $this->getDateRangeFormComponent(),
                 Cluster::make([
                     $this->getStartDateFormComponent(),
                     $this->getEndDateFormComponent(),
-                ])->hiddenLabel(),
+                ])->extraFieldWrapperAttributes([
+                    'class' => 'report-hidden-label',
+                ]),
+                ...FilterProjectCompany::make()
             ]);
     }
 

@@ -5,6 +5,7 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
+use App\Filament\Forms\Addons\FilterProjectCompany;
 use App\Models\Accounting\Account;
 use App\Models\Common\Client;
 use App\Models\Common\Vendor;
@@ -107,6 +108,7 @@ class AccountTransactions extends BaseReportPage
                         ->keyBindings(['mod+s'])
                         ->button(),
                 ])->alignEnd()->verticallyAlignEnd(),
+                ...FilterProjectCompany::make(),
             ]);
     }
 
@@ -114,8 +116,8 @@ class AccountTransactions extends BaseReportPage
     {
         $accounts = Account::query()
             ->get()
-            ->groupBy(fn (Account $account) => $account->category->getPluralLabel())
-            ->map(fn (Collection $accounts) => $accounts->pluck('name', 'id'))
+            ->groupBy(fn(Account $account) => $account->category->getPluralLabel())
+            ->map(fn(Collection $accounts) => $accounts->pluck('name', 'id'))
             ->toArray();
 
         $allAccountsOption = [
@@ -135,7 +137,7 @@ class AccountTransactions extends BaseReportPage
         $vendors = Vendor::query()
             ->orderBy('name')
             ->pluck('name', 'id')
-            ->mapWithKeys(fn ($name, $id) => [-$id => $name])
+            ->mapWithKeys(fn($name, $id) => [-$id => $name])
             ->toArray();
 
         $allEntitiesOption = [

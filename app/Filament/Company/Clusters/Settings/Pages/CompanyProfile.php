@@ -30,6 +30,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Locked;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Wallo\FilamentSelectify\Components\ToggleButton;
 
 use function Filament\authorize;
 
@@ -82,6 +83,7 @@ class CompanyProfile extends Page
     {
         $data = $this->record->attributesToArray();
         $data['name'] = $this->record->company->name;
+        $data['is_primary'] = $this->record->company->is_primary;
         $this->form->fill($data);
     }
 
@@ -90,6 +92,7 @@ class CompanyProfile extends Page
         try {
             $data = $this->form->getState();
             $this->record->company->name = $data['name'];
+            $this->record->company->is_primary = $data['is_primary'];
             $this->record->company->save();
             $this->handleRecordUpdate($this->record, $data);
         } catch (Halt $exception) {
@@ -154,6 +157,9 @@ class CompanyProfile extends Page
             ->schema([
                 Group::make()
                     ->schema([
+                        ToggleButton::make('is_primary')
+                            ->label('Primary Company')
+                            ->softRequired(),
                         TextInput::make('name')
                             ->maxLength(255)
                             ->softRequired(),

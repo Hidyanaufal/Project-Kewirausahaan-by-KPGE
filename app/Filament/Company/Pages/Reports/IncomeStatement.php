@@ -5,13 +5,11 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
-use App\Filament\Company\Resources\Addons\ProjectResource;
-use App\Models\Addons\Project;
+use App\Filament\Forms\Addons\FilterProjectCompany;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
 use App\Transformers\IncomeStatementReportTransformer;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
 use Filament\Support\Enums\Alignment;
 use Guava\FilamentClusters\Forms\Cluster;
@@ -51,17 +49,16 @@ class IncomeStatement extends BaseReportPage
     public function filtersForm(Form $form): Form
     {
         return $form
-            ->inlineLabel(false)
-            ->columns(1)
+            ->columns(4)
             ->schema([
-                ProjectResource::options()
-                    ->inlineLabel(false)
-                    ->columnSpanFull(),
                 $this->getDateRangeFormComponent(),
                 Cluster::make([
                     $this->getStartDateFormComponent(),
                     $this->getEndDateFormComponent(),
-                ])->hiddenLabel(),
+                ])->extraFieldWrapperAttributes([
+                    'class' => 'report-hidden-label',
+                ]),
+                ...FilterProjectCompany::make(),
             ]);
     }
 
