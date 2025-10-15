@@ -51,7 +51,7 @@
                     @endforeach
                 </div>
             </td>
-            <td class="text-sm p-2">({{ $profitTotal }})</td>
+            <td class="text-sm p-2">{{ $profitTotal }}</td>
         </tr>
         @if($isPerDocumentDiscount)
             <tr>

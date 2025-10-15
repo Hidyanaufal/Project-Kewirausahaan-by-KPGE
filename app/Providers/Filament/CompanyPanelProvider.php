@@ -28,6 +28,7 @@ use App\Filament\Company\Pages\Reports;
 use App\Filament\Company\Pages\Service\ConnectedAccount;
 use App\Filament\Company\Pages\Service\LiveCurrency;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
+use App\Filament\Company\Resources\Addons\AccountDefaultResource;
 use App\Filament\Company\Resources\Addons\AssetGroupResource;
 use App\Filament\Company\Resources\Addons\AssetResource;
 use App\Filament\Company\Resources\Addons\DepreciationRecordResource;
@@ -176,6 +177,7 @@ class CompanyPanelProvider extends PanelProvider
                             ->items([
                                 ...NavigationHelper::filterNavigationByPermissions(AccountChart::class),
                                 ...NavigationHelper::filterNavigationByPermissions(TransactionResource::class),
+                                ...NavigationHelper::filterNavigationByPermissions(AccountDefaultResource::class),
                             ]),
 
                         NavigationGroup::make('Asset')

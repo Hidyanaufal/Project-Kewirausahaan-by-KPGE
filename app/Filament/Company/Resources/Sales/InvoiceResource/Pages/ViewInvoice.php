@@ -11,12 +11,15 @@ use App\Filament\Infolists\Components\BannerEntry;
 use App\Filament\Infolists\Components\DocumentPreview;
 use App\Models\Accounting\Invoice;
 use Filament\Actions;
+use Filament\Facades\Filament;
+use Filament\Forms\Components\Placeholder;
 use Filament\Infolists\Components\Grid;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\IconPosition;
+use Filament\Support\Enums\MaxWidth;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\HtmlString;
 
@@ -43,6 +46,19 @@ class ViewInvoice extends ViewRecord
                 ->outlined(),
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
+                    Actions\Action::make('journal')
+                        ->icon('heroicon-s-book-open')
+                        ->label('Journal')
+                        ->outlined()
+                        ->modalWidth(MaxWidth::SevenExtraLarge)
+                        ->slideOver()
+                        ->form([
+                            Placeholder::make('journal_entries')
+                                ->label('Journal Entries')
+                                ->view('filament.company.resources.sales.invoice-resource.pages.journal', [
+                                    'journalEntries' => $this->record?->transactions?->flatMap(fn($transaction) => $transaction->journalEntries) ?? [],
+                                ]),
+                        ]),
                     Invoice::getApproveDraftAction(),
                     Invoice::getMarkAsSentAction(),
                     Invoice::getPrintDocumentAction(),

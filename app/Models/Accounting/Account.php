@@ -5,8 +5,10 @@ namespace App\Models\Accounting;
 use App\Concerns\Blamable;
 use App\Concerns\CompanyOwned;
 use App\Enums\Accounting\AccountCategory;
+use App\Enums\Accounting\AccountDefaultKey;
 use App\Enums\Accounting\AccountType;
 use App\Facades\Accounting;
+use App\Models\AccountDefault;
 use App\Models\Banking\BankAccount;
 use App\Models\Setting\Currency;
 use App\Observers\AccountObserver;
@@ -47,7 +49,6 @@ class Account extends Model
         'default',
         'created_by',
         'updated_by',
-        'bank_code',
     ];
 
     protected $casts = [
@@ -151,58 +152,60 @@ class Account extends Model
         return $this->hasMany(JournalEntry::class, 'account_id');
     }
 
-    public static function getAccountsPPh23(?int $companyId = null): self
+    protected static function findAccountByNameOrFail(AccountDefaultKey $accountDefaultKey, ?int $companyId = null): self
     {
-        return self::where('name', 'Hutang PPh 23')
-            ->when($companyId, function (Builder $query) use ($companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->firstOrFail();
-    }
+        $accountDefault = AccountDefault::where('key', $accountDefaultKey)
+            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+            ->first();
 
-    public static function getAccountsWapu(?int $companyId = null): self
-    {
-        return self::where('name', 'PPN WAPU')
-            ->when($companyId, function (Builder $query) use ($companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->firstOrFail();
+        $account = self::where('id', $accountDefault->account_id)
+            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+            ->first();
+
+        if (! $account) {
+            throw new \RuntimeException(sprintf(
+                'Account "%s" not found when called from %s().',
+                $accountDefaultKey->value,
+                debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2)[1]['function'] ?? 'unknown'
+            ));
+        }
+
+        return $account;
     }
 
     public static function getAccountsReceivableAccount(?int $companyId = null): self
     {
-        return self::where('name', 'Account Receivable IDR')
-            ->when($companyId, function (Builder $query) use ($companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->firstOrFail();
+        return self::findAccountByNameOrFail(AccountDefaultKey::AccountsReceivable, $companyId);
     }
 
     public static function getAccountsPayableAccount(?int $companyId = null): self
     {
-        return self::where('name', 'Account Payable IDR')
-            ->when($companyId, function (Builder $query) use ($companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->firstOrFail();
+        return self::findAccountByNameOrFail(AccountDefaultKey::AccountsPayable, $companyId);
     }
 
     public static function getSalesDiscountAccount(?int $companyId = null): self
     {
-        return self::where('name', 'Sales Discount')
-            ->when($companyId, function (Builder $query) use ($companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->firstOrFail();
+        return self::findAccountByNameOrFail(AccountDefaultKey::SalesDiscount, $companyId);
     }
 
     public static function getPurchaseDiscountAccount(?int $companyId = null): self
     {
-        return self::where('name', 'Purchase Discount')
-            ->when($companyId, function (Builder $query) use ($companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->firstOrFail();
+        return self::findAccountByNameOrFail(AccountDefaultKey::PurchaseDiscount, $companyId);
+    }
+
+    public static function getAccountsPPh23(?int $companyId = null): self
+    {
+        return self::findAccountByNameOrFail(AccountDefaultKey::PPh23, $companyId);
+    }
+
+    public static function getAccountsWapu(?int $companyId = null): self
+    {
+        return self::findAccountByNameOrFail(AccountDefaultKey::PPnWapu, $companyId);
+    }
+
+    public static function getAccountsProfit(?int $companyId = null): self
+    {
+        return self::findAccountByNameOrFail(AccountDefaultKey::Profit, $companyId);
     }
 
     protected static function newFactory(): Factory

@@ -244,4 +244,9 @@ class Company extends FilamentCompaniesCompany implements HasAvatar
     {
         return $this->hasMany(DepreciationRecord::class, 'company_id');
     }
+
+    public function accountDefaults(): HasMany
+    {
+        return $this->hasMany(AccountDefault::class, 'company_id');
+    }
 }

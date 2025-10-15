@@ -37,6 +37,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Notifications\Notification as NotificationsNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -515,6 +516,7 @@ class Invoice extends Document
             $lineItemDescription = "{$baseDescription} › {$lineItem->offering->name}";
             $lineItemSubtotalInInvoiceCurrency = $lineItem->subtotal;
 
+            // pendapatan
             $journalEntryData[] = [
                 'type' => JournalEntryType::Credit,
                 'account_id' => $lineItem->offering->income_account_id,
@@ -522,6 +524,7 @@ class Invoice extends Document
                 'description' => $lineItemDescription,
             ];
 
+            // pph23
             $journalEntryData[] = [
                 'type' => JournalEntryType::Credit,
                 'account_id' => Account::getAccountsPPh23()->id,
@@ -529,9 +532,9 @@ class Invoice extends Document
                 'description' => $lineItemDescription,
             ];
 
+            // adjusment (discount & tax)
             foreach ($lineItem->adjustments as $adjustment) {
                 $adjustmentAmountInInvoiceCurrency = $lineItem->calculateAdjustmentTotalAmount($adjustment);
-
                 $journalEntryData[] = [
                     'type' => $adjustment->category->isDiscount() ? JournalEntryType::Debit : JournalEntryType::Credit,
                     'account_id' => $adjustment->account_id,
@@ -540,7 +543,7 @@ class Invoice extends Document
                 ];
             }
 
-            // Handle per-document discount allocation
+            // discount per-document
             if ($this->discount_method->isPerDocument() && $totalLineItemSubtotalInInvoiceCurrency > 0) {
                 $lineItemSubtotalInInvoiceCurrency = $lineItem->subtotal;
 
@@ -562,6 +565,30 @@ class Invoice extends Document
                     ];
                 }
             }
+        }
+
+        // profit
+        if ($this->profit_total > 0) {
+            $profitTotal = $this->profit_total;
+            $profitDescription =  'Profit ' .  $baseDescription;
+            $journalEntryData[] = [
+                'type' => JournalEntryType::Credit,
+                'account_id' => Account::getAccountsProfit()->id,
+                'amount_in_invoice_currency' => $profitTotal * 0.98,
+                'description' => $profitDescription,
+            ];
+            $journalEntryData[] = [
+                'type' => JournalEntryType::Credit,
+                'account_id' => Account::getAccountsPPh23()->id,
+                'amount_in_invoice_currency' => $profitTotal * 0.02,
+                'description' => $profitDescription,
+            ];
+            $journalEntryData[] = [
+                'type' => JournalEntryType::Credit,
+                'account_id' => Account::getAccountsWapu()->id,
+                'amount_in_invoice_currency' => $profitTotal * 0.11,
+                'description' => $profitDescription,
+            ];
         }
 
         // Convert amounts to default currency
@@ -701,6 +728,14 @@ class Invoice extends Document
             ->databaseTransaction()
             ->successNotificationTitle('Invoice approved')
             ->action(function (self $record, MountableAction $action, Component $livewire) {
+                if (!$record->tax_code_id || !$record->tax_number || !$record->tax_date) {
+                    Notification::make()
+                        ->title('Tax data is missing. Please fill it out first.')
+                        ->danger()
+                        ->send();
+                    $action->halt();
+                }
+
                 if ($record->hasInactiveAdjustments()) {
                     $isViewPage = $livewire instanceof InvoiceResource\Pages\ViewInvoice;
 
