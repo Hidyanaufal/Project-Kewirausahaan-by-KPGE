@@ -81,7 +81,7 @@ trait HasTransactionAction
         return $form
             ->schema([
                 Forms\Components\Hidden::make('id'),
-                Forms\Components\TextInput::make('code')
+                Forms\Components\TextInput::make('transaction_code')
                     ->required(false)
                     ->hidden(fn(Forms\Get $get) => empty($get('id'))),
                 Forms\Components\DatePicker::make('posted_at')
@@ -128,7 +128,7 @@ trait HasTransactionAction
         return $form
             ->schema([
                 Forms\Components\Hidden::make('id'),
-                Forms\Components\TextInput::make('code')
+                Forms\Components\TextInput::make('transaction_code')
                     ->required(false)
                     ->hidden(fn(Forms\Get $get) => empty($get('id'))),
                 Forms\Components\DatePicker::make('posted_at')

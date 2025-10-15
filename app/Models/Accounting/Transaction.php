@@ -56,7 +56,7 @@ class Transaction extends Model
         'updated_by',
         'meta',
         'project_id',
-        'code',
+        'transaction_code',
     ];
 
     protected $casts = [
@@ -93,7 +93,7 @@ class Transaction extends Model
                 ->count() + 1;
 
             $sequence = str_pad($count, 3, '0', STR_PAD_LEFT);
-            $model->code = "{$companyCode}/{$prefix}/{$ym}/{$sequence}";
+            $model->transaction_code = "{$companyCode}/{$prefix}/{$ym}/{$sequence}";
         });
     }
 
