@@ -53,6 +53,7 @@ readonly class DocumentPreviewDTO extends DocumentDTO
             accountNumber: $settings->account_number,
             beneficiaryName: $settings->beneficiary_name,
             beneficiaryTitle: $settings->beneficiary_title,
+            profit: self::formatToMoney(50000, null),
             contactName: 'John Doe',
         );
     }

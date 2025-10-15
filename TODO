@@ -4,5 +4,5 @@ Todo:
   ✔ Tambahkan 1 field untuk no transaksi/kode voucher/kode transaksi . contoh BM untuk bank masuk MAN/BM/2401/004 dan BK untuk Bank Keluar MAN/BK/2401/001 @done(25-10-15 07:37)
   ☐ Tambahkan field filter by project dan by company untuk setiap report (field by company hanya muncul pada company utama, tambahkan field company utama)
   ☐ Tambahkan field filter by project dan by company di dashboard
-  ☐ Output result ganti dari csv menjadi excel
+  ✔ Output result ganti dari csv menjadi excel @done(25-10-15 14:59)
   ☐ #CR (tidak ada di kick off, penawaran, propose untuk phase 2) Report Data Anggota atas -Simpanan Sukarela bisa ditambahkan nama2 anggota, jadi terlihat nama2 anggota dan nilai simpanannya
