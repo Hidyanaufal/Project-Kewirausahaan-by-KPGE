@@ -279,3 +279,24 @@ if (!function_exists('formatCurrencyShort')) {
         return 'Rp' . number_format($numeric, 0, ',', '.');
     }
 }
+
+if (!function_exists('getRomanMonth')) {
+    function getRomanMonth(int $month): string
+    {
+        $romans = [
+            'I',
+            'II',
+            'III',
+            'IV',
+            'V',
+            'VI',
+            'VII',
+            'VIII',
+            'IX',
+            'X',
+            'XI',
+            'XII'
+        ];
+        return $romans[$month - 1];
+    }
+}

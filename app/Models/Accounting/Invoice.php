@@ -400,26 +400,30 @@ class Invoice extends Document
             throw new \RuntimeException('No current company is set for the user.');
         }
 
-        $defaultInvoiceSettings = $company->defaultInvoice;
-
-        $numberPrefix = $defaultInvoiceSettings->number_prefix ?? '';
+        $companyCode = $company->company_code;
+        $romanMonth = getRomanMonth(now()->month);
+        $year = now()->year;
 
         $latestDocument = static::query()
-            ->whereNotNull('invoice_number')
-            ->latest('invoice_number')
+            ->orderBy('id', 'desc')
             ->first();
 
-        $lastNumberNumericPart = $latestDocument
-            ? (int) substr($latestDocument->invoice_number, strlen($numberPrefix))
-            : DocumentDefault::getBaseNumber();
+        $lastNumberNumericPart = $latestDocument->id;
+        $nextNumber = $lastNumberNumericPart + 1;
 
-        $numberNext = $lastNumberNumericPart + 1;
-
-        return $defaultInvoiceSettings->getNumberNext(
-            prefix: $numberPrefix,
-            next: $numberNext
+        // Formatkan nomor dokumen baru
+        $documentNumber = sprintf(
+            '%s%02d/%s-%s/%d',
+            $companyCode,   // Kode perusahaan (misalnya JE, PE)
+            $nextNumber,    // Nomor urut
+            $companyCode,   // Kode perusahaan (misalnya JES, KPP)
+            $romanMonth,    // Bulan dalam angka romawi (misalnya VII)
+            $year           // Tahun saat ini
         );
+
+        return $documentNumber;
     }
+
 
     public function recordPayment(array $data): void
     {

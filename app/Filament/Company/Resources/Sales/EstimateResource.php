@@ -389,7 +389,7 @@ class EstimateResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->defaultSort('expiration_date')
+            ->defaultSort('id', 'desc')
             ->columns([
                 Columns::id(),
                 Tables\Columns\TextColumn::make('status')

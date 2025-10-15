@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Resources\Addons;
 
+use App\Concerns\HasPermissionCheck;
 use App\Enums\Addons\DepreciationMethod;
 use App\Filament\Company\Resources\Addons\AssetGroupResource\Pages;
 use App\Models\Addons\AssetGroup;
@@ -11,6 +12,8 @@ use Filament\Tables;
 
 class AssetGroupResource extends Resource
 {
+    use HasPermissionCheck;
+
     protected static ?string $model = AssetGroup::class;
 
     public static function form(Forms\Form $form): Forms\Form

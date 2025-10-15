@@ -79,21 +79,18 @@ class Transaction extends Model
                 TransactionType::Withdrawal => 'BK', // Bank Keluar
                 default => 'TRX',
             };
-
-            $companyCode = 'MAN';
-            if ($model->company && property_exists($model->company, 'code')) {
-                $companyCode = strtoupper($model->company->code ?? 'MAN');
-            }
-
+            $bankCode = $model?->bankAccount?->account?->bank_code ?? '';
             $ym = $date->format('ym');
-
             $count = static::where('type', $model->type)
                 ->whereYear('posted_at', $date->year)
                 ->whereMonth('posted_at', $date->month)
                 ->count() + 1;
-
             $sequence = str_pad($count, 3, '0', STR_PAD_LEFT);
-            $model->transaction_code = "{$companyCode}/{$prefix}/{$ym}/{$sequence}";
+            if ($bankCode) {
+                $model->transaction_code = "{$bankCode}/{$prefix}/{$ym}/{$sequence}";
+            } else {
+                $model->transaction_code = "{$prefix}/{$ym}/{$sequence}";
+            }
         });
     }
 

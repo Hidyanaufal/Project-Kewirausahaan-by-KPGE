@@ -261,26 +261,22 @@ class Estimate extends Document
             throw new \RuntimeException('No current company is set for the user.');
         }
 
-        $defaultEstimateSettings = $company->defaultEstimate;
-
-        $numberPrefix = $defaultEstimateSettings->number_prefix ?? '';
+        $companyCode = $company->company_code;
+        $romanMonth = getRomanMonth(now()->month);
+        $year = now()->year;
 
         $latestDocument = static::query()
-            ->whereNotNull('estimate_number')
-            ->latest('estimate_number')
+            ->orderBy('id', 'desc')
             ->first();
 
-        $lastNumberNumericPart = $latestDocument
-            ? (int) substr($latestDocument->estimate_number, strlen($numberPrefix))
-            : DocumentDefault::getBaseNumber();
+        $lastNumberNumericPart = $latestDocument->id;
 
-        $numberNext = $lastNumberNumericPart + 1;
+        $nextNumber = $lastNumberNumericPart + 1;
+        $documentNumber = sprintf('%04d/%s-%s/%d', $nextNumber, $companyCode, $romanMonth, $year);
 
-        return $defaultEstimateSettings->getNumberNext(
-            prefix: $numberPrefix,
-            next: $numberNext
-        );
+        return $documentNumber;
     }
+
 
     public function approveDraft(?Carbon $approvedAt = null): void
     {

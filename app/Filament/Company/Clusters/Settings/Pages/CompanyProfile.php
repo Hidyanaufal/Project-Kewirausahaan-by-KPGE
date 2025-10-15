@@ -84,6 +84,7 @@ class CompanyProfile extends Page
         $data = $this->record->attributesToArray();
         $data['name'] = $this->record->company->name;
         $data['is_primary'] = $this->record->company->is_primary;
+        $data['company_code'] = $this->record->company->company_code;
         $this->form->fill($data);
     }
 
@@ -92,6 +93,7 @@ class CompanyProfile extends Page
         try {
             $data = $this->form->getState();
             $this->record->company->name = $data['name'];
+            $this->record->company->company_code = $data['company_code'];
             $this->record->company->is_primary = $data['is_primary'];
             $this->record->company->save();
             $this->handleRecordUpdate($this->record, $data);
@@ -160,9 +162,17 @@ class CompanyProfile extends Page
                         ToggleButton::make('is_primary')
                             ->label('Primary Company')
                             ->softRequired(),
-                        TextInput::make('name')
-                            ->maxLength(255)
-                            ->softRequired(),
+                        Group::make([
+                            TextInput::make('company_code')
+                                ->label('Code')
+                                ->columnSpan(1)
+                                ->maxLength(5)
+                                ->softRequired(),
+                            TextInput::make('name')
+                                ->columnSpan(4)
+                                ->maxLength(255)
+                                ->softRequired(),
+                        ])->columns(5),
                         TextInput::make('email')
                             ->email()
                             ->localizeLabel()

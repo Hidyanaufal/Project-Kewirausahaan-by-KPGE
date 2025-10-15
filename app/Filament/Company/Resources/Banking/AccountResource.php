@@ -80,13 +80,18 @@ class AccountResource extends Resource
                             ]),
                         Forms\Components\Group::make()
                             ->relationship('account')
-                            ->columns()
+                            ->columns(2)
                             ->columnSpanFull()
                             ->schema([
-                                Forms\Components\TextInput::make('name')
-                                    ->maxLength(100)
-                                    ->localizeLabel()
-                                    ->required(),
+                                Forms\Components\Group::make([
+                                    Forms\Components\TextInput::make('bank_code')
+                                        ->maxLength(3),
+                                    Forms\Components\TextInput::make('name')
+                                        ->maxLength(100)
+                                        ->localizeLabel()
+                                        ->required(),
+                                ])
+                                    ->columns(2),
                                 CreateCurrencySelect::make('currency_code')
                                     ->disabledOn('edit'),
                             ]),
@@ -127,7 +132,7 @@ class AccountResource extends Resource
                     ->icon(static fn(BankAccount $record) => $record->isEnabled() ? 'heroicon-o-lock-closed' : null)
                     ->tooltip(static fn(BankAccount $record) => $record->isEnabled() ? 'Default Account' : null)
                     ->iconPosition('after')
-                    ->description(static fn(BankAccount $record) => $record->mask ?? null),
+                    ->description(static fn(BankAccount $record) => $record->account->bank_code . $record->mask  ?? null),
                 Tables\Columns\TextColumn::make('account.subtype.name')
                     ->localizeLabel('Subtype')
                     ->sortable()

@@ -3,6 +3,7 @@
 namespace App\Filament\Company\Resources\Addons;
 
 use App\Actions\Addons\GenerateYearlyForAsset;
+use App\Concerns\HasPermissionCheck;
 use App\Enums\Addons\AssetStatus;
 use App\Enums\Addons\DepreciationMethod;
 use App\Filament\Company\Resources\Addons\AssetResource\Pages;
@@ -15,6 +16,8 @@ use Filament\Notifications\Notification;
 
 class AssetResource extends Resource
 {
+    use HasPermissionCheck;
+
     protected static ?string $model = Asset::class;
 
     public static function form(Forms\Form $form): Forms\Form

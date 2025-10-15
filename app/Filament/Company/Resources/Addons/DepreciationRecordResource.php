@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Resources\Addons;
 
+use App\Concerns\HasPermissionCheck;
 use App\Filament\Company\Resources\Addons\DepreciationRecordResource\Pages;
 use App\Models\Addons\Asset;
 use App\Models\Addons\DepreciationRecord;
@@ -13,6 +14,8 @@ use Filament\Tables;
 
 class DepreciationRecordResource extends Resource
 {
+    use HasPermissionCheck;
+
     protected static ?string $model = DepreciationRecord::class;
 
     public static function form(Forms\Form $form): Forms\Form

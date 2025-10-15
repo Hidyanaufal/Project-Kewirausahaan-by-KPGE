@@ -13,6 +13,7 @@
 @endphp
 
 <div x-data="panelShiftDropdown" x-on:click.outside="closeDropdown">
+    
     <div x-on:click="toggleDropdown" class="flex cursor-pointer">
         <button
             type="button"
@@ -59,9 +60,18 @@
         @foreach($panels as $panelId => $panel)
             <x-panel-shift-dropdown.panel :panel-id="$panelId">
                 @if($panelId !== 'main' && isset($panel['label']))
-                    <x-panel-shift-dropdown.subpanel-header :label="$panel['label']" :panel-id="$panelId"/>
+                <x-panel-shift-dropdown.subpanel-header :label="$panel['label']" :panel-id="$panelId"/>
                 @endif
                 @if($panel['renderItems'])
+                    <button
+                        x-data="triggerSearchShortcut"
+                        @click="trigger"
+                        class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                        <x-filament::icon icon="heroicon-o-magnifying-glass" class="w-5 h-5" />
+                        <span>Search</span>
+                        <span class="ml-auto text-xs text-gray-400">Ctrl + K</span>
+                    </button>
                     @foreach($panel['items'] as $item)
                         <x-panel-shift-dropdown.content-handler :item="$item"/>
                     @endforeach
@@ -93,6 +103,20 @@
 
 <script>
     document.addEventListener('alpine:init', () => {
+        Alpine.data('triggerSearchShortcut', () => ({
+            trigger() {
+                const event = new KeyboardEvent('keydown', {
+                    key: 'k',
+                    code: 'KeyK',
+                    ctrlKey: true,
+                    metaKey: navigator.platform.toUpperCase().includes('MAC'),
+                    bubbles: true,
+                    cancelable: true,
+                });
+                window.dispatchEvent(event); // ganti dari document ke window
+                console.log('Triggered Ctrl+K event'); // debug log
+            },
+        }));
         Alpine.data('panelShiftDropdown', () => ({
             open: false,
             navigationStack: ['main'],

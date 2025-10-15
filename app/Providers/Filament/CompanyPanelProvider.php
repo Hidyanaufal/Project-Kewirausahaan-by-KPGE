@@ -100,7 +100,7 @@ class CompanyPanelProvider extends PanelProvider
                 family: 'Inter',
                 provider: GoogleFontProvider::class
             )
-            ->spa(true)
+            ->spa(false)
             ->tenantMenu(false)
             ->plugins([
                 ActivitylogPlugin::make(),

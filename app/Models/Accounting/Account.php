@@ -47,6 +47,7 @@ class Account extends Model
         'default',
         'created_by',
         'updated_by',
+        'bank_code',
     ];
 
     protected $casts = [
