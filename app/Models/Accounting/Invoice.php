@@ -384,7 +384,7 @@ class Invoice extends Document
 
     public function canBeMarkedAsSent(): bool
     {
-        return ! $this->hasBeenSent();
+        return ! $this->hasBeenSent() && $this->wasApproved();
     }
 
     public function hasPayments(): bool
@@ -425,7 +425,6 @@ class Invoice extends Document
 
         return $documentNumber;
     }
-
 
     public function recordPayment(array $data): void
     {

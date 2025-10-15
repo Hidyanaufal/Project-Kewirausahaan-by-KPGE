@@ -231,7 +231,7 @@ class Estimate extends Document
 
     public function canBeMarkedAsSent(): bool
     {
-        return ! $this->hasBeenSent();
+        return ! $this->hasBeenSent() && $this->wasApproved();
     }
 
     public function canBeMarkedAsAccepted(): bool
