@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install wkhtmltopdf (0.12.6-1 for Debian Buster)
 RUN curl -L -o /tmp/wkhtmltox.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.buster_amd64.deb \
-    && apt-get update && apt-get install -y ./tmp/wkhtmltox.deb \
+    && apt-get update && apt-get install -y /tmp/wkhtmltox.deb \
     && rm -rf /var/lib/apt/lists/* /tmp/wkhtmltox.deb
 
 # Verify wkhtmltopdf
