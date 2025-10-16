@@ -8,6 +8,7 @@ use App\Enums\Accounting\AdjustmentType;
 use App\Enums\Accounting\DocumentDiscountMethod;
 use App\Enums\Accounting\DocumentType;
 use App\Enums\Accounting\InvoiceStatus;
+use App\Enums\Addons\AgingRange;
 use App\Enums\Setting\PaymentTerms;
 use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Filament\Company\Resources\Sales\ClientResource\RelationManagers\InvoicesRelationManager;
@@ -37,6 +38,8 @@ use App\Utilities\Currency\CurrencyConverter;
 use App\Utilities\RateCalculator;
 use Awcodes\TableRepeater\Header;
 use Filament\Forms;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -484,25 +487,45 @@ class InvoiceResource extends Resource
                     ->multiple(),
                 Tables\Filters\TernaryFilter::make('has_payments')
                     ->label('Has payments')
+                    ->placeholder('All Status')
                     ->queries(
                         true: fn(Builder $query) => $query->whereHas('payments'),
                         false: fn(Builder $query) => $query->whereDoesntHave('payments'),
                     ),
-                Tables\Filters\SelectFilter::make('source_type')
-                    ->label('Source type')
-                    ->options([
-                        DocumentType::Estimate->value => DocumentType::Estimate->getLabel(),
-                        DocumentType::RecurringInvoice->value => DocumentType::RecurringInvoice->getLabel(),
+                Tables\Filters\Filter::make('aging')
+                    ->label('Aging (Days)')
+                    ->indicateUsing(function (array $state) {
+                        if (blank($state['aging_range'] ?? null)) {
+                            return [];
+                        }
+                        $aging = AgingRange::from($state['aging_range']);
+                        $label = 'Aging (Days) ' . $aging->getLabel();
+                        return Tables\Filters\Indicator::make("{$label}")->removable(true);
+                    })
+                    ->form([
+                        Select::make('aging_range')
+                            ->label('Select Aging Range')
+                            ->options(AgingRange::class)
+                            ->required()
                     ])
-                    ->native(false)
-                    ->query(function (Builder $query, array $data) {
-                        $sourceType = $data['value'] ?? null;
-
-                        return match ($sourceType) {
-                            DocumentType::Estimate->value => $query->whereNotNull('estimate_id'),
-                            DocumentType::RecurringInvoice->value => $query->whereNotNull('recurring_invoice_id'),
-                            default => $query,
-                        };
+                    ->query(function (Builder $query, array $data): Builder {
+                        $aging_range = $data['aging_range'] ?? null;
+                        if ($aging_range) {
+                            $query->whereIn('status', ['overdue', 'unsent']);
+                            switch ($aging_range) {
+                                case '1_to_30':
+                                    return $query->whereRaw('DATEDIFF(due_date, CURDATE()) BETWEEN -30 AND 0');
+                                case '31_to_60':
+                                    return $query->whereRaw('DATEDIFF(due_date, CURDATE()) BETWEEN -60 AND -31');
+                                case '61_to_90':
+                                    return $query->whereRaw('DATEDIFF(due_date, CURDATE()) BETWEEN -90 AND -61');
+                                case 'over_90':
+                                    return $query->whereRaw('DATEDIFF(due_date, CURDATE()) < -90');
+                                default:
+                                    return $query; // No filtering if no range is selected
+                            }
+                        }
+                        return $query;
                     }),
                 DateRangeFilter::make('date')
                     ->fromLabel('From date')
