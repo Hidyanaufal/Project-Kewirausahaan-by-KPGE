@@ -10,6 +10,7 @@ enum AccountDefaultKey: string implements HasLabel
     case AccountsPayable    = 'accounts_payable';
     case SalesDiscount      = 'sales_discount';
     case PurchaseDiscount   = 'purchase_discount';
+    case PPn                = 'ppn';
     case PPh23              = 'pph_23';
     case PPnWapu            = 'ppn_wapu';
     case Profit             = 'profit';
@@ -22,6 +23,7 @@ enum AccountDefaultKey: string implements HasLabel
             self::SalesDiscount      => 'Sales Discount',
             self::PurchaseDiscount   => 'Purchase Discount',
             self::PPh23              => 'PPh 23',
+            self::PPn                => 'PPN',
             self::PPnWapu            => 'PPN WAPU',
             self::Profit             => 'Profit',
         };

@@ -6,6 +6,7 @@ use App\Casts\RateCast;
 use App\Collections\Accounting\DocumentCollection;
 use App\Concerns\HasAttacments;
 use App\Concerns\HasDocumentNumber;
+use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\AdjustmentComputation;
 use App\Enums\Accounting\DocumentDiscountMethod;
 use App\Enums\Accounting\DocumentType;
@@ -129,66 +130,97 @@ class Invoice extends Document
     protected static function boot()
     {
         parent::boot();
-
         static::updating(function (Invoice $record) {
             if ($record->isDirty('status')) {
-                $new = $record->status;
+                if ($record->status === InvoiceStatus::Paid) {
+                    $latestTransaction = Transaction::query()
+                        ->where([
+                            'transactionable_type' => Invoice::class,
+                            'transactionable_id'   => $record->id,
+                            'is_payment'           => true,
+                        ])
+                        ->orderBy('id', 'desc')
+                        ->first();
 
-                // Check if the new status is 'Paid'
-                if (
-                    $new === InvoiceStatus::Paid
-                ) {
-                    $accountWapu    = Account::getAccountsWapu();
-                    $accountPPh23   = Account::getAccountsPPh23();
+                    $approvalTransaction = Transaction::query()
+                        ->where([
+                            'is_payment'           => false,
+                            'transactionable_type' => Invoice::class,
+                            'transactionable_id'   => $record->id,
+                        ])
+                        ->first();
 
-                    // Retrieve the latest payment transaction
-                    $latestTransaction = Transaction::where([
-                        'transactionable_type' => Invoice::class,
-                        'transactionable_id'   => $record->id,
-                        'is_payment'           => true,
-                    ])->orderBy('id', 'desc')->first();
+                    $approvalJournalEntries = JournalEntry::query()
+                        ->where([
+                            'transaction_id' => $approvalTransaction->id,
+                        ])
+                        ->get();
 
-                    // Retrieve the approval transaction (non-payment)
-                    $approvalTransaction = Transaction::where([
-                        'is_payment'           => false,
-                        'transactionable_type' => Invoice::class,
-                        'transactionable_id'   => $record->id,
-                    ])->first();
 
-                    // Retrieve all journal entries linked to approval transaction
-                    $approvalJournalEntries = JournalEntry::where([
-                        'transaction_id' => $approvalTransaction->id,
-                    ])->get();
+                    $accountWapu        = Account::getAccountsWapu();
+                    $accountPPn         = Account::getAccountsPPn();
+                    $accountPPh23       = Account::getAccountsPPh23();
+                    $journalAmountTotal = 0;
+                    $totalReceivable    = 0;
 
-                    //                     foreach ($approvalJournalEntries as $journal) {
-                    //                         // PPn WAPU
-                    //                         if (
-                    //                             $journal->account_id == $accountWapu->id
-                    //                             && $journal->type == JournalEntryType::Credit
-                    //                         ) {
-                    //                             JournalEntry::create([
-                    //                                 'transaction_id' => $latestTransaction->id,
-                    //                                 'account_id'     => $accountWapu->id,
-                    //                                 'type'           => JournalEntryType::Debit,
-                    //                                 'amount'         => $journal->amount,
-                    //                                 'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
-                    //                             ]);
-                    //                         }
-                    // 
-                    //                         // PPh 23
-                    //                         if (
-                    //                             $journal->account_id == $accountPPh23->id
-                    //                             && $journal->type == JournalEntryType::Credit
-                    //                         ) {
-                    //                             JournalEntry::create([
-                    //                                 'transaction_id' => $latestTransaction->id,
-                    //                                 'account_id'     => $accountPPh23->id,
-                    //                                 'type'           => JournalEntryType::Debit,
-                    //                                 'amount'         => $journal->amount,
-                    //                                 'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
-                    //                             ]);
-                    //                         }
-                    //                     }
+                    foreach ($approvalJournalEntries as $journal) {
+                        // PPN WAPU
+                        if ($journal->account_id == $accountWapu->id) {
+                            $journalEntry = JournalEntry::create([
+                                'transaction_id' => $latestTransaction->id,
+                                'account_id'     => $accountWapu->id,
+                                'type'           => JournalEntryType::Debit,
+                                'amount'         => $journal->amount,
+                                'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                            ]);
+                            $journalAmountTotal += $journalEntry->amount;
+                        }
+
+                        // PPN 
+                        if ($journal->account_id == $accountPPn->id) {
+                            $journalEntry = JournalEntry::create([
+                                'transaction_id' => $latestTransaction->id,
+                                'account_id'     => $accountPPn->id,
+                                'type'           => JournalEntryType::Debit,
+                                'amount'         => $journal->amount,
+                                'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                            ]);
+                            $journalAmountTotal += $journalEntry->amount;
+                        }
+
+                        // Receivable/Piutang
+                        if ($journal->account_id == Account::getAccountsReceivableAccount()->id) {
+                            $totalReceivable = $journal->amount;
+                        }
+
+                        // Revenue/Pendapatan
+                        if ($journal->account->category == AccountCategory::Revenue) {
+                            $journalEntry = JournalEntry::create([
+                                'transaction_id' => $latestTransaction->id,
+                                'account_id'     => $accountPPh23->id,
+                                'type'           => JournalEntryType::Debit,
+                                'amount'         => $journal->amount * 0.02,
+                                'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                            ]);
+                            $journalAmountTotal += $journalEntry->amount;
+                        }
+                    }
+
+                    // Penyesuaian uang yang diterima oleh kas
+                    $bankAmount = $totalReceivable - $journalAmountTotal;
+                    JournalEntry::query()
+                        ->where([
+                            'transaction_id' => $latestTransaction->id,
+                            'account_id'     => $latestTransaction->bankAccount->account_id,
+                        ])
+                        ->delete();
+                    $journalEntry = JournalEntry::create([
+                        'transaction_id' => $latestTransaction->id,
+                        'account_id'     => $latestTransaction->bankAccount->account_id,
+                        'type'           => JournalEntryType::Debit,
+                        'amount'         => $bankAmount,
+                        'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                    ]);
                 }
             }
         });
@@ -383,7 +415,7 @@ class Invoice extends Document
 
     public function canBeMarkedAsSent(): bool
     {
-        return ! $this->hasBeenSent() && $this->wasApproved() && $this->isPaid();
+        return ! $this->hasBeenSent() && $this->wasApproved() && !$this->isPaid();
     }
 
     public function hasPayments(): bool
@@ -517,15 +549,7 @@ class Invoice extends Document
             $journalEntryData[] = [
                 'type' => JournalEntryType::Credit,
                 'account_id' => $lineItem->offering->income_account_id,
-                'amount_in_invoice_currency' => $lineItemSubtotalInInvoiceCurrency * 0.98,
-                'description' => $lineItemDescription,
-            ];
-
-            // pph23
-            $journalEntryData[] = [
-                'type' => JournalEntryType::Credit,
-                'account_id' => Account::getAccountsPPh23()->id,
-                'amount_in_invoice_currency' => $lineItemSubtotalInInvoiceCurrency * 0.02,
+                'amount_in_invoice_currency' => $lineItemSubtotalInInvoiceCurrency,
                 'description' => $lineItemDescription,
             ];
 
@@ -571,13 +595,7 @@ class Invoice extends Document
             $journalEntryData[] = [
                 'type' => JournalEntryType::Credit,
                 'account_id' => Account::getAccountsProfit()->id,
-                'amount_in_invoice_currency' => $profitTotal * 0.98,
-                'description' => $profitDescription,
-            ];
-            $journalEntryData[] = [
-                'type' => JournalEntryType::Credit,
-                'account_id' => Account::getAccountsPPh23()->id,
-                'amount_in_invoice_currency' => $profitTotal * 0.02,
+                'amount_in_invoice_currency' => $profitTotal,
                 'description' => $profitDescription,
             ];
             $journalEntryData[] = [
