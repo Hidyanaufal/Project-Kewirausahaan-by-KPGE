@@ -19,9 +19,12 @@ RUN apt-get update && apt-get install -y \
     fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-# Install wkhtmltopdf (0.12.6-1 for Debian Buster)
-RUN curl -L -o /tmp/wkhtmltox.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.buster_amd64.deb \
-    && apt-get update && apt-get install -y /tmp/wkhtmltox.deb \
+# Install wkhtmltopdf (fix for libssl1.1 dependency)
+RUN apt-get update && apt-get install -y curl gnupg \
+    && echo "deb http://security.debian.org/debian-security bullseye-security main" >> /etc/apt/sources.list \
+    && apt-get update && apt-get install -y libssl1.1 || true \
+    && curl -L -o /tmp/wkhtmltox.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.buster_amd64.deb \
+    && apt-get install -y /tmp/wkhtmltox.deb \
     && rm -rf /var/lib/apt/lists/* /tmp/wkhtmltox.deb
 
 # Verify wkhtmltopdf
