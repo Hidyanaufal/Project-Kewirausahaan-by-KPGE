@@ -30,7 +30,7 @@
                     <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
                         @if ($journalEntry->type->value == 'debit')
                             @php $accountDebit += $journalEntry->amount; @endphp
-                            <span>{{ number_format($journalEntry->amount / 100) }}</span>
+                            <span style="color: #388E3C;">{{ number_format($journalEntry->amount / 100) }}</span>
                         @else
                             <span class="text-transparent">-</span>
                         @endif
@@ -40,7 +40,7 @@
                     <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
                         @if ($journalEntry->type->value == 'credit')
                             @php $accountCredit += $journalEntry->amount; @endphp
-                            <span>{{ number_format($journalEntry->amount / 100) }}</span>
+                            <span style="color: #C62828;">{{ number_format($journalEntry->amount / 100) }}</span>
                         @else
                             <span class="text-transparent">-</span>
                         @endif

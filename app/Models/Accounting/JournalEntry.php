@@ -11,12 +11,14 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class JournalEntry extends Model
 {
     use Blamable;
     use CompanyOwned;
     use HasFactory;
+    use SoftDeletes;
 
     protected $fillable = [
         'company_id',

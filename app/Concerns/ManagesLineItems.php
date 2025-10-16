@@ -104,6 +104,10 @@ trait ManagesLineItems
             $currencyCode,
         );
 
+        if ($profitTotal > 0) {
+            $taxTotalCents += $profitTotal * 0.11;
+        }
+
         $grandTotalCents = $subtotalCents + $taxTotalCents - $discountTotalCents + $profitTotal;
 
         return [

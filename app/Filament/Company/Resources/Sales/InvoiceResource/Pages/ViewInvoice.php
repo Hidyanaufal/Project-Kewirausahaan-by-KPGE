@@ -11,7 +11,6 @@ use App\Filament\Infolists\Components\BannerEntry;
 use App\Filament\Infolists\Components\DocumentPreview;
 use App\Models\Accounting\Invoice;
 use Filament\Actions;
-use Filament\Facades\Filament;
 use Filament\Forms\Components\Placeholder;
 use Filament\Infolists\Components\Grid;
 use Filament\Infolists\Components\Section;
@@ -43,26 +42,42 @@ class ViewInvoice extends ViewRecord
         return [
             Actions\EditAction::make()
                 ->label('Edit invoice')
-                ->outlined(),
+                ->outlined()
+                ->visible(fn() => !$this->record->wasApproved()),
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
-                    Actions\Action::make('journal')
-                        ->icon('heroicon-s-book-open')
-                        ->label('Journal')
-                        ->outlined()
-                        ->modalWidth(MaxWidth::SevenExtraLarge)
-                        ->slideOver()
-                        ->form([
-                            Placeholder::make('journal_entries')
-                                ->label('Journal Entries')
-                                ->view('filament.company.resources.sales.invoice-resource.pages.journal', [
-                                    'journalEntries' => $this->record?->transactions?->flatMap(fn($transaction) => $transaction->journalEntries) ?? [],
-                                ]),
-                        ]),
                     Invoice::getApproveDraftAction(),
                     Invoice::getMarkAsSentAction(),
                     Invoice::getPrintDocumentAction(),
                     Invoice::getReplicateAction(),
+                ])->dropdown(false),
+                Actions\ActionGroup::make([
+                    Actions\Action::make('journal_summary')
+                        ->icon('heroicon-s-book-open')
+                        ->outlined()
+                        ->modalWidth(MaxWidth::SevenExtraLarge)
+                        ->modalHeading('Journal Summary for ' . $this->record->invoice_number)
+                        ->slideOver()
+                        ->modalFooterActions(fn() => [])
+                        ->form([
+                            Placeholder::make('journal_entries')
+                                ->view('filament.company.resources.sales.invoice-resource.pages.journal-summary', [
+                                    'journalEntries' => $this->record?->transactions?->flatMap(fn($transaction) => $transaction->journalEntries) ?? [],
+                                ]),
+                        ]),
+                    Actions\Action::make('journal_detail')
+                        ->icon('heroicon-o-book-open')
+                        ->outlined()
+                        ->modalWidth(MaxWidth::SevenExtraLarge)
+                        ->modalHeading('Journal Detail for ' . $this->record->invoice_number)
+                        ->slideOver()
+                        ->modalFooterActions(fn() => [])
+                        ->form([
+                            Placeholder::make('journal_entries')
+                                ->view('filament.company.resources.sales.invoice-resource.pages.journal-detail', [
+                                    'journalEntries' => $this->record?->transactions?->flatMap(fn($transaction) => $transaction->journalEntries) ?? [],
+                                ]),
+                        ]),
                 ])->dropdown(false),
                 Actions\DeleteAction::make(),
             ])

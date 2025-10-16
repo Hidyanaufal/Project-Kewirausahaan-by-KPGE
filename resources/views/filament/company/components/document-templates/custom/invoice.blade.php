@@ -107,15 +107,6 @@
                         {{ $document->subtotal }}
                     </td>
                 </tr>
-
-                <!-- PPN -->
-                <tr>
-                    <td colspan="2" class="px-2 text-right">PPN 11%</td>
-                    <td class="px-2 text-right">
-                        {{ $document->tax }}
-                    </td>
-                </tr>
-
                 <!-- Profit -->
                 <tr>
                     <td colspan="2" class="px-2 text-right">Profit</td>
@@ -124,9 +115,17 @@
                     </td>
                 </tr>
 
+                <!-- PPN -->
+                <tr>
+                    <td colspan="2" class="px-2 text-right">Pajak</td>
+                    <td class="px-2 text-right">
+                        {{ $document->tax }}
+                    </td>
+                </tr>
+
                 <!-- Total -->
                 <tr>
-                    <td colspan="2" class="px-2 font-semibold text-right">Total setelah PPN</td>
+                    <td colspan="2" class="px-2 font-semibold text-right">Total</td>
                     <td class="px-2 font-semibold text-right">
                         {{ $document->total }}
                     </td>
