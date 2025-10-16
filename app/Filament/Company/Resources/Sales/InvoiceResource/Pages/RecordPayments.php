@@ -133,10 +133,11 @@ class RecordPayments extends ListRecords
                         }
 
                         $paymentData = [
-                            'posted_at' => $data['posted_at'],
-                            'payment_method' => $data['payment_method'],
-                            'bank_account_id' => $data['bank_account_id'],
-                            'amount' => $paymentAmount,
+                            'transaction_code'  => $data['transaction_code'],
+                            'posted_at'         => $data['posted_at'],
+                            'payment_method'    => $data['payment_method'],
+                            'bank_account_id'   => $data['bank_account_id'],
+                            'amount'            => $paymentAmount,
                         ];
 
                         $invoice->recordPayment($paymentData);
@@ -199,6 +200,7 @@ class RecordPayments extends ListRecords
         return $form
             ->live()
             ->schema([
+                Forms\Components\TextInput::make('transaction_code'),
                 Forms\Components\Grid::make(2) // Changed from 3 to 4
                     ->schema([
                         Forms\Components\Select::make('bank_account_id')

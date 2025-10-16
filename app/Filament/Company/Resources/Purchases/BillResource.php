@@ -166,7 +166,7 @@ class BillResource extends Resource
                                         }
                                     }),
                                 Forms\Components\Select::make('discount_method')
-                                    ->label('Discount method')->hidden()
+                                    ->label('Discount method')
                                     ->options(DocumentDiscountMethod::class)
                                     ->softRequired()
                                     ->default($settings->discount_method)

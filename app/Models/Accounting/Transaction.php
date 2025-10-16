@@ -71,25 +71,26 @@ class Transaction extends Model
     protected static function boot()
     {
         parent::boot();
-
         static::creating(function ($model) {
-            $date = $model->posted_at ?? now();
-            $prefix = match ($model->type) {
-                TransactionType::Deposit => 'BM', // Bank Masuk
-                TransactionType::Withdrawal => 'BK', // Bank Keluar
-                default => 'TRX',
-            };
-            $bankCode = $model?->bankAccount?->account?->bank_code ?? '';
-            $ym = $date->format('ym');
-            $count = static::where('type', $model->type)
-                ->whereYear('posted_at', $date->year)
-                ->whereMonth('posted_at', $date->month)
-                ->count() + 1;
-            $sequence = str_pad($count, 3, '0', STR_PAD_LEFT);
-            if ($bankCode) {
-                $model->transaction_code = "{$bankCode}/{$prefix}/{$ym}/{$sequence}";
-            } else {
-                $model->transaction_code = "{$prefix}/{$ym}/{$sequence}";
+            if (!$model->transaction_code) {
+                $date = $model->posted_at ?? now();
+                $prefix = match ($model->type) {
+                    TransactionType::Deposit => 'BM', // Bank Masuk
+                    TransactionType::Withdrawal => 'BK', // Bank Keluar
+                    default => 'TRX',
+                };
+                $bankCode = $model?->bankAccount?->account?->bank_code ?? '';
+                $ym = $date->format('ym');
+                $count = static::where('type', $model->type)
+                    ->whereYear('posted_at', $date->year)
+                    ->whereMonth('posted_at', $date->month)
+                    ->count() + 1;
+                $sequence = str_pad($count, 3, '0', STR_PAD_LEFT);
+                if ($bankCode) {
+                    $model->transaction_code = "{$bankCode}/{$prefix}/{$ym}/{$sequence}";
+                } else {
+                    $model->transaction_code = "{$prefix}/{$ym}/{$sequence}";
+                }
             }
         });
     }

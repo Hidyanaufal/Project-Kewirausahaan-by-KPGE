@@ -110,6 +110,7 @@ class PayBills extends ListRecords
                             'posted_at' => $data['posted_at'],
                             'payment_method' => $data['payment_method'],
                             'bank_account_id' => $data['bank_account_id'],
+                            'transaction_code' => $data['transaction_code'],
                             'amount' => $paymentAmount,
                         ];
 
@@ -149,6 +150,7 @@ class PayBills extends ListRecords
         return $form
             ->live()
             ->schema([
+                Forms\Components\TextInput::make('transaction_code'),
                 Forms\Components\Grid::make(3)
                     ->schema([
                         Forms\Components\Select::make('bank_account_id')

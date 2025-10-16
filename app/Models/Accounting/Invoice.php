@@ -496,6 +496,7 @@ class Invoice extends Document
             'is_payment' => true,
             'posted_at' => $data['posted_at'],
             'amount' => $formattedAmountForBankCurrency,
+            'transaction_code' => $data['transaction_code'] ?? null,
             'payment_method' => $data['payment_method'],
             'bank_account_id' => $data['bank_account_id'],
             'account_id' => Account::getAccountsReceivableAccount($this->company_id)->id,

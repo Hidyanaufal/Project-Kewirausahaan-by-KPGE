@@ -261,6 +261,7 @@ class Bill extends Document
         $this->transactions()->create([
             'company_id' => $this->company_id,
             'type' => $transactionType,
+            'transaction_code' => $data['transaction_code'] ?? null,
             'is_payment' => true,
             'posted_at' => $data['posted_at'],
             'amount' => $formattedAmountForBankCurrency,

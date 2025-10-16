@@ -52,11 +52,7 @@ class TransactionResource extends Resource
                     'bankAccount.account',
                     'journalEntries.account',
                     'payeeable',
-                ])
-                    ->where(function (Builder $query) {
-                        $query->whereNull('transactionable_id')
-                            ->orWhere('is_payment', true);
-                    });
+                ]);
             })
             ->columns([
                 Columns::id(),
@@ -114,15 +110,19 @@ class TransactionResource extends Resource
                     ->multiple()
                     ->options(static fn() => Transaction::getChartAccountOptions()),
                 Tables\Filters\TernaryFilter::make('reviewed')
+                    ->placeholder('All')
+                    ->native(false)
                     ->label('Status')
                     ->trueLabel('Reviewed')
                     ->falseLabel('Not Reviewed'),
                 Tables\Filters\SelectFilter::make('type')
                     ->label('Type')
+                    ->native(false)
                     ->options(TransactionType::class),
                 Tables\Filters\TernaryFilter::make('is_payment')
-                    ->label('Payment')
-                    ->default(false),
+                    ->placeholder('All')
+                    ->native(false)
+                    ->label('Payment'),
                 Tables\Filters\SelectFilter::make('payee')
                     ->label('Payee')
                     ->options(static fn() => Transaction::getPayeeOptions())

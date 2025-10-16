@@ -130,7 +130,7 @@ trait ManagesLineItems
         } else {
             $result = $record->profit_rate;
         }
-        return CurrencyConverter::convertToCents($result, $currencyCode);
+        return CurrencyConverter::convertToCents($result ?? 0, $currencyCode);
     }
 
     protected function calculateDiscountTotal(
