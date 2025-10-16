@@ -4,11 +4,13 @@ namespace App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 
 use App\Concerns\HideFromSpotlight;
 use App\Enums\Accounting\DocumentType;
+use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers\AttachmentsRelationManager;
 use App\Filament\Company\Resources\Sales\ClientResource;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Filament\Infolists\Components\BannerEntry;
 use App\Filament\Infolists\Components\DocumentPreview;
+use App\Helpers\AuthHelper;
 use App\Models\Accounting\Invoice;
 use Filament\Actions;
 use Filament\Forms\Components\Placeholder;
@@ -20,6 +22,7 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
 
 class ViewInvoice extends ViewRecord
@@ -40,10 +43,19 @@ class ViewInvoice extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\EditAction::make()
+            Actions\Action::make('edit')
                 ->label('Edit invoice')
                 ->outlined()
-                ->visible(fn() => !$this->record->wasApproved()),
+                ->requiresConfirmation()
+                ->action(function (Model $record) {
+                    $isAdmin = AuthHelper::isAdmin();
+                    if (!$isAdmin) {
+                        $record->status = InvoiceStatus::Draft;
+                        $record->approved_at = null;
+                        $record->save();
+                    }
+                    return redirect(EditInvoice::getUrl(['record' => $record]));
+                }),
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
                     Invoice::getApproveDraftAction(),

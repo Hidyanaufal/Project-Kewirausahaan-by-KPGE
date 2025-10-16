@@ -3,6 +3,7 @@
 namespace App\DTO;
 
 use App\Enums\Accounting\DocumentType;
+use App\Enums\Accounting\InvoiceStatus;
 use App\Enums\Setting\Font;
 use App\Models\Accounting\Document;
 use App\Models\Setting\DocumentDefault;
@@ -85,6 +86,13 @@ readonly class DocumentDTO
         $projectName = $document->project->name;
         $contactName = $document->client?->primaryContact?->first_name . ' ' . $document->client?->primaryContact?->last_name;
         $isEmptyContactName = trim($contactName) === '';
+
+        // handle case invoice
+        if ($settings->header == 'Invoice') {
+            if ($document->status == InvoiceStatus::Draft) {
+                $settings->header = 'Proforma Invoice';
+            }
+        }
 
         return new self(
             header: $settings->header,
