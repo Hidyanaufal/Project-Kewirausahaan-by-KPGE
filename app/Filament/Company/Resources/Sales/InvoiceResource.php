@@ -487,6 +487,7 @@ class InvoiceResource extends Resource
                     ->multiple(),
                 Tables\Filters\TernaryFilter::make('has_payments')
                     ->label('Has payments')
+                    ->native(false)
                     ->placeholder('All Status')
                     ->queries(
                         true: fn(Builder $query) => $query->whereHas('payments'),

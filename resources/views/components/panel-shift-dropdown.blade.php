@@ -31,17 +31,18 @@
                 />
             @endif
 
-            <span class="grid justify-items-start text-start">
+           <span class="grid justify-items-start text-start max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap">
                 @if ($currentTenant instanceof \Filament\Models\Contracts\HasCurrentTenantLabel)
-                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                    <span class="text-xs text-gray-500 dark:text-gray-400 truncate">
                         {{ $currentTenant->getCurrentTenantLabel() }}
                     </span>
                 @endif
 
-                <span class="text-gray-950 dark:text-white">
-                    {{$user->name}}
+                <span class="text-gray-950 dark:text-white truncate">
+                    {{ $user->name }}
                 </span>
-                <span class="text-gray-950 dark:text-white text-xs">
+
+                <span class="text-gray-950 dark:text-white text-xs truncate">
                     {{ $currentTenantName ?? filament()->getUserName($user) }}
                 </span>
             </span>

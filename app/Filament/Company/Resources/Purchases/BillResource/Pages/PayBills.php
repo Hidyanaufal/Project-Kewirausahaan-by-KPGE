@@ -149,6 +149,7 @@ class PayBills extends ListRecords
     {
         return $form
             ->live()
+            ->columns(3)
             ->schema([
                 Forms\Components\TextInput::make('transaction_code'),
                 Forms\Components\Grid::make(3)

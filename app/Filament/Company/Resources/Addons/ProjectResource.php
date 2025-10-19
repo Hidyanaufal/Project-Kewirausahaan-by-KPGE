@@ -171,7 +171,6 @@ class ProjectResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->label('Project Name')
                     ->searchable(isIndividual: false)
-                    ->wrap()
                     ->toggleable(isToggledHiddenByDefault: false),
 
                 Tables\Columns\TextColumn::make('type.name')

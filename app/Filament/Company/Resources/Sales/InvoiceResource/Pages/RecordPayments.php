@@ -199,6 +199,7 @@ class RecordPayments extends ListRecords
     {
         return $form
             ->live()
+            ->columns(2)
             ->schema([
                 Forms\Components\TextInput::make('transaction_code'),
                 Forms\Components\Grid::make(2) // Changed from 3 to 4
