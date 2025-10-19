@@ -79,11 +79,8 @@ class AssetResource extends Resource
     public static function table(Tables\Table $table): Tables\Table
     {
         return $table
+            ->defaultSort('id', 'desc')
             ->columns([
-                Tables\Columns\TextColumn::make('asset_code')
-                    ->label('Asset Code')
-                    ->searchable(),
-
                 Tables\Columns\TextColumn::make('name')
                     ->label('Asset Name')
                     ->searchable()
