@@ -126,7 +126,7 @@ class ViewProject extends ViewRecord
                         ->date(),
                     TextEntry::make('project_value')
                         ->label('Project Value')
-                        ->money('idr', true),
+                        ->currency(),
                     TextEntry::make('status')
                         ->badge()
                         ->label('Status'),

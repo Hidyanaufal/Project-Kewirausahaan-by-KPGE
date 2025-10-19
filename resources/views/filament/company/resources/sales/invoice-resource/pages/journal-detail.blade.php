@@ -58,7 +58,7 @@
 
                     <!-- Description -->
                     <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-300">
-                        <span class="text-transparent">{{ $journalEntry->description }}</span>
+                        <span>{{ $journalEntry->description }}</span>
                     </td>
 
                     <!-- Timestamp -->

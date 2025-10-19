@@ -58,11 +58,11 @@ class ReportService
         return $dtoClass::fromArray($formattedBalances);
     }
 
-    public function buildAccountBalanceReport(string $startDate, string $endDate, array $columns = []): ReportDTO
+    public function buildAccountBalanceReport(string $startDate, string $endDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
     {
         $orderedCategories = AccountCategory::getOrderedCategories();
 
-        $accounts = $this->accountService->getAccountBalances($startDate, $endDate)
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
@@ -141,12 +141,12 @@ class ReportService
         return $balances;
     }
 
-    public function calculateRetainedEarnings(?string $startDate, string $endDate): Money
+    public function calculateRetainedEarnings(?string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
         $startDate ??= Carbon::parse($this->accountService->getEarliestTransactionDate())->toDateTimeString();
-        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate)->where('category', AccountCategory::Revenue)->get();
+        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)->where('category', AccountCategory::Revenue)->get();
 
-        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate)->where('category', AccountCategory::Expense)->get();
+        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)->where('category', AccountCategory::Expense)->get();
 
         $revenueTotal = 0;
         $expenseTotal = 0;
@@ -166,7 +166,7 @@ class ReportService
         return new Money($retainedEarnings, CurrencyAccessor::getDefaultCurrency());
     }
 
-    public function buildAccountTransactionsReport(string $startDate, string $endDate, ?array $columns = null, ?string $accountId = 'all', ?string $entityId = 'all'): ReportDTO
+    public function buildAccountTransactionsReport(string $startDate, string $endDate, ?array $columns = null, ?string $accountId = 'all', ?string $entityId = 'all', $projectId = null, $companyId = null): ReportDTO
     {
         $columns ??= [];
         $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
@@ -175,10 +175,10 @@ class ReportService
 
         $entityId = $entityId !== 'all' ? $entityId : null;
 
-        $query = $this->accountService->getAccountBalances($startDate, $endDate, $accountIds)
+        $query = $this->accountService->getAccountBalances($startDate, $endDate, $accountIds, $projectId, $companyId)
             ->orderByRaw('LENGTH(code), code');
 
-        $accounts = $query->with(['journalEntries' => $this->accountService->getTransactionDetailsSubquery($startDate, $endDate, $entityId)])->get();
+        $accounts = $query->with(['journalEntries' => $this->accountService->getTransactionDetailsSubquery($startDate, $endDate, $entityId, $projectId, $companyId)])->get();
 
         $reportCategories = [];
 
@@ -266,7 +266,7 @@ class ReportService
         return new ReportDTO(categories: $reportCategories, fields: $columns);
     }
 
-    public function buildTrialBalanceReport(string $trialBalanceType, string $asOfDate, array $columns = []): ReportDTO
+    public function buildTrialBalanceReport(string $trialBalanceType, string $asOfDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
     {
         $asOfDateCarbon = Carbon::parse($asOfDate);
         $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate());
@@ -275,7 +275,7 @@ class ReportService
 
         $isPostClosingTrialBalance = $trialBalanceType === 'postClosing';
 
-        $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString())
+        $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
             ->when($isPostClosingTrialBalance, fn(Builder $query) => $query->whereNotIn('category', [AccountCategory::Revenue, AccountCategory::Expense]))
             ->orderByRaw('LENGTH(code), code')
             ->get();
@@ -317,7 +317,7 @@ class ReportService
             }
 
             if ($category === AccountCategory::Equity && $isPostClosingTrialBalance) {
-                $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString())->getAmount();
+                $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), $projectId, $companyId)->getAmount();
                 $isCredit = $retainedEarningsAmount >= 0;
 
                 $categorySummaryBalances[$isCredit ? 'credit_balance' : 'debit_balance'] += abs($retainedEarningsAmount);
@@ -352,9 +352,9 @@ class ReportService
         return new ReportDTO(categories: $accountCategories, overallTotal: $formattedReportTotalBalances, fields: $columns, reportType: $trialBalanceType);
     }
 
-    public function getRetainedEarningsBalances(string $startDate, string $endDate): AccountBalanceDTO
+    public function getRetainedEarningsBalances(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountBalanceDTO
     {
-        $retainedEarningsAmount = $this->calculateRetainedEarnings($startDate, $endDate)->getAmount();
+        $retainedEarningsAmount = $this->calculateRetainedEarnings($startDate, $endDate, $projectId, $companyId)->getAmount();
 
         $isCredit = $retainedEarningsAmount >= 0;
         $retainedEarningsDebitAmount = $isCredit ? 0 : abs($retainedEarningsAmount);
@@ -387,20 +387,21 @@ class ReportService
         string $startDate,
         string $endDate,
         array $columns = [],
-        $projectId = null
+        $projectId = null,
+        $companyId = null
     ): ReportDTO {
         // Query only relevant accounts and sort them at the query level
-        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId)
+        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->where('category', AccountCategory::Revenue)
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $cogsAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId)
+        $cogsAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereRelation('subtype', 'name', 'Cost of Goods Sold')
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId)
+        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->where('category', AccountCategory::Expense)
             ->whereRelation('subtype', 'name', '!=', 'Cost of Goods Sold')
             ->orderByRaw('LENGTH(code), code')
@@ -477,17 +478,17 @@ class ReportService
         );
     }
 
-    public function buildCashFlowStatementReport(string $startDate, string $endDate, array $columns = []): ReportDTO
+    public function buildCashFlowStatementReport(string $startDate, string $endDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
     {
         $sections = [
-            'Operating Activities' => $this->buildOperatingActivities($startDate, $endDate),
-            'Investing Activities' => $this->buildInvestingActivities($startDate, $endDate),
-            'Financing Activities' => $this->buildFinancingActivities($startDate, $endDate),
+            'Operating Activities' => $this->buildOperatingActivities($startDate, $endDate, $projectId, $companyId),
+            'Investing Activities' => $this->buildInvestingActivities($startDate, $endDate, $projectId, $companyId),
+            'Financing Activities' => $this->buildFinancingActivities($startDate, $endDate, $projectId, $companyId),
         ];
 
-        $totalCashFlows = $this->calculateTotalCashFlows($sections, $startDate);
+        $totalCashFlows = $this->calculateTotalCashFlows($sections, $startDate, $projectId, $companyId);
 
-        $overview = $this->buildCashFlowOverview($startDate, $endDate);
+        $overview = $this->buildCashFlowOverview($startDate, $endDate, $projectId, $companyId);
 
         return new ReportDTO(
             categories: $sections,
@@ -499,11 +500,11 @@ class ReportService
         );
     }
 
-    private function calculateTotalCashFlows(array $sections, string $startDate): AccountBalanceDTO
+    private function calculateTotalCashFlows(array $sections, string $startDate, $projectId = null, $companyId = null): AccountBalanceDTO
     {
         $totalInflow = 0;
         $totalOutflow = 0;
-        $startingBalance = $this->accountService->getStartingBalanceForAllBankAccounts($startDate)->getAmount();
+        $startingBalance = $this->accountService->getStartingBalanceForAllBankAccounts($startDate, $projectId, $companyId)->getAmount();
 
         foreach ($sections as $section) {
             $netMovement = $section->summary->netMovement ?? 0;
@@ -529,9 +530,11 @@ class ReportService
         ]);
     }
 
-    private function buildCashFlowOverview(string $startDate, string $endDate): CashFlowOverviewDTO
+    private function buildCashFlowOverview(string $startDate, string $endDate, $projectId = null, $companyId = null): CashFlowOverviewDTO
     {
-        $accounts = $this->accountService->getBankAccountBalances($startDate, $endDate)->get();
+        $bankBalancesQuery = $this->accountService->getBankAccountBalances($startDate, $endDate, $projectId, $companyId);
+
+        $accounts = is_array($bankBalancesQuery) ? collect() : $bankBalancesQuery->get();
 
         $startingBalanceAccounts = [];
         $endingBalanceAccounts = [];
@@ -581,9 +584,9 @@ class ReportService
         return new CashFlowOverviewDTO($overviewCategories);
     }
 
-    private function buildOperatingActivities(string $startDate, string $endDate): AccountCategoryDTO
+    private function buildOperatingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate)
+        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [
                 AccountType::OperatingRevenue,
                 AccountType::UncategorizedRevenue,
@@ -598,7 +601,7 @@ class ReportService
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $adjustments = $this->accountService->getCashFlowAccountBalances($startDate, $endDate)
+        $adjustments = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [
                 AccountType::ContraAsset,
                 AccountType::CurrentLiability,
@@ -610,14 +613,14 @@ class ReportService
         return $this->formatSectionAccounts($accounts, $adjustments, $startDate, $endDate);
     }
 
-    private function buildInvestingActivities(string $startDate, string $endDate): AccountCategoryDTO
+    private function buildInvestingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate)
+        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [AccountType::NonCurrentAsset])
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $adjustments = $this->accountService->getCashFlowAccountBalances($startDate, $endDate)
+        $adjustments = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [AccountType::NonOperatingRevenue])
             ->orderByRaw('LENGTH(code), code')
             ->get();
@@ -625,9 +628,9 @@ class ReportService
         return $this->formatSectionAccounts($accounts, $adjustments, $startDate, $endDate);
     }
 
-    private function buildFinancingActivities(string $startDate, string $endDate): AccountCategoryDTO
+    private function buildFinancingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate)
+        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->where(function (Builder $query) {
                 $query->whereIn('accounts.type', [
                     AccountType::Equity,
@@ -702,14 +705,14 @@ class ReportService
         );
     }
 
-    public function buildBalanceSheetReport(string $asOfDate, array $columns = []): ReportDTO
+    public function buildBalanceSheetReport(string $asOfDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
     {
         $asOfDateCarbon = Carbon::parse($asOfDate);
         $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate());
 
         $orderedCategories = array_filter(AccountCategory::getOrderedCategories(), fn(AccountCategory $category) => $category->isReal());
 
-        $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString())
+        $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
             ->whereIn('category', $orderedCategories)
             ->orderByRaw('LENGTH(code), code')
             ->get();
@@ -758,7 +761,7 @@ class ReportService
             }
 
             if ($category === AccountCategory::Equity) {
-                $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString())->getAmount();
+                $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), $projectId, $companyId)->getAmount();
 
                 $categorySummaryBalances['ending_balance'] += $retainedEarningsAmount;
 

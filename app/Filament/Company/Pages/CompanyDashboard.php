@@ -18,7 +18,7 @@ class CompanyDashboard extends Dashboard
 
     protected static ?string $navigationLabel = 'Dashboard';
 
-    protected static ?string $navigationIcon = 'heroicon-o-chart-bar';
+    protected static ?string $navigationIcon = 'heroicon-o-chart-pie';
 
     public function getColumns(): int | array
     {

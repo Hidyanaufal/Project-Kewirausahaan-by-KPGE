@@ -8,7 +8,8 @@ Todo:
   ✔ Tambahkan field code perusahaan @done(25-10-16 20:17)
   ✔ Tambahkan field code pada bank account @done(25-10-16 20:17)
   ✘ #CR (tidak ada di kick off, penawaran, propose untuk phase 2) Report Data Anggota atas -Simpanan Sukarela bisa ditambahkan nama2 anggota, jadi terlihat nama2 anggota dan nilai simpanannya @cancelled(25-10-16 20:16)
-  ☐ Export excel all report
+  ✔ Export excel all report @done(25-10-16 21:38)
+  ✔ Export pdf all report @done(25-10-16 21:42)
   ☐ Backend filter by project and by company
   ✔ Sebelum di approve, nama invoice menjadi proforma invoice, setelah di approve nama dokumennya menjadi Invoice. https://drive.google.com/file/d/1PDUw9kHgIvKB4cCjpDlkTfKlwZjD3yv4/view?usp=drive_link @done(25-10-16 20:39)
   ☐ nilai uang masuk yang diinput ketika client bayar adalah nilai DPP dikurangi PPH 23 dan tanpa PPN untuk wapu) bukan full payment, system harus bisa menjurnal lengkap (https://drive.google.com/file/d/1JI71x5yhiuLKwBo01o5nofDGgSZOmh0_/view?usp=drive_link)

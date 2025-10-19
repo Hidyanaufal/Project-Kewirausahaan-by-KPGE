@@ -69,7 +69,8 @@ class IncomeStatement extends BaseReportPage
             $this->getFormattedStartDate(),
             $this->getFormattedEndDate(),
             $columns,
-            $this->getFilterState('project_id')
+            $this->getFilterState('project_id'),
+            $this->getFilterState('filter_company_id'),
         );
     }
 

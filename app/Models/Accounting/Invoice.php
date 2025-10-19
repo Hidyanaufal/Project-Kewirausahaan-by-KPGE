@@ -131,8 +131,22 @@ class Invoice extends Document
     {
         parent::boot();
         static::updating(function (Invoice $record) {
+            $subtotal = $record->subtotal + $record->profit_total;
+            $tax_pph23 = $subtotal * 0.02;
+            if ($record->isWapu()) {
+                $record->actual_total = $subtotal - $tax_pph23;
+            } else {
+                $record->actual_total = $subtotal - $tax_pph23 + $record->tax_total;
+            }
+
             if ($record->isDirty('status')) {
                 if ($record->status === InvoiceStatus::Paid) {
+                    // Membaca akun coa default
+                    $accountWapu            = Account::getAccountsWapu();
+                    $accountPPn             = Account::getAccountsPPn();
+                    $accountPPh23           = Account::getAccountsPPh23();
+
+                    // Membaca data jurnal ketika approval invoice
                     $latestTransaction = Transaction::query()
                         ->where([
                             'transactionable_type' => Invoice::class,
@@ -141,7 +155,6 @@ class Invoice extends Document
                         ])
                         ->orderBy('id', 'desc')
                         ->first();
-
                     $approvalTransaction = Transaction::query()
                         ->where([
                             'is_payment'           => false,
@@ -149,19 +162,16 @@ class Invoice extends Document
                             'transactionable_id'   => $record->id,
                         ])
                         ->first();
-
                     $approvalJournalEntries = JournalEntry::query()
                         ->where([
                             'transaction_id' => $approvalTransaction->id,
                         ])
                         ->get();
-
-
-                    $accountWapu        = Account::getAccountsWapu();
-                    $accountPPn         = Account::getAccountsPPn();
-                    $accountPPh23       = Account::getAccountsPPh23();
                     $journalAmountTotal = 0;
-                    $totalReceivable    = 0;
+                    $journalReceivable = $approvalJournalEntries
+                        ->where('account_id', Account::getAccountsReceivableAccount()->id)
+                        ->first();
+                    $totalReceivable = $journalReceivable->amount ?? 0;
 
                     foreach ($approvalJournalEntries as $journal) {
                         // PPN WAPU
@@ -188,11 +198,6 @@ class Invoice extends Document
                             $journalAmountTotal += $journalEntry->amount;
                         }
 
-                        // Receivable/Piutang
-                        if ($journal->account_id == Account::getAccountsReceivableAccount()->id) {
-                            $totalReceivable = $journal->amount;
-                        }
-
                         // Revenue/Pendapatan
                         if ($journal->account->category == AccountCategory::Revenue) {
                             $journalEntry = JournalEntry::create([
@@ -214,11 +219,26 @@ class Invoice extends Document
                             'account_id'     => $latestTransaction->bankAccount->account_id,
                         ])
                         ->delete();
-                    $journalEntry = JournalEntry::create([
+                    JournalEntry::create([
                         'transaction_id' => $latestTransaction->id,
                         'account_id'     => $latestTransaction->bankAccount->account_id,
                         'type'           => JournalEntryType::Debit,
                         'amount'         => $bankAmount,
+                        'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                    ]);
+
+                    // Penyesuaian account receivable
+                    JournalEntry::query()
+                        ->where([
+                            'transaction_id' => $latestTransaction->id,
+                            'account_id'     => $journalReceivable->account_id,
+                        ])
+                        ->delete();
+                    JournalEntry::create([
+                        'transaction_id' => $latestTransaction->id,
+                        'account_id'     => $journalReceivable->account_id,
+                        'type'           => JournalEntryType::Credit,
+                        'amount'         => $record->total,
                         'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
                     ]);
                 }
@@ -382,6 +402,11 @@ class Invoice extends Document
             return false;
         }
 
+        // tidak ada skema dp: tidak boleh jika sudah punya 1 atau lebih payment
+        if ($this->payments()->count() >= 1) {
+            return false;
+        }
+
         return ! in_array($this->status, [
             InvoiceStatus::Draft,
             InvoiceStatus::Paid,
@@ -392,6 +417,10 @@ class Invoice extends Document
     public function canBulkRecordPayment(): bool
     {
         if (! $this->client_id || $this->currency_code !== CurrencyAccessor::getDefaultCurrency()) {
+            return false;
+        }
+
+        if ($this->payments()->count() >= 1) {
             return false;
         }
 

@@ -23,62 +23,56 @@ class AssetResource extends Resource
     public static function form(Forms\Form $form): Forms\Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Asset Details')
-                ->description('Record and manage company assets along with depreciation settings.')
-                ->schema([
-                    Forms\Components\TextInput::make('asset_code')
-                        ->label('Asset Code')
-                        ->maxLength(100)
-                        ->helperText('Optional unique identifier for the asset (e.g., A-001).'),
+            Forms\Components\Select::make('group_id')
+                ->label('Asset Group')
+                ->options(fn() => AssetGroup::orderBy('name')->pluck('name', 'id'))
+                ->searchable()
+                ->native(false)
+                ->required()
+                ->columnSpanFull()
+                ->helperText('Select the asset group to apply default depreciation settings.'),
 
-                    Forms\Components\TextInput::make('name')
-                        ->label('Asset Name')
-                        ->required()
-                        ->helperText('Provide a clear, descriptive name for this asset.'),
+            Forms\Components\TextInput::make('asset_code')
+                ->label('Asset Code')
+                ->maxLength(100),
 
-                    Forms\Components\Select::make('group_id')
-                        ->label('Asset Group')
-                        ->options(fn() => AssetGroup::orderBy('name')->pluck('name', 'id'))
-                        ->searchable()
-                        ->native(false)
-                        ->helperText('Select the asset group to apply default depreciation settings.'),
+            Forms\Components\TextInput::make('name')
+                ->label('Asset Name')
+                ->required(),
 
-                    Forms\Components\DatePicker::make('acquisition_date')
-                        ->label('Acquisition Date')
-                        ->required()
-                        ->helperText('Date the asset was purchased or became operational.'),
+            Forms\Components\DatePicker::make('acquisition_date')
+                ->label('Acquisition Date')
+                ->required(),
 
-                    Forms\Components\TextInput::make('acquisition_cost')
-                        ->label('Acquisition Cost')
-                        ->money('IDR', true)
-                        ->required()
-                        ->helperText('The total cost to acquire the asset, including taxes or fees.'),
+            Forms\Components\TextInput::make('acquisition_cost')
+                ->label('Acquisition Cost')
+                ->money('IDR', true)
+                ->required()
+                ->helperText('The total cost to acquire the asset, including taxes or fees.'),
 
-                    Forms\Components\TextInput::make('salvage_value')
-                        ->label('Salvage Value')
-                        ->money('IDR', true)
-                        ->default(0)
-                        ->helperText('Estimated residual value after the asset’s useful life ends. This reduces total depreciation.'),
+            Forms\Components\TextInput::make('salvage_value')
+                ->label('Salvage Value')
+                ->money('IDR', true)
+                ->default(0)
+                ->helperText('Estimated residual value after the asset’s useful life ends. This reduces total depreciation.'),
 
-                    Forms\Components\TextInput::make('useful_life_months')
-                        ->label('Useful Life (months)')
-                        ->numeric()
-                        ->helperText('Number of months the asset is expected to be used. Leave empty to use group default.'),
+            Forms\Components\Select::make('status')
+                ->label('Asset Status')
+                ->options(AssetStatus::class)
+                ->default(AssetStatus::Active->value)
+                ->native(false)
+                ->helperText('Current condition or usage state of the asset.'),
 
-                    Forms\Components\Select::make('depreciation_method')
-                        ->label('Depreciation Method')
-                        ->options(DepreciationMethod::class)
-                        ->native(false)
-                        ->helperText('Depreciation calculation method. Leave empty to use the group default.'),
+            Forms\Components\TextInput::make('useful_life_months')
+                ->label('Useful Life (months)')
+                ->numeric()
+                ->helperText('Leave empty to use group default.'),
 
-                    Forms\Components\Select::make('status')
-                        ->label('Asset Status')
-                        ->options(AssetStatus::class)
-                        ->default(AssetStatus::Active->value)
-                        ->native(false)
-                        ->helperText('Current condition or usage state of the asset.'),
-                ])
-                ->columns(2),
+            Forms\Components\Select::make('depreciation_method')
+                ->label('Depreciation Method')
+                ->options(DepreciationMethod::class)
+                ->native(false)
+                ->helperText('Leave empty to use the group default.'),
         ]);
     }
 

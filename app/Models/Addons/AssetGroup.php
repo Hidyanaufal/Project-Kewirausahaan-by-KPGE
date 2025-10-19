@@ -3,6 +3,7 @@
 namespace App\Models\Addons;
 
 use App\Concerns\CompanyOwned;
+use App\Models\Accounting\Account;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -15,8 +16,20 @@ class AssetGroup extends Model
         'description',
         'useful_life_months',
         'default_method',
-        'company_id'
+        'company_id',
+        'asset_account_id',
+        'contra_account_id',
     ];
+
+    public function assetAccount()
+    {
+        return $this->belongsTo(Account::class, 'asset_account_id');
+    }
+
+    public function contraAsset()
+    {
+        return $this->belongsTo(Account::class, 'contra_account_id');
+    }
 
     public function assets(): HasMany
     {

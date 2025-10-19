@@ -122,6 +122,7 @@ class ProjectResource extends Resource
                     Forms\Components\TextInput::make('name')
                         ->label('Project Name')
                         ->required()
+                        ->columnSpanFull()
                         ->maxLength(255),
 
                     Forms\Components\Textarea::make('description')

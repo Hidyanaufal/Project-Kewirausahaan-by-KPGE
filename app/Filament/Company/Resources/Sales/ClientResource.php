@@ -59,7 +59,6 @@ class ClientResource extends Resource
                                 Forms\Components\Hidden::make('is_primary')
                                     ->default(true),
                                 Forms\Components\Select::make('title')
-                                    ->required()
                                     ->searchable()
                                     ->options(ContactTitle::class),
                                 Forms\Components\TextInput::make('position')

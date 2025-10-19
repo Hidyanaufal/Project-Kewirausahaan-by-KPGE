@@ -124,14 +124,16 @@ class TransactionObserver
         $invoiceCurrency = $invoice->currency_code;
 
         $depositTotalInInvoiceCurrencyCents = (int) $invoice->deposits()
-            ->when($excludedTransaction, fn (Builder $query) => $query->whereKeyNot($excludedTransaction->getKey()))
+            ->when($excludedTransaction, fn(Builder $query) => $query->whereKeyNot($excludedTransaction->getKey()))
             ->get()
             ->sum(function (Transaction $transaction) use ($invoiceCurrency) {
                 // If the transaction has stored the original invoice amount in metadata, use that
-                if (! empty($transaction->meta) &&
+                if (
+                    ! empty($transaction->meta) &&
                     isset($transaction->meta['original_document_currency']) &&
                     $transaction->meta['original_document_currency'] === $invoiceCurrency &&
-                    isset($transaction->meta['amount_in_document_currency_cents'])) {
+                    isset($transaction->meta['amount_in_document_currency_cents'])
+                ) {
 
                     return (int) $transaction->meta['amount_in_document_currency_cents'];
                 }
@@ -144,14 +146,16 @@ class TransactionObserver
             });
 
         $withdrawalTotalInInvoiceCurrencyCents = (int) $invoice->withdrawals()
-            ->when($excludedTransaction, fn (Builder $query) => $query->whereKeyNot($excludedTransaction->getKey()))
+            ->when($excludedTransaction, fn(Builder $query) => $query->whereKeyNot($excludedTransaction->getKey()))
             ->get()
             ->sum(function (Transaction $transaction) use ($invoiceCurrency) {
                 // If the transaction has stored the original invoice amount in metadata, use that
-                if (! empty($transaction->meta) &&
+                if (
+                    ! empty($transaction->meta) &&
                     isset($transaction->meta['original_document_currency']) &&
                     $transaction->meta['original_document_currency'] === $invoiceCurrency &&
-                    isset($transaction->meta['amount_in_document_currency_cents'])) {
+                    isset($transaction->meta['amount_in_document_currency_cents'])
+                ) {
 
                     return (int) $transaction->meta['amount_in_document_currency_cents'];
                 }
@@ -165,7 +169,7 @@ class TransactionObserver
 
         $totalPaidInInvoiceCurrencyCents = $depositTotalInInvoiceCurrencyCents - $withdrawalTotalInInvoiceCurrencyCents;
 
-        $invoiceTotalInInvoiceCurrencyCents = (int) $invoice->total;
+        $invoiceTotalInInvoiceCurrencyCents = (int) $invoice->actual_total ?? $invoice->total;
 
         $newStatus = match (true) {
             $totalPaidInInvoiceCurrencyCents > $invoiceTotalInInvoiceCurrencyCents => InvoiceStatus::Overpaid,
@@ -198,14 +202,16 @@ class TransactionObserver
         $billCurrency = $bill->currency_code;
 
         $withdrawalTotalInBillCurrencyCents = (int) $bill->withdrawals()
-            ->when($excludedTransaction, fn (Builder $query) => $query->whereKeyNot($excludedTransaction->getKey()))
+            ->when($excludedTransaction, fn(Builder $query) => $query->whereKeyNot($excludedTransaction->getKey()))
             ->get()
             ->sum(function (Transaction $transaction) use ($billCurrency) {
                 // If the transaction has stored the original bill amount in metadata, use that
-                if (! empty($transaction->meta) &&
+                if (
+                    ! empty($transaction->meta) &&
                     isset($transaction->meta['original_document_currency']) &&
                     $transaction->meta['original_document_currency'] === $billCurrency &&
-                    isset($transaction->meta['amount_in_document_currency_cents'])) {
+                    isset($transaction->meta['amount_in_document_currency_cents'])
+                ) {
 
                     return (int) $transaction->meta['amount_in_document_currency_cents'];
                 }

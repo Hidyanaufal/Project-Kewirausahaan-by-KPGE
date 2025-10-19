@@ -23,23 +23,47 @@ class AccountService
         protected JournalEntryRepository $journalEntryRepository
     ) {}
 
-    public function getDebitBalance(Account $account, string $startDate, string $endDate): Money
+    /**
+     * @param Account $account
+     * @param string $startDate
+     * @param string $endDate
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Money
+     */
+    public function getDebitBalance(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
-        $query = $this->getAccountBalances($startDate, $endDate, [$account->id])->first();
+        $query = $this->getAccountBalances($startDate, $endDate, [$account->id], $projectId, $companyId)->first();
 
-        return new Money($query->total_debit, $account->currency_code);
+        return new Money($query->total_debit ?? 0, $account->currency_code);
     }
 
-    public function getCreditBalance(Account $account, string $startDate, string $endDate): Money
+    /**
+     * @param Account $account
+     * @param string $startDate
+     * @param string $endDate
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Money
+     */
+    public function getCreditBalance(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
-        $query = $this->getAccountBalances($startDate, $endDate, [$account->id])->first();
+        $query = $this->getAccountBalances($startDate, $endDate, [$account->id], $projectId, $companyId)->first();
 
-        return new Money($query->total_credit, $account->currency_code);
+        return new Money($query->total_credit ?? 0, $account->currency_code);
     }
 
-    public function getNetMovement(Account $account, string $startDate, string $endDate): Money
+    /**
+     * @param Account $account
+     * @param string $startDate
+     * @param string $endDate
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Money
+     */
+    public function getNetMovement(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
-        $query = $this->getAccountBalances($startDate, $endDate, [$account->id])->first();
+        $query = $this->getAccountBalances($startDate, $endDate, [$account->id], $projectId, $companyId)->first();
 
         $netMovement = $this->calculateNetMovementByCategory(
             $account->category,
@@ -50,20 +74,36 @@ class AccountService
         return new Money($netMovement, $account->currency_code);
     }
 
-    public function getStartingBalance(Account $account, string $startDate, bool $override = false): ?Money
+    /**
+     * @param Account $account
+     * @param string $startDate
+     * @param bool $override
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Money|null
+     */
+    public function getStartingBalance(Account $account, string $startDate, bool $override = false, $projectId = null, $companyId = null): ?Money
     {
         if ($override === false && $account->category->isNominal()) {
             return null;
         }
 
-        $query = $this->getAccountBalances($startDate, $startDate, [$account->id])->first();
+        $query = $this->getAccountBalances($startDate, $startDate, [$account->id], $projectId, $companyId)->first();
 
         return new Money($query->starting_balance ?? 0, $account->currency_code);
     }
 
-    public function getEndingBalance(Account $account, string $startDate, string $endDate): ?Money
+    /**
+     * @param Account $account
+     * @param string $startDate
+     * @param string $endDate
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Money|null
+     */
+    public function getEndingBalance(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): ?Money
     {
-        $query = $this->getAccountBalances($startDate, $endDate, [$account->id])->first();
+        $query = $this->getAccountBalances($startDate, $endDate, [$account->id], $projectId, $companyId)->first();
 
         $netMovement = $this->calculateNetMovementByCategory(
             $account->category,
@@ -89,9 +129,17 @@ class AccountService
         }
     }
 
-    public function getBalances(Account $account, string $startDate, string $endDate): array
+    /**
+     * @param Account $account
+     * @param string $startDate
+     * @param string $endDate
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return array
+     */
+    public function getBalances(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): array
     {
-        $query = $this->getAccountBalances($startDate, $endDate, [$account->id])->first();
+        $query = $this->getAccountBalances($startDate, $endDate, [$account->id], $projectId, $companyId)->first();
 
         $needStartingBalances = $account->category->isReal();
 
@@ -102,8 +150,8 @@ class AccountService
         );
 
         $balances = [
-            'debit_balance' => $query->total_debit,
-            'credit_balance' => $query->total_credit,
+            'debit_balance' => $query->total_debit ?? 0,
+            'credit_balance' => $query->total_credit ?? 0,
             'net_movement' => $netMovement,
             'starting_balance' => $needStartingBalances ? ($query->starting_balance ?? 0) : null,
             'ending_balance' => $needStartingBalances
@@ -115,9 +163,21 @@ class AccountService
         return array_filter($balances, static fn($value) => $value !== null);
     }
 
-    public function getTransactionDetailsSubquery(string $startDate, string $endDate, ?string $entityId = null): Closure
+    /**
+     * Transaction details subquery for eager loading.
+     *
+     * Added optional projectId & companyId filters to restrict transactions if provided.
+     *
+     * @param string $startDate
+     * @param string $endDate
+     * @param string|null $entityId
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Closure
+     */
+    public function getTransactionDetailsSubquery(string $startDate, string $endDate, ?string $entityId = null, $projectId = null, $companyId = null): Closure
     {
-        return static function ($query) use ($startDate, $endDate, $entityId) {
+        return static function ($query) use ($startDate, $endDate, $entityId, $projectId, $companyId) {
             $query->select(
                 'journal_entries.id',
                 'journal_entries.account_id',
@@ -146,14 +206,33 @@ class AccountService
                     });
                 }
             }
+
+            if ($projectId !== null) {
+                $query->where('transactions.project_id', $projectId);
+            }
+
+            if ($companyId !== null) {
+                $query->where('transactions.company_id', $companyId);
+            }
         };
     }
 
+    /**
+     * Main query for account balances.
+     *
+     * @param string $startDate
+     * @param string $endDate
+     * @param array $accountIds
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Builder
+     */
     public function getAccountBalances(
         string $startDate,
         string $endDate,
         array $accountIds = [],
-        $projectId = null
+        $projectId = null,
+        $companyId = null
     ): Builder {
         $accountIds = array_map('intval', $accountIds);
 
@@ -211,7 +290,8 @@ class AccountService
             $query->whereIn('accounts.id', $accountIds);
         }
 
-        if ($projectId) {
+        // If either projectId or companyId is present, join invoices & bills so we can filter by their columns
+        if ($projectId !== null || $companyId !== null) {
             $query
                 ->leftJoin('invoices', function ($join) {
                     $join->on('invoices.id', '=', 'transactions.transactionable_id')
@@ -220,12 +300,23 @@ class AccountService
                 ->leftJoin('bills', function ($join) {
                     $join->on('bills.id', '=', 'transactions.transactionable_id')
                         ->where('transactions.transactionable_type', '=', Bill::class);
-                })
-                ->where(function ($q) use ($projectId) {
+                });
+
+            if ($projectId !== null) {
+                $query->where(function (Builder $q) use ($projectId) {
                     $q->where('invoices.project_id', $projectId)
                         ->orWhere('bills.project_id', $projectId)
                         ->orWhere('transactions.project_id', $projectId);
                 });
+            }
+
+            if ($companyId !== null) {
+                $query->where(function (Builder $q) use ($companyId) {
+                    $q->where('invoices.company_id', $companyId)
+                        ->orWhere('bills.company_id', $companyId)
+                        ->orWhere('transactions.company_id', $companyId);
+                });
+            }
         }
 
         $query->addBinding([$startDate, $startDate, $startDate, $startDate, $startDate, $endDate, $startDate, $endDate], 'select');
@@ -233,77 +324,42 @@ class AccountService
         return $query;
     }
 
-    public function getCashFlowAccountBalances(string $startDate, string $endDate, array $accountIds = []): Builder
+    /**
+     * Cash flow specific account balances (only accounts linked to bank accounts).
+     *
+     * @param string $startDate
+     * @param string $endDate
+     * @param array $accountIds
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Builder
+     */
+    public function getCashFlowAccountBalances(string $startDate, string $endDate, array $accountIds = [], $projectId = null, $companyId = null): Builder
     {
         $accountIds = array_map('intval', $accountIds);
 
-        $query = Account::query()
-            ->select([
-                'accounts.id',
-                'accounts.name',
-                'accounts.category',
-                'accounts.type',
-                'accounts.subtype_id',
-                'accounts.currency_code',
-                'accounts.code',
-            ])
-            ->addSelect([
-                DB::raw("
-                    COALESCE(
-                        CASE
-                            WHEN accounts.category IN ('asset', 'expense') THEN
-                                SUM(CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END) -
-                                SUM(CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END)
-                            ELSE
-                                SUM(CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END) -
-                                SUM(CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END)
-                        END, 0
-                    ) AS starting_balance
-                "),
-                DB::raw("
-                    COALESCE(SUM(
-                        CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at BETWEEN ? AND ? THEN journal_entries.amount ELSE 0 END
-                    ), 0) AS total_debit
-                "),
-                DB::raw("
-                    COALESCE(SUM(
-                        CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at BETWEEN ? AND ? THEN journal_entries.amount ELSE 0 END
-                    ), 0) AS total_credit
-                "),
-            ])
-            ->join('journal_entries', 'journal_entries.account_id', '=', 'accounts.id')
-            ->join('transactions', function (JoinClause $join) use ($endDate) {
-                $join->on('transactions.id', '=', 'journal_entries.transaction_id')
-                    ->where('transactions.posted_at', '<=', $endDate);
-            })
+        $query = $this->getAccountBalances($startDate, $endDate, $accountIds, $projectId, $companyId)
             ->whereExists(function (\Illuminate\Database\Query\Builder $subQuery) {
                 $subQuery->select(DB::raw(1))
                     ->from('journal_entries as je')
                     ->join('bank_accounts', 'bank_accounts.account_id', '=', 'je.account_id') // Join bank_accounts on account_id
                     ->whereNotNull('bank_accounts.id') // Ensure there is a linked BankAccount
                     ->whereColumn('je.transaction_id', 'journal_entries.transaction_id');
-            })
-            ->groupBy([
-                'accounts.id',
-                'accounts.name',
-                'accounts.category',
-                'accounts.type',
-                'accounts.subtype_id',
-                'accounts.currency_code',
-                'accounts.code',
-            ])
-            ->with(['subtype:id,name,inverse_cash_flow']);
-
-        if (! empty($accountIds)) {
-            $query->whereIn('accounts.id', $accountIds);
-        }
-
-        $query->addBinding([$startDate, $startDate, $startDate, $startDate, $startDate, $endDate, $startDate, $endDate], 'select');
+            });
 
         return $query;
     }
 
-    public function getTotalBalanceForAllBankAccounts(string $startDate, string $endDate): Money
+    /**
+     * Total balance for all bank accounts (with optional project/company filters).
+     *
+     * @param string $startDate
+     * @param string $endDate
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Money
+     */
+    public function getTotalBalanceForAllBankAccounts(string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
         $accountIds = Account::whereHas('bankAccount')
             ->pluck('id')
@@ -313,7 +369,7 @@ class AccountService
             return new Money(0, CurrencyAccessor::getDefaultCurrency());
         }
 
-        $result = DB::table('journal_entries')
+        $query = DB::table('journal_entries')
             ->join('transactions', function (JoinClause $join) use ($endDate) {
                 $join->on('transactions.id', '=', 'journal_entries.transaction_id')
                     ->where('transactions.posted_at', '<=', $endDate);
@@ -337,15 +393,50 @@ class AccountService
                 $endDate,
                 $startDate,
                 $endDate,
-            ])
-            ->first();
+            ]);
 
-        $totalBalance = $result->totalStartingBalance + $result->totalNetMovement;
+        if ($projectId !== null || $companyId !== null) {
+            $query->leftJoin('invoices', function ($join) {
+                $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Invoice::class);
+            })->leftJoin('bills', function ($join) {
+                $join->on('bills.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Bill::class);
+            });
+
+            if ($projectId !== null) {
+                $query->where(function ($q) use ($projectId) {
+                    $q->where('invoices.project_id', $projectId)
+                        ->orWhere('bills.project_id', $projectId)
+                        ->orWhere('transactions.project_id', $projectId);
+                });
+            }
+
+            if ($companyId !== null) {
+                $query->where(function ($q) use ($companyId) {
+                    $q->where('invoices.company_id', $companyId)
+                        ->orWhere('bills.company_id', $companyId)
+                        ->orWhere('transactions.company_id', $companyId);
+                });
+            }
+        }
+
+        $result = $query->first();
+
+        $totalBalance = ($result->totalStartingBalance ?? 0) + ($result->totalNetMovement ?? 0);
 
         return new Money($totalBalance, CurrencyAccessor::getDefaultCurrency());
     }
 
-    public function getStartingBalanceForAllBankAccounts(string $startDate): Money
+    /**
+     * Starting balance for all bank accounts (with optional filters).
+     *
+     * @param string $startDate
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Money
+     */
+    public function getStartingBalanceForAllBankAccounts(string $startDate, $projectId = null, $companyId = null): Money
     {
         $accountIds = Account::whereHas('bankAccount')
             ->pluck('id')
@@ -355,7 +446,7 @@ class AccountService
             return new Money(0, CurrencyAccessor::getDefaultCurrency());
         }
 
-        $result = DB::table('journal_entries')
+        $query = DB::table('journal_entries')
             ->join('transactions', function (JoinClause $join) use ($startDate) {
                 $join->on('transactions.id', '=', 'journal_entries.transaction_id')
                     ->where('transactions.posted_at', '<', $startDate);
@@ -370,13 +461,49 @@ class AccountService
             ", [
                 $startDate,
                 $startDate,
-            ])
-            ->first();
+            ]);
+
+        if ($projectId !== null || $companyId !== null) {
+            $query->leftJoin('invoices', function ($join) {
+                $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Invoice::class);
+            })->leftJoin('bills', function ($join) {
+                $join->on('bills.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Bill::class);
+            });
+
+            if ($projectId !== null) {
+                $query->where(function ($q) use ($projectId) {
+                    $q->where('invoices.project_id', $projectId)
+                        ->orWhere('bills.project_id', $projectId)
+                        ->orWhere('transactions.project_id', $projectId);
+                });
+            }
+
+            if ($companyId !== null) {
+                $query->where(function ($q) use ($companyId) {
+                    $q->where('invoices.company_id', $companyId)
+                        ->orWhere('bills.company_id', $companyId)
+                        ->orWhere('transactions.company_id', $companyId);
+                });
+            }
+        }
+
+        $result = $query->first();
 
         return new Money($result->totalStartingBalance ?? 0, CurrencyAccessor::getDefaultCurrency());
     }
 
-    public function getBankAccountBalances(string $startDate, string $endDate): Builder | array
+    /**
+     * Bank account balances helper (uses getAccountBalances).
+     *
+     * @param string $startDate
+     * @param string $endDate
+     * @param int|null $projectId
+     * @param int|null $companyId
+     * @return Builder|array
+     */
+    public function getBankAccountBalances(string $startDate, string $endDate, $projectId = null, $companyId = null): Builder | array
     {
         $accountIds = Account::whereHas('bankAccount')
             ->pluck('id')
@@ -386,7 +513,7 @@ class AccountService
             return [];
         }
 
-        return $this->getAccountBalances($startDate, $endDate, $accountIds);
+        return $this->getAccountBalances($startDate, $endDate, $accountIds, $projectId, $companyId);
     }
 
     public function getEarliestTransactionDate(): string

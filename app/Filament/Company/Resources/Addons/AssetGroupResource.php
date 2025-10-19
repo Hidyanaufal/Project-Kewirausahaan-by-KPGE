@@ -5,6 +5,7 @@ namespace App\Filament\Company\Resources\Addons;
 use App\Concerns\HasPermissionCheck;
 use App\Enums\Addons\DepreciationMethod;
 use App\Filament\Company\Resources\Addons\AssetGroupResource\Pages;
+use App\Filament\Forms\Components\CreateAccountSelect;
 use App\Models\Addons\AssetGroup;
 use Filament\Forms;
 use Filament\Resources\Resource;
@@ -18,36 +19,55 @@ class AssetGroupResource extends Resource
 
     public static function form(Forms\Form $form): Forms\Form
     {
-        return $form->schema([
-            Forms\Components\Section::make('Asset Group')
-                ->description('Define default depreciation behavior for assets under this group.')
-                ->schema([
-                    Forms\Components\TextInput::make('name')
-                        ->label('Group Name')
-                        ->required()
-                        ->maxLength(255)
-                        ->helperText('A short, descriptive name. Example: “Office Equipment”, “Vehicles”.'),
+        return $form
+            ->schema([
+                Forms\Components\TextInput::make('name')
+                    ->label('Group Name')
+                    ->required()
+                    ->maxLength(255)
+                    ->columnSpanFull()
+                    ->placeholder('Office Equipment')
+                    ->validationMessages([
+                        'required' => 'Please enter the group name.',
+                        'max' => 'The group name may not exceed 255 characters.',
+                    ]),
 
-                    Forms\Components\Textarea::make('description')
-                        ->label('Description')
-                        ->rows(2)
-                        ->helperText('Optional: details or examples of assets included in this group.'),
+                Forms\Components\Textarea::make('description')
+                    ->label('Description')
+                    ->columnSpanFull()
+                    ->rows(2),
 
-                    Forms\Components\TextInput::make('useful_life_months')
-                        ->label('Default Useful Life (months)')
-                        ->numeric()
-                        ->minValue(1)
-                        ->helperText('Number of months used as the default useful life for assets in this group.'),
+                Forms\Components\TextInput::make('useful_life_months')
+                    ->label('Default Useful Life (months)')
+                    ->numeric()
+                    ->minValue(1)
+                    ->helperText('Number of months used as the default useful life for assets in this group.')
+                    ->validationMessages([
+                        'numeric' => 'The useful life must be a number.',
+                        'min' => 'The useful life must be at least 1 month.',
+                    ]),
 
-                    Forms\Components\Select::make('default_method')
-                        ->label('Default Depreciation Method')
-                        ->native(false)
-                        ->searchable()
-                        ->options(DepreciationMethod::class)
-                        ->helperText('Method to apply by default (can be overridden at the asset level).'),
-                ])
-                ->columns(1),
-        ]);
+                Forms\Components\Select::make('default_method')
+                    ->label('Default Depreciation Method')
+                    ->native(false)
+                    ->searchable()
+                    ->options(DepreciationMethod::class)
+                    ->helperText('Method to apply by default (can be overridden at the asset level).'),
+
+                CreateAccountSelect::make('asset_account_id')
+                    ->label('Asset Account')
+                    ->required()
+                    ->validationMessages([
+                        'required' => 'The asset account is required for this asset group.',
+                    ]),
+
+                CreateAccountSelect::make('contra_account_id')
+                    ->label('Contra Asset Account')
+                    ->required()
+                    ->validationMessages([
+                        'required' => 'The contra asset account is required for this asset group.',
+                    ]),
+            ]);
     }
 
     public static function table(Tables\Table $table): Tables\Table
