@@ -19,6 +19,8 @@ use Illuminate\Contracts\Support\Htmlable;
 
 class ViewClient extends ViewRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     protected static string $resource = ClientResource::class;
 
     protected function getAllRelationManagers(): array

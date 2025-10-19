@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class EditEstimate extends EditRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     use HandlePageRedirect;
     use ManagesLineItems;
 

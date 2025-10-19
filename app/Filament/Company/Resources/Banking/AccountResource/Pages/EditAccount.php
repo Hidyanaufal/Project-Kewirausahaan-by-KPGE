@@ -9,6 +9,8 @@ use Filament\Resources\Pages\EditRecord;
 
 class EditAccount extends EditRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     use HandlePageRedirect;
 
     protected static string $resource = AccountResource::class;

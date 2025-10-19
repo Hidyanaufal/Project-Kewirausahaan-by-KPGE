@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class EditClient extends EditRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     use HandlePageRedirect;
 
     protected static string $resource = ClientResource::class;

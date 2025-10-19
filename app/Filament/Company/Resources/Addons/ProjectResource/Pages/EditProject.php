@@ -10,6 +10,8 @@ use Filament\Resources\Pages\EditRecord;
 
 class EditProject extends EditRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     use HasMediumContentWidth;
     use HandlePageRedirect;
 

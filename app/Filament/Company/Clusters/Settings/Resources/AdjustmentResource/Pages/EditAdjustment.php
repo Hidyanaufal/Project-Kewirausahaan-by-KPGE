@@ -8,6 +8,8 @@ use Filament\Resources\Pages\EditRecord;
 
 class EditAdjustment extends EditRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     use HandlePageRedirect;
 
     protected static string $resource = AdjustmentResource::class;

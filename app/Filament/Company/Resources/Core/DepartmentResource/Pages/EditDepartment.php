@@ -8,6 +8,8 @@ use Filament\Resources\Pages\EditRecord;
 
 class EditDepartment extends EditRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     protected static string $resource = DepartmentResource::class;
 
     protected function getHeaderActions(): array

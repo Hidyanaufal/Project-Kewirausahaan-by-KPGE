@@ -27,6 +27,8 @@ use Illuminate\Support\HtmlString;
 
 class ViewInvoice extends ViewRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     use HideFromSpotlight;
 
     protected static string $resource = InvoiceResource::class;

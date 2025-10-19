@@ -31,7 +31,7 @@
                 />
             @endif
 
-           <span class="grid justify-items-start text-start max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap">
+           <span class="grid justify-items-start text-start max-w-[250px] overflow-hidden text-ellipsis whitespace-nowrap">
                 @if ($currentTenant instanceof \Filament\Models\Contracts\HasCurrentTenantLabel)
                     <span class="text-xs text-gray-500 dark:text-gray-400 truncate">
                         {{ $currentTenant->getCurrentTenantLabel() }}

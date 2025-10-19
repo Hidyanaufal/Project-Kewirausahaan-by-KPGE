@@ -15,6 +15,8 @@ use Filament\Support\Enums\IconPosition;
 
 class ViewBill extends ViewRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     protected static string $resource = BillResource::class;
 
     protected $listeners = [

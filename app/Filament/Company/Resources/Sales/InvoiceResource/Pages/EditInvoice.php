@@ -14,6 +14,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class EditInvoice extends EditRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     use HandlePageRedirect;
     use ManagesLineItems;
     use HideFromSpotlight;

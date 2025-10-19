@@ -22,6 +22,8 @@ use Rmsramos\Activitylog\Actions\ActivityLogTimelineTableAction;
 
 class ViewProject extends ViewRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     use HasMediumContentWidth;
 
     protected static string $resource = ProjectResource::class;

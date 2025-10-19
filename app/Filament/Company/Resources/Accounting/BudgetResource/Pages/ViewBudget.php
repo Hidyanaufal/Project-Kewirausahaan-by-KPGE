@@ -10,6 +10,8 @@ use Filament\Support\Enums\MaxWidth;
 
 class ViewBudget extends ViewRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     protected static string $resource = BudgetResource::class;
 
     public function getMaxContentWidth(): MaxWidth | string | null

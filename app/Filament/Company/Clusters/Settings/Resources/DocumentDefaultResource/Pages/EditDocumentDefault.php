@@ -10,6 +10,8 @@ use PHPUnit\Event\Code\Throwable;
 
 class EditDocumentDefault extends EditRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     protected static string $resource = DocumentDefaultResource::class;
 
     public function getRecordTitle(): string | Htmlable

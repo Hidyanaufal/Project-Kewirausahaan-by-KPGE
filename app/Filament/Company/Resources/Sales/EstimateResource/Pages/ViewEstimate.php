@@ -21,6 +21,8 @@ use Illuminate\Support\HtmlString;
 
 class ViewEstimate extends ViewRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     protected static string $resource = EstimateResource::class;
 
     protected $listeners = [

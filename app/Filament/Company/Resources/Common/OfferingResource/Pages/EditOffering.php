@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class EditOffering extends EditRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     use HandlePageRedirect;
     use HasMediumContentWidth;
 

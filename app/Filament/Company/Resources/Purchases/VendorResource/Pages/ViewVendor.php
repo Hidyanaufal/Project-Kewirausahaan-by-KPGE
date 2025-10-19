@@ -17,6 +17,8 @@ use Filament\Support\Enums\IconPosition;
 
 class ViewVendor extends ViewRecord
 {
+
+    use \App\Concerns\HideFromSpotlight;
     protected static string $resource = VendorResource::class;
 
     protected function getAllRelationManagers(): array
@@ -77,7 +79,7 @@ class ViewVendor extends ViewRecord
                             ->label('Primary phone'),
                         TextEntry::make('website')
                             ->label('Website')
-                            ->url(static fn ($state) => $state, true)
+                            ->url(static fn($state) => $state, true)
                             ->link(),
                     ]),
                 Section::make('Additional Details')
