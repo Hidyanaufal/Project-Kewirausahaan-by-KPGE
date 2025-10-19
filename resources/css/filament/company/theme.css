@@ -264,5 +264,5 @@
     text-overflow: ellipsis !important;
     display: block;
     width: 100%;
-    max-width: min(100%, 120px);
+    max-width: min(100%, 165px);
 }

@@ -49,7 +49,6 @@ class Asset extends Model
         return $this->hasMany(AssetDisposal::class);
     }
 
-    // helper: sisa umur bulan (approx) dari sekarang
     public function remainingLifeMonths(): int
     {
         $life = $this->useful_life_months ?? ($this->group?->useful_life_months ?? 0);

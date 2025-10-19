@@ -92,6 +92,14 @@ class AssetGroupResource extends Resource
                     ->counts('assets')
                     ->sortable(),
 
+                Tables\Columns\TextColumn::make('assetAccount.name')
+                    ->label('Asset Account')
+                    ->description(fn(AssetGroup $model) => $model->assetAccount->code),
+
+                Tables\Columns\TextColumn::make('contraAsset.name')
+                    ->label('Contra Asset Account')
+                    ->description(fn(AssetGroup $model) => $model->contraAsset->code),
+
                 Tables\Columns\TextColumn::make('updated_at')
                     ->label('Last Updated')
                     ->since(),
