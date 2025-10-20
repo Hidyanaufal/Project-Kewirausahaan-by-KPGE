@@ -9,6 +9,7 @@ use App\Enums\Accounting\JournalEntryType;
 use App\Models\Accounting\Transaction;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class GenerateYearlyForAsset
 {
@@ -150,6 +151,12 @@ class GenerateYearlyForAsset
 
                 $created[] = $record;
                 if ($asset->group && $asset->group->contraAsset && $asset->group->assetAccount) {
+                    Log::debug('debug from: ' . __CLASS__, [
+                        'group'         => $asset->group,
+                        'contraAsset'   => $asset->group->contraAsset,
+                        'assetAccount'  => $asset->group->assetAccount,
+                    ]);
+
                     $transaction = Transaction::create([
                         'bank_account_id' => null,
                         'type'            => 'journal',

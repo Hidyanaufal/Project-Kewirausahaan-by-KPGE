@@ -28,9 +28,7 @@ class AssetResource extends Resource
                 ->options(fn() => AssetGroup::orderBy('name')->pluck('name', 'id'))
                 ->searchable()
                 ->native(false)
-                ->required()
-                ->columnSpanFull()
-                ->helperText('Select the asset group to apply default depreciation settings.'),
+                ->required(),
 
             Forms\Components\TextInput::make('asset_code')
                 ->label('Asset Code')
@@ -55,13 +53,6 @@ class AssetResource extends Resource
                 ->money('IDR', true)
                 ->default(0)
                 ->helperText('Estimated residual value after the asset’s useful life ends. This reduces total depreciation.'),
-
-            Forms\Components\Select::make('status')
-                ->label('Asset Status')
-                ->options(AssetStatus::class)
-                ->default(AssetStatus::Active->value)
-                ->native(false)
-                ->helperText('Current condition or usage state of the asset.'),
 
             Forms\Components\TextInput::make('useful_life_months')
                 ->label('Useful Life (months)')
