@@ -94,11 +94,11 @@ class AssetGroupResource extends Resource
 
                 Tables\Columns\TextColumn::make('assetAccount.name')
                     ->label('Asset Account')
-                    ->description(fn(AssetGroup $model) => $model->assetAccount->code),
+                    ->description(fn(AssetGroup $model) => $model?->assetAccount?->code),
 
                 Tables\Columns\TextColumn::make('contraAsset.name')
                     ->label('Contra Asset Account')
-                    ->description(fn(AssetGroup $model) => $model->contraAsset->code),
+                    ->description(fn(AssetGroup $model) => $model?->contraAsset?->code),
 
                 Tables\Columns\TextColumn::make('updated_at')
                     ->label('Last Updated')
