@@ -173,14 +173,6 @@ class GenerateYearlyForAsset
                         'amount'         => $deprExpense,
                         'description'    => "Depreciation of asset {$asset->name} for year {$year}",
                     ]);
-
-                    JournalEntry::create([
-                        'transaction_id' => $transaction->id,
-                        'account_id'     => $asset->group->assetAccount->id,
-                        'type'           => JournalEntryType::Credit,
-                        'amount'         => $deprExpense,
-                        'description'    => "Depreciation expense for asset {$asset->name} for year {$year}",
-                    ]);
                 }
 
                 $opening = $closing;

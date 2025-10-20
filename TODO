@@ -18,5 +18,6 @@ Todo:
   ✔ implementasi dept ke coa @done(25-10-20 11:32)
   ✔ Tambahkan tombol export pada form depreciation record https://drive.google.com/file/d/1IhGoB5XbqsvaP4Mj84v7hNrz64oRM9M/view?usp=drive_link @done(25-10-20 11:32)
   ☐ Backend filter by project and by company
+  ☐ export dep record pdf
   ✔ invoice: tax, total pada ui belum sesuai dengan pdf @done(25-10-20 13:08)
   ✔ ketika reapprove invoice jurnal lama harus dihapus @done(25-10-20 13:08)

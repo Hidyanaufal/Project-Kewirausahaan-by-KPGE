@@ -5,8 +5,10 @@ namespace App\Filament\Company\Resources\Addons;
 use App\Concerns\HasPermissionCheck;
 use App\Filament\Company\Resources\Addons\DepreciationRecordResource\Pages;
 use App\Filament\Exports\Accounting\DepreciationRecordExporter;
+use App\Helpers\AuthHelper;
 use App\Models\Addons\Asset;
 use App\Models\Addons\DepreciationRecord;
+use Barryvdh\Snappy\Facades\SnappyPdf;
 use Filament\Forms;
 use Filament\Forms\Get;
 use Filament\Resources\Resource;
@@ -97,7 +99,34 @@ class DepreciationRecordResource extends Resource
             ])
             ->headerActions([
                 Tables\Actions\ExportAction::make()
+                    ->label('Export XLSX')
+                    ->icon('heroicon-o-document-arrow-down')
                     ->exporter(DepreciationRecordExporter::class),
+                Tables\Actions\Action::make('exportPdf')
+                    ->label('Export PDF')
+                    ->color('danger')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->action(function () {
+                        $company = auth()->user()->company;
+                        $records = \App\Models\Addons\DepreciationRecord::with('asset')
+                            ->where('company_id', AuthHelper::currentCompany())
+                            ->get();
+
+                        $view = 'pdf.depreciation-records';
+
+                        $pdf = SnappyPdf::loadView($view, [
+                            'company' => $company,
+                            'records' => $records,
+                            'report' => [
+                                'fiscal_year' => now()->year,
+                            ],
+                        ]);
+
+                        return response()->streamDownload(
+                            fn() => print($pdf->output()),
+                            'daftar_penyusutan_' . now()->year . '.pdf'
+                        );
+                    }),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make()
