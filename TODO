@@ -10,11 +10,13 @@ Todo:
   ✘ #CR (tidak ada di kick off, penawaran, propose untuk phase 2) Report Data Anggota atas -Simpanan Sukarela bisa ditambahkan nama2 anggota, jadi terlihat nama2 anggota dan nilai simpanannya @cancelled(25-10-16 20:16)
   ✔ Export excel all report @done(25-10-16 21:38)
   ✔ Export pdf all report @done(25-10-16 21:42)
-  ☐ Backend filter by project and by company
   ✔ Sebelum di approve, nama invoice menjadi proforma invoice, setelah di approve nama dokumennya menjadi Invoice. https://drive.google.com/file/d/1PDUw9kHgIvKB4cCjpDlkTfKlwZjD3yv4/view?usp=drive_link @done(25-10-16 20:39)
   ✔ nilai uang masuk yang diinput ketika client bayar adalah nilai DPP dikurangi PPH 23 dan tanpa PPN untuk wapu) bukan full payment, system harus bisa menjurnal lengkap (https://drive.google.com/file/d/1JI71x5yhiuLKwBo01o5nofDGgSZOmh0_/view?usp=drive_link) @done(25-10-19 22:41)
   ✔ Record payment pada invoice dan bill butuh ditampilkan kode jurnal atau kode transaksi @done(25-10-16 20:32)
   ✔ Pembayaran gelondongan lebih dari 1 invoice, nilai yang diinput Adalah nilai masing-masing invoice dikurangi pph 23 dan ppn wapu https://drive.google.com/file/d/1cncGVd79HfUiXg5jhyAEjG_eVh8fkdAl/view?usp=drive_link @done(25-10-19 22:41)
   ✔ Untuk revisi invoice, harus bisa edit walaupun sudah diapprove, kemudian invoice yang sudah diedit harus diapprove lagi. Nomor invoicenya tetep sama, namun tanggal invoicenya berubah, admin yang bisa edit @done(25-10-16 21:37)
-  ☐ implementasi dept ke coa
-  ☐ Tambahkan tombol export pada form depreciation record https://drive.google.com/file/d/1IhGoB5XbqsvaP4Mj84v7hNrz64oRM9M/view?usp=drive_link
+  ✔ implementasi dept ke coa @done(25-10-20 11:32)
+  ✔ Tambahkan tombol export pada form depreciation record https://drive.google.com/file/d/1IhGoB5XbqsvaP4Mj84v7hNrz64oRM9M/view?usp=drive_link @done(25-10-20 11:32)
+  ☐ Backend filter by project and by company
+  ✔ invoice: tax, total pada ui belum sesuai dengan pdf @done(25-10-20 13:08)
+  ✔ ketika reapprove invoice jurnal lama harus dihapus @done(25-10-20 13:08)

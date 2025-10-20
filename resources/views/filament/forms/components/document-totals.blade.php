@@ -77,15 +77,6 @@
             <td class="text-sm p-2 font-semibold text-gray-950 dark:text-white">{{ $amountDue ? 'Total' : 'Grand Total' }}:</td>
             <td class="text-sm p-2">{{ $grandTotal }}</td>
         </tr>
-        @if($amountDue)
-            <tr>
-                <td colspan="4"></td>
-                <td class="text-sm p-2 font-semibold text-gray-950 dark:text-white border-t-4 border-double">Amount Due
-                    ({{ $currencyCode }}):
-                </td>
-                <td class="text-sm p-2 border-t-4 border-double">{{ $amountDue }}</td>
-            </tr>
-        @endif
         @if($conversionMessage)
             <tr>
                 <td colspan="6" class="text-sm p-2 text-gray-600">

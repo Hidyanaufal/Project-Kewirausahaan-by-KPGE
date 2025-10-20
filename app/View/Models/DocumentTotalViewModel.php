@@ -30,10 +30,6 @@ class DocumentTotalViewModel
         $discountTotalInCents = $this->calculateDiscountTotalInCents($lineItems, $subtotalInCents, $currencyCode);
         $profitTotalInCents = $this->calculateProfitTotalInCents($subtotalInCents, $currencyCode) ?? 0;
 
-        $grandTotalInCents = $subtotalInCents + $profitTotalInCents + ($taxTotalInCents - $discountTotalInCents);
-        $amountDueInCents = $this->calculateAmountDueInCents($grandTotalInCents, $currencyCode);
-        $conversionMessage = $this->buildConversionMessage($grandTotalInCents, $currencyCode, $defaultCurrencyCode);
-
         $discountMethod = DocumentDiscountMethod::parse($this->data['discount_method']);
         $isPerDocumentDiscount = $discountMethod->isPerDocument();
 
@@ -41,17 +37,29 @@ class DocumentTotalViewModel
             ? CurrencyConverter::formatCentsToMoney($taxTotalInCents, $currencyCode)
             : null;
 
+        $profitTotal = CurrencyConverter::formatCentsToMoney($profitTotalInCents, $currencyCode);
+
+        if ($profitTotalInCents) {
+            $taxTotalInCents += $profitTotalInCents * 0.11;
+            $taxTotal = $taxTotalInCents > 0
+                ? CurrencyConverter::formatCentsToMoney($taxTotalInCents, $currencyCode)
+                : null;
+        }
+
         $discountTotal = ($isPerDocumentDiscount || $discountTotalInCents > 0)
             ? CurrencyConverter::formatCentsToMoney($discountTotalInCents, $currencyCode)
             : null;
 
-        $profitTotal = CurrencyConverter::formatCentsToMoney($profitTotalInCents, $currencyCode);
 
         $subtotal = ($taxTotal || $discountTotal || $profitTotal)
             ? CurrencyConverter::formatCentsToMoney($subtotalInCents, $currencyCode)
             : null;
 
+        $grandTotalInCents = $subtotalInCents + $profitTotalInCents + ($taxTotalInCents - $discountTotalInCents);
         $grandTotal = CurrencyConverter::formatCentsToMoney($grandTotalInCents, $currencyCode);
+
+        $amountDueInCents = $this->calculateAmountDueInCents($grandTotalInCents, $currencyCode);
+        $conversionMessage = $this->buildConversionMessage($grandTotalInCents, $currencyCode, $defaultCurrencyCode);
 
         $amountDue = $this->documentType !== DocumentType::Estimate
             ? CurrencyConverter::formatCentsToMoney($amountDueInCents, $currencyCode)

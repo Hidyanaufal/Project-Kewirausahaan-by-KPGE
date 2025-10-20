@@ -544,7 +544,7 @@ class Invoice extends Document
             throw new \RuntimeException('Invoice is not in draft status.');
         }
 
-        $this->createApprovalTransaction();
+        $this->updateApprovalTransaction();
 
         $approvedAt ??= company_now();
 
