@@ -8,6 +8,7 @@ use App\Filament\Exports\Accounting\DepreciationRecordExporter;
 use App\Helpers\AuthHelper;
 use App\Models\Addons\Asset;
 use App\Models\Addons\DepreciationRecord;
+use App\Models\Company;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Filament\Forms;
 use Filament\Forms\Get;
@@ -107,9 +108,10 @@ class DepreciationRecordResource extends Resource
                     ->color('danger')
                     ->icon('heroicon-o-document-arrow-down')
                     ->action(function () {
-                        $company = auth()->user()->company;
+                        $companyId = AuthHelper::currentCompany();
+                        $company = Company::find($companyId);
                         $records = \App\Models\Addons\DepreciationRecord::with('asset')
-                            ->where('company_id', AuthHelper::currentCompany())
+                            ->where('company_id', $companyId)
                             ->get();
 
                         $view = 'pdf.depreciation-records';

@@ -64,13 +64,13 @@
 
     <table class="no-border">
         <tr>
-            <td width="15%" class="text-left">NPWP</td>
-            <td width="40%">{{ $company->npwp ?? '00.000.000.0-000.000' }}</td>
-            <td width="20%" class="text-left">Tahun Pajak</td>
+            <td width="15%" class="text-left">NPWP :</td>
+            <td width="40%">{{ $company->profile->tax_id ?? '-' }}</td>
+            <td width="20%" class="text-left">Tahun Pajak :</td>
             <td>{{ $report['fiscal_year'] ?? now()->year }}</td>
         </tr>
         <tr>
-            <td class="text-left">Nama Wajib Pajak</td>
+            <td class="text-left">Nama Wajib Pajak :</td>
             <td colspan="3">{{ $company->name ?? '-' }}</td>
         </tr>
     </table>
@@ -109,12 +109,12 @@
                         <td>{{ $loop->iteration }}</td>
                         <td class="text-left">{{ $record->asset->name ?? '-' }}</td>
                         <td>{{ $record->asset->acquired_at?->format('d M Y') ?? '-' }}</td>
-                        <td class="text-right">{{ number_format($record->asset->purchase_price, 0, ',', '.') }}</td>
-                        <td class="text-right">{{ number_format($record->opening_fiscal_book_value, 0, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($record->asset->purchase_price / 100, 0, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($record->opening_fiscal_book_value / 100, 0, ',', '.') }}</td>
                         <td>{{ $record->commercial_method ?? 'Garis lurus' }}</td>
                         <td>{{ $record->fiscal_method ?? 'Garis lurus' }}</td>
-                        <td class="text-right">{{ number_format($record->depreciation_expense, 0, ',', '.') }}</td>
-                        <td class="text-right">{{ number_format($record->closing_fiscal_book_value, 0, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($record->depreciation_expense / 100, 0, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($record->closing_fiscal_book_value / 100, 0, ',', '.') }}</td>
                     </tr>
                 @endforeach
 
