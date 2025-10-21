@@ -5,6 +5,7 @@ namespace App\Filament\Forms\Components;
 use App\Enums\Accounting\AdjustmentComputation;
 use App\Enums\Accounting\DocumentType;
 use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Group;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Get;
@@ -26,11 +27,13 @@ class DocumentTotals extends Grid
                     'percentage' => 'Percentage'
                 ])
                 ->default(AdjustmentComputation::Percentage)
+                ->visible(fn() => $this->getType() != DocumentType::Bill)
                 ->selectablePlaceholder(false)
                 ->live(),
             TextInput::make('profit_rate')
                 ->hiddenLabel()
                 ->live()
+                ->visible(fn() => $this->getType() != DocumentType::Bill)
                 ->extraInputAttributes(['class' => 'text-right'])
                 ->rate(
                     computation: static fn(Get $get) => $get('profit_computation'),

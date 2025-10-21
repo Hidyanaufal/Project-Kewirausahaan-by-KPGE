@@ -46,7 +46,7 @@ class ViewInvoice extends ViewRecord
     {
         return [
             Actions\Action::make('edit')
-                ->label('Edit invoice')
+                ->label('Edit Invoice')
                 ->outlined()
                 ->requiresConfirmation()
                 ->action(function (Model $record) {

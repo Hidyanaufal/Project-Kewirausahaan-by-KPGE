@@ -3,11 +3,13 @@
 namespace App\Filament\Company\Resources\Sales\EstimateResource\Pages;
 
 use App\Enums\Accounting\DocumentType;
+use App\Enums\Accounting\EstimateStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers\AttachmentsRelationManager;
 use App\Filament\Company\Resources\Sales\ClientResource;
 use App\Filament\Company\Resources\Sales\EstimateResource;
 use App\Filament\Infolists\Components\BannerEntry;
 use App\Filament\Infolists\Components\DocumentPreview;
+use App\Helpers\AuthHelper;
 use App\Models\Accounting\Estimate;
 use Filament\Actions;
 use Filament\Infolists\Components\Grid;
@@ -17,6 +19,7 @@ use Filament\Infolists\Infolist;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\IconPosition;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
 
 class ViewEstimate extends ViewRecord
@@ -37,9 +40,23 @@ class ViewEstimate extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\EditAction::make()
-                ->label('Edit quotation')
-                ->outlined(),
+            Actions\Action::make('edit')
+                ->label('Edit Quotation')
+                ->outlined()
+                ->requiresConfirmation()
+                ->action(function (Model $record) {
+                    $isAdmin = AuthHelper::isAdmin();
+                    if (!$isAdmin) {
+                        $record->status = EstimateStatus::Draft;
+                        $record->approved_at = null;
+                        $record->accepted_at = null;
+                        $record->declined_at = null;
+                        $record->last_sent_at = null;
+                        $record->last_viewed_at = null;
+                        $record->save();
+                    }
+                    return redirect(EditEstimate::getUrl(['record' => $record]));
+                }),
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
                     Estimate::getApproveDraftAction(),

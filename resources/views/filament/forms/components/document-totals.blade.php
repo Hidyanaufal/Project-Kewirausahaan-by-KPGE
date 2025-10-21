@@ -42,6 +42,7 @@
                 <td class="text-sm p-2">{{ $taxTotal }}</td>
             </tr>
         @endif
+        @if ($profitComponents->count())
         <tr>
             <td colspan="3" class="text-sm p-2">Profit:</td>
             <td colspan="2" class="text-sm p-2">
@@ -53,6 +54,7 @@
             </td>
             <td class="text-sm p-2">{{ $profitTotal }}</td>
         </tr>
+        @endif
         @if($isPerDocumentDiscount)
             <tr>
                 <td colspan="3" class="text-sm p-2">Discount:</td>

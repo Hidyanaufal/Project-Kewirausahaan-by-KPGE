@@ -2,9 +2,11 @@
 
 namespace App\Filament\Company\Resources\Purchases\BillResource\Pages;
 
+use App\Enums\Accounting\BillStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers\AttachmentsRelationManager;
 use App\Filament\Company\Resources\Purchases\BillResource;
 use App\Filament\Company\Resources\Purchases\VendorResource;
+use App\Helpers\AuthHelper;
 use App\Models\Accounting\Bill;
 use Filament\Actions;
 use Filament\Infolists\Components\Section;
@@ -12,6 +14,7 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\IconPosition;
+use Illuminate\Database\Eloquent\Model;
 
 class ViewBill extends ViewRecord
 {
@@ -28,7 +31,16 @@ class ViewBill extends ViewRecord
         return [
             Actions\EditAction::make()
                 ->label('Edit bill')
-                ->outlined(),
+                ->outlined()
+                ->requiresConfirmation()
+                ->action(function (Model $record) {
+                    $isAdmin = AuthHelper::isAdmin();
+                    if (!$isAdmin) {
+                        $record->status = BillStatus::Draft;
+                        $record->save();
+                    }
+                    return redirect(EditBill::getUrl(['record' => $record]));
+                }),
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
                     Bill::getReplicateAction(),
