@@ -8,11 +8,13 @@ use Filament\Pages\Dashboard;
 use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
 use App\Filament\Company\Widgets;
 use App\Filament\Forms\Addons\FilterProjectCompany;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
 class CompanyDashboard extends Dashboard
 {
     use \App\Concerns\HasPermissionCheck;
     use HasFiltersForm;
+    use InteractsWithPageFilters;
 
     protected static string $routePath = '/';
 

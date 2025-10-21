@@ -115,6 +115,8 @@ class ViewEstimate extends ViewRecord
                                 TextEntry::make('accepted_at')
                                     ->label('Accepted at')
                                     ->date(),
+                                TextEntry::make('createdBy.name')
+                                    ->label('Created By'),
                             ])->columnSpan(1),
                         DocumentPreview::make()
                             ->type(DocumentType::Estimate),

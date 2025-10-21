@@ -75,6 +75,8 @@ class Estimate extends Document
         'profit_computation',
         'profit_rate',
         'profit_total',
+        'is_negotiation_result',
+        'negotiated_from_id',
     ];
 
     protected $casts = [
@@ -264,6 +266,8 @@ class Estimate extends Document
         $companyCode = $company->company_code;
         $romanMonth = getRomanMonth(now()->month);
         $year = now()->year;
+        $defaultSetting = $company->defaultEstimate;
+        $numberPrefix = $defaultSetting->number_prefix ?? '';
 
         $latestDocument = static::query()
             ->orderBy('id', 'desc')
@@ -272,7 +276,7 @@ class Estimate extends Document
         $lastNumberNumericPart = $latestDocument->id;
 
         $nextNumber = $lastNumberNumericPart + 1;
-        $documentNumber = sprintf('%04d/%s-%s/%d', $nextNumber, $companyCode, $romanMonth, $year);
+        $documentNumber = sprintf('%s%04d/%s-%s/%d', $numberPrefix, $nextNumber, $companyCode, $romanMonth, $year);
 
         return $documentNumber;
     }
@@ -386,6 +390,8 @@ class Estimate extends Document
                 $replica->estimate_number = self::getNextDocumentNumber();
                 $replica->date = company_today();
                 $replica->expiration_date = company_today()->addDays($original->company->defaultInvoice->payment_terms->getDays());
+                $replica->is_negotiation_result = true;
+                $replica->negotiated_from_id = $original->id;
             })
             ->databaseTransaction()
             ->after(function (self $original, self $replica) {

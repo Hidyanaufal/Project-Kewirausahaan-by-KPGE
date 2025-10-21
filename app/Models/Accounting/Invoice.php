@@ -90,6 +90,11 @@ class Invoice extends Document
         'profit_computation',
         'profit_rate',
         'profit_total',
+        'contract_number',
+        'po_reference_number',
+        'po_date',
+        'spk_number',
+        'spk_date',
     ];
 
     protected $casts = [

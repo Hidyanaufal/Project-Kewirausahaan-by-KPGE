@@ -22,7 +22,9 @@ class DocumentTotals extends Grid
         $this->schema([
             Select::make('profit_computation')
                 ->hiddenLabel()
-                ->options(AdjustmentComputation::class)
+                ->options([
+                    'percentage' => 'Percentage'
+                ])
                 ->default(AdjustmentComputation::Percentage)
                 ->selectablePlaceholder(false)
                 ->live(),

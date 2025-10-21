@@ -382,7 +382,7 @@ class BillResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->defaultSort('due_date')
+            ->defaultSort('id', 'desc')
             ->columns([
                 Columns::id(),
                 Tables\Columns\TextColumn::make('status')
@@ -428,6 +428,8 @@ class BillResource extends Resource
                     ->native(false),
                 Tables\Filters\TernaryFilter::make('has_payments')
                     ->label('Has payments')
+                    ->native(false)
+                    ->placeholder('All')
                     ->queries(
                         true: fn(Builder $query) => $query->whereHas('payments'),
                         false: fn(Builder $query) => $query->whereDoesntHave('payments'),

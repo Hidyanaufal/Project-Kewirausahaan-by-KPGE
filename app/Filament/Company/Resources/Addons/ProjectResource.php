@@ -140,11 +140,11 @@ class ProjectResource extends Resource
 
                     Forms\Components\DatePicker::make('start_date')
                         ->label('Start Date')
-                        ->native(false),
+                        ->native(true),
 
                     Forms\Components\DatePicker::make('end_date')
                         ->label('End Date')
-                        ->native(false),
+                        ->native(true),
                 ]),
 
             Forms\Components\Section::make('Additional')

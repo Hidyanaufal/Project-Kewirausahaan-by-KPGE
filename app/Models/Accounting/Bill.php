@@ -13,6 +13,7 @@ use App\Enums\Accounting\DocumentType;
 use App\Enums\Accounting\JournalEntryType;
 use App\Enums\Accounting\TransactionType;
 use App\Filament\Company\Resources\Purchases\BillResource;
+use App\Helpers\AuthHelper;
 use App\Models\Addons\Project;
 use App\Models\Banking\BankAccount;
 use App\Models\Common\Vendor;
@@ -21,6 +22,7 @@ use App\Models\Setting\DocumentDefault;
 use App\Observers\BillObserver;
 use App\Utilities\Currency\CurrencyAccessor;
 use App\Utilities\Currency\CurrencyConverter;
+use Filament\Actions\Action;
 use Filament\Actions\MountableAction;
 use Filament\Actions\ReplicateAction;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
@@ -169,14 +171,25 @@ class Bill extends Document
         return $this->paid_at !== null;
     }
 
+    public function isDraft(): bool
+    {
+        return $this->status === BillStatus::Draft;
+    }
+
     public function canBeOverdue(): bool
     {
         return in_array($this->status, BillStatus::canBeOverdue());
     }
 
+    public function canBeApproved(): bool
+    {
+        return $this->isDraft() && AuthHelper::isAdmin();
+    }
+
     public function canRecordPayment(): bool
     {
         return ! in_array($this->status, [
+            BillStatus::Draft,
             BillStatus::Paid,
             BillStatus::Void,
         ]);
@@ -431,6 +444,23 @@ class Bill extends Document
     public function formatAmountToDefaultCurrency(int $amountCents): int
     {
         return $this->convertAmountToDefaultCurrency($amountCents);
+    }
+
+    public static function getApproveDraftAction(string $action = Action::class): MountableAction
+    {
+        return $action::make('approveDraft')
+            ->label('Approve')
+            ->icon('heroicon-m-check-circle')
+            ->visible(function (self $record) {
+                return $record->canBeApproved();
+            })
+            ->requiresConfirmation()
+            ->databaseTransaction()
+            ->successNotificationTitle('Invoice approved')
+            ->action(function (self $record, MountableAction $action) {
+                $record->status = BillStatus::Open;
+                $record->save();
+            });
     }
 
     public static function getReplicateAction(string $action = ReplicateAction::class): MountableAction

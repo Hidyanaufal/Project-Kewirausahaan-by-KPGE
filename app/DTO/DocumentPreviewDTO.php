@@ -21,6 +21,7 @@ readonly class DocumentPreviewDTO extends DocumentDTO
             null;
 
         return new self(
+            detail: null,
             header: $data['header'] ?? $settings->header ?? 'Invoice',
             subheader: $data['subheader'] ?? $settings->subheader,
             footer: $data['footer'] ?? $settings->footer,
@@ -54,6 +55,7 @@ readonly class DocumentPreviewDTO extends DocumentDTO
             beneficiaryName: $settings->beneficiary_name,
             beneficiaryTitle: $settings->beneficiary_title,
             profit: self::formatToMoney(50000, null),
+            profitPercentage: 10,
             contactName: 'John Doe',
         );
     }

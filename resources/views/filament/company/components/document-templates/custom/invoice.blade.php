@@ -1,7 +1,3 @@
-@php
-    // dd($document);
-@endphp
-
 <div class="p-6 text-gray-800 bg-white rounded-md shadow-sm invoice-container">
     {{-- Header --}}
     <div class="mb-4">
@@ -25,7 +21,7 @@
     </div>
 
     {{-- Metadata --}}
-    <div class="space-y-1 metadata">
+    <div class="flex justify-between text-xs mb-6">
         <div class="flex mb-2 gap-5">
             <div class="text-xs">Kepada :</div>
             <div class="text-xs">
@@ -33,6 +29,28 @@
                 @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
                     {!! $formattedAddress !!}
                 @endif
+            </div>
+        </div>
+        <div class="space-y-1 text-xs">
+            <div class="flex gap-5">
+                <div class="w-32">Nomor Kontrak</div>
+                <div>: {{ $document?->detail?->contract_number ?? '-' }}</div>
+            </div>
+            <div class="flex gap-5">
+                <div class="w-32">Ref. Nomor PO</div>
+                <div>: {{ $document?->detail?->po_reference_number ?? '-' }}</div>
+            </div>
+            <div class="flex gap-5">
+                <div class="w-32">Tanggal PO</div>
+                <div>: {{ \Carbon\Carbon::parse($document?->detail?->po_date)->format('d F Y') }}</div>
+            </div>
+            <div class="flex gap-5">
+                <div class="w-32">SPK No.</div>
+                <div>: {{ $document?->detail?->spk_number ?? '-' }}</div>
+            </div>
+            <div class="flex gap-5">
+                <div class="w-32">Tanggal SPK</div>
+                <div>: {{ \Carbon\Carbon::parse($document?->detail?->spk_date)->format('d F Y') }}</div>
             </div>
         </div>
     </div>
@@ -59,9 +77,9 @@
                                 @isset($document->project)
                                     <div>
                                         {{ $document->project }}
-                                        @if ($item->description)
+                                        @if ($document?->detail?->project?->description)
                                             <div class="mt-0.5 text-[10px] text-gray-600 leading-snug">
-                                                {{ $item->description }}
+                                                {{ $document?->detail?->project?->description }}
                                             </div>
                                         @endif
                                     </div>
@@ -100,6 +118,14 @@
                     </td>
                 </tr>
 
+                <!-- Profit -->
+                <tr>
+                    <td colspan="2" class="px-2 text-right">Profit {{ $document->profitPercentage }}%</td>
+                    <td class="px-2 text-right">
+                        {{ $document->profit }}
+                    </td>
+                </tr>
+
                 <!-- Jumlah -->
                 <tr>
                     <td colspan="2" class="px-2 text-right border-t border-black">Jumlah</td>
@@ -107,17 +133,11 @@
                         {{ $document->subtotal }}
                     </td>
                 </tr>
-                <!-- Profit -->
-                <tr>
-                    <td colspan="2" class="px-2 text-right">Profit</td>
-                    <td class="px-2 text-right">
-                        {{ $document->profit }}
-                    </td>
-                </tr>
+
 
                 <!-- PPN -->
                 <tr>
-                    <td colspan="2" class="px-2 text-right">Pajak</td>
+                    <td colspan="2" class="px-2 text-right">PPN 11%</td>
                     <td class="px-2 text-right">
                         {{ $document->tax }}
                     </td>

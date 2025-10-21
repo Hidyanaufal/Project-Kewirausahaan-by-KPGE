@@ -4,6 +4,7 @@ namespace App\Filament\Company\Resources\Purchases\BillResource\Pages;
 
 use App\Concerns\HandlePageRedirect;
 use App\Concerns\ManagesLineItems;
+use App\Enums\Accounting\BillStatus;
 use App\Filament\Company\Resources\Purchases\BillResource;
 use App\Models\Accounting\Bill;
 use App\Models\Addons\Project;
@@ -51,6 +52,8 @@ class CreateBill extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         /** @var Bill $record */
+        $data['status'] =  BillStatus::Draft;
+
         $record = parent::handleRecordCreation($data);
 
         $this->handleLineItems($record, collect($data['lineItems'] ?? []));

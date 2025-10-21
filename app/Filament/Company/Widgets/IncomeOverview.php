@@ -3,14 +3,20 @@
 namespace App\Filament\Company\Widgets;
 
 use App\Concerns\HasPermissionCheck;
+use App\Helpers\AuthHelper;
 use App\Services\ReportService;
 use App\Transformers\IncomeStatementReportTransformer;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
-class IncomeOverview extends BaseWidget
+class IncomeOverview extends BaseWidget implements HasForms
 {
     use HasPermissionCheck;
+    use InteractsWithPageFilters;
+    use InteractsWithForms;
 
     protected function getColumns(): int
     {
@@ -19,14 +25,20 @@ class IncomeOverview extends BaseWidget
 
     protected function getStats(): array
     {
-        $startDate = now()->startOfYear()->toDateString();
-        $endDate   = now()->endOfMonth()->toDateString();
+        $startDate = $this->filters['start_date'] ?? now()->startOfYear()->toDateString();
+        $endDate   = $this->filters['end_date'] ?? now()->endOfMonth()->toDateString();
         $reportService = app(ReportService::class);
-        $reportDTO = $reportService->buildIncomeStatementReport($startDate, $endDate, [
-            'account_code',
-            'account_name',
-            'net_movement'
-        ]);
+        $reportDTO = $reportService->buildIncomeStatementReport(
+            $startDate,
+            $endDate,
+            [
+                'account_code',
+                'account_name',
+                'net_movement',
+            ],
+            projectId: $this->filters['project_id'],
+            companyId: AuthHelper::isPrimaryCompany() ? $this->filters['filter_company_id'] : null,
+        );
 
         $transformer = new IncomeStatementReportTransformer($reportDTO);
         $summary = $transformer->getSummary();

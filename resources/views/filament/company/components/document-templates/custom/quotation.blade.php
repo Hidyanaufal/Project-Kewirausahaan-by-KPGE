@@ -1,7 +1,3 @@
-@php
-    // dd($document);
-@endphp
-
 <div class="p-6 text-gray-800 bg-white rounded-md shadow-sm invoice-container">
     {{-- Header --}}
     <div class="mb-4">
@@ -102,33 +98,34 @@
                     </tr>
                 @endforeach
 
+                <!-- Pajak -->
+                <tr>
+                    <td colspan="5" class="px-2 text-right">PPN 11%</td>
+                    <td class="px-2 text-right">
+                        {{ $document->tax }}
+                    </td>
+                </tr>
+                
                 <!-- Jumlah -->
                 <tr>
-                    <td colspan="5" class="px-2 text-right border-t border-black">JUMLAH</td>
+                    <td colspan="5" class="px-2 text-right border-t border-black">Jumlah</td>
                     <td class="px-2 text-right border-t border-black">
                         {{ $document->subtotal }}
                     </td>
                 </tr>
 
-                <!-- Pajak -->
-                <tr>
-                    <td colspan="5" class="px-2 text-right">PAJAK</td>
-                    <td class="px-2 text-right">
-                        {{ $document->tax }}
-                    </td>
-                </tr>
 
                 <!-- Profit -->
-                {{-- <tr>
-                    <td colspan="5" class="px-2 text-right">PROFIT</td>
+                <tr>
+                    <td colspan="5" class="px-2 text-right">Profit {{ $document->profitPercentage }}%</td>
                     <td class="px-2 text-right">
                         {{ $document->profit }}
                     </td>
-                </tr> --}}
+                </tr>
 
                 <!-- Total -->
                 <tr>
-                    <td colspan="5" class="px-2 font-semibold text-right">TOTAL</td>
+                    <td colspan="5" class="px-2 font-semibold text-right">Total</td>
                     <td class="px-2 font-semibold text-right">
                         {{ $document->total }}
                     </td>

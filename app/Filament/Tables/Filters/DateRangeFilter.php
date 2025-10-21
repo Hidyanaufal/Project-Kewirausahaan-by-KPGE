@@ -35,6 +35,7 @@ class DateRangeFilter extends Filter
             DatePicker::make('from')
                 ->label(fn() => $this->fromLabel)
                 ->live()
+                ->native(true)
                 ->default(fn() => $this->defaultFromDate)
                 ->maxDate(function (Get $get) {
                     return $get('until');
@@ -46,6 +47,7 @@ class DateRangeFilter extends Filter
                 }),
             DatePicker::make('until')
                 ->label(fn() => $this->untilLabel)
+                ->native(true)
                 ->live()
                 ->default(fn() => $this->defaultUntilDate)
                 ->minDate(function (Get $get) {

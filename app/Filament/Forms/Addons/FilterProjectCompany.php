@@ -21,7 +21,7 @@ class FilterProjectCompany
                         ->withoutGlobalScopes()
                         ->pluck('name', 'id')
                         ->toArray();
-                    return ['all' => 'All Company'] + $companies;
+                    return $companies;
                 }),
             ProjectResource::options()
                 ->required(false),

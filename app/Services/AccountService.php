@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\Accounting\AccountCategory;
+use App\Helpers\AuthHelper;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\Bill;
 use App\Models\Accounting\Invoice;
@@ -286,7 +287,11 @@ class AccountService
             ])
             ->with(['subtype:id,name,inverse_cash_flow']);
 
-        if (! empty($accountIds)) {
+        if (AuthHelper::isPrimaryCompany()) {
+            $query->withoutGlobalScopes();
+        }
+
+        if (!empty($accountIds)) {
             $query->whereIn('accounts.id', $accountIds);
         }
 

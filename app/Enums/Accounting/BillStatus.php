@@ -7,10 +7,11 @@ use Filament\Support\Contracts\HasLabel;
 
 enum BillStatus: string implements HasColor, HasLabel
 {
+    case Draft = 'draft';
+    case Open = 'open';
     case Overdue = 'overdue';
     case Partial = 'partial';
     case Paid = 'paid';
-    case Open = 'open';
     case Void = 'void';
 
     public function getLabel(): ?string
@@ -21,6 +22,7 @@ enum BillStatus: string implements HasColor, HasLabel
     public function getColor(): string | array | null
     {
         return match ($this) {
+            self::Draft => 'gray',
             self::Open => 'info',
             self::Overdue => 'danger',
             self::Partial => 'warning',
@@ -49,8 +51,8 @@ enum BillStatus: string implements HasColor, HasLabel
     public static function getUnpaidOptions(): array
     {
         return collect(self::cases())
-            ->filter(fn (self $case) => in_array($case, self::unpaidStatuses()))
-            ->mapWithKeys(fn (self $case) => [$case->value => $case->getLabel()])
+            ->filter(fn(self $case) => in_array($case, self::unpaidStatuses()))
+            ->mapWithKeys(fn(self $case) => [$case->value => $case->getLabel()])
             ->toArray();
     }
 }

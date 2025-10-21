@@ -11,15 +11,10 @@ enum InvoiceStatus: string implements HasColor, HasLabel
     case Unsent = 'unsent';
     case Sent = 'sent';
     case Viewed = 'viewed';
-
     case Partial = 'partial';
-
     case Paid = 'paid';
-
     case Overdue = 'overdue';
-
     case Overpaid = 'overpaid';
-
     case Void = 'void';
 
     public function getLabel(): ?string
@@ -61,7 +56,7 @@ enum InvoiceStatus: string implements HasColor, HasLabel
     public static function getUnpaidOptions(): array
     {
         return collect(self::unpaidStatuses())
-            ->mapWithKeys(fn (self $case) => [$case->value => $case->getLabel()])
+            ->mapWithKeys(fn(self $case) => [$case->value => $case->getLabel()])
             ->toArray();
     }
 }

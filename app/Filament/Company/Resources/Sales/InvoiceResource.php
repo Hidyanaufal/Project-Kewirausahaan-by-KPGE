@@ -99,8 +99,6 @@ class InvoiceResource extends Resource
                                 Forms\Components\TextInput::make('invoice_number')
                                     ->label('Invoice number')
                                     ->default(static fn() => Invoice::getNextDocumentNumber()),
-                                Forms\Components\TextInput::make('order_number')
-                                    ->label('P.O/S.O Number'),
                                 Cluster::make([
                                     Forms\Components\DatePicker::make('date')
                                         ->label('Invoice date')
@@ -389,6 +387,36 @@ class InvoiceResource extends Resource
                         Forms\Components\RichEditor::make('terms')
                             ->default($settings->terms)
                             ->columnSpanFull(),
+                    ]),
+                Forms\Components\Section::make('Contract Information')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\Group::make([
+                            Forms\Components\TextInput::make('contract_number')
+                                ->label('Contract Number')
+                                ->maxLength(100)
+                                ->placeholder('Enter contract number'),
+                        ])->columns(2)->columnSpanFull(),
+
+                        Forms\Components\TextInput::make('po_reference_number')
+                            ->label('PO Reference Number')
+                            ->maxLength(100)
+                            ->placeholder('Enter PO reference number'),
+
+                        Forms\Components\DatePicker::make('po_date')
+                            ->label('PO Date')
+                            ->placeholder('Select PO date')
+                            ->native(true),
+
+                        Forms\Components\TextInput::make('spk_number')
+                            ->label('SPK Number')
+                            ->maxLength(100)
+                            ->placeholder('Enter SPK number'),
+
+                        Forms\Components\DatePicker::make('spk_date')
+                            ->label('SPK Date')
+                            ->placeholder('Select SPK date')
+                            ->native(true),
                     ]),
                 Forms\Components\Section::make('Tax Detail')
                     ->columns(3)

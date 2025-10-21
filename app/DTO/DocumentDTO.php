@@ -18,6 +18,7 @@ readonly class DocumentDTO
      * @param  LineItemDTO[]  $lineItems
      */
     public function __construct(
+        public ?Document $detail,
         public ?string $header,
         public ?string $subheader,
         public ?string $footer,
@@ -30,6 +31,7 @@ readonly class DocumentDTO
         public string $currencyCode,
         public ?string $subtotal,
         public ?string $discount,
+        public ?string $profitPercentage,
         public ?string $profit,
         public ?string $tax,
         public string $total,
@@ -87,14 +89,27 @@ readonly class DocumentDTO
         $contactName = $document->client?->primaryContact?->first_name . ' ' . $document->client?->primaryContact?->last_name;
         $isEmptyContactName = trim($contactName) === '';
 
-        // handle case invoice
-        if ($settings->header == 'Invoice') {
+        // Handle Case Invoice
+        if (strtolower($settings->header) == 'invoice') {
             if ($document->status == InvoiceStatus::Draft) {
                 $settings->header = 'Proforma Invoice';
             }
         }
 
+        // Handle Case Negotiation
+        if (strtolower($settings->header) == 'penawaran harga') {
+            if ($document->is_negotiation_result) {
+                $settings->header = 'NEGOSIASI HARGA';
+            }
+        }
+
+        $profitRate = 0;
+        if ($document?->profit_rate) {
+            $profitRate = $document?->profit_rate;
+        }
+
         return new self(
+            detail: $document,
             header: $settings->header,
             subheader: $settings->subheader,
             footer: $document->footer,
@@ -108,6 +123,7 @@ readonly class DocumentDTO
             subtotal: $subtotal,
             discount: $discount,
             tax: $tax,
+            profitPercentage: $profitRate,
             profit: $profit,
             total: self::formatToMoney($document->total, $currencyCode),
             amountDue: $amountDue,

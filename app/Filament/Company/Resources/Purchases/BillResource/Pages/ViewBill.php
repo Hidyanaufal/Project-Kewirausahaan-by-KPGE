@@ -32,6 +32,7 @@ class ViewBill extends ViewRecord
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
                     Bill::getReplicateAction(),
+                    Bill::getApproveDraftAction(),
                 ])->dropdown(false),
                 Actions\DeleteAction::make(),
             ])
@@ -74,6 +75,8 @@ class ViewBill extends ViewRecord
                         TextEntry::make('paid_at')
                             ->label('Paid at')
                             ->date(),
+                        TextEntry::make('createdBy.name')
+                            ->label('Created By'),
                     ]),
             ]);
     }

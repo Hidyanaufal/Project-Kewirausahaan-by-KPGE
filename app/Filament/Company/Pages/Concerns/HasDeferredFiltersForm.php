@@ -87,7 +87,8 @@ trait HasDeferredFiltersForm
 
     public function getFilterState(string $name): mixed
     {
-        return Arr::get($this->filters, $name);
+        $value = Arr::get($this->filters, $name);
+        return $value === "" ? null : $value;
     }
 
     public function setFilterState(string $name, mixed $value): void

@@ -161,6 +161,8 @@ class ViewInvoice extends ViewRecord
                                 TextEntry::make('paid_at')
                                     ->label('Paid at')
                                     ->date(),
+                                TextEntry::make('createdBy.name')
+                                    ->label('Created By'),
                             ])->columnSpan(1),
                         DocumentPreview::make()
                             ->type(DocumentType::Invoice),
