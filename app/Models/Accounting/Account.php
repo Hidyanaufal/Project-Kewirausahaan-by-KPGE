@@ -154,24 +154,43 @@ class Account extends Model
 
     protected static function findAccountByNameOrFail(AccountDefaultKey $accountDefaultKey, ?int $companyId = null): self
     {
-        $accountDefault = AccountDefault::where('key', $accountDefaultKey)
-            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
-            ->first();
+        try {
+            // Find AccountDefault by key and company (if provided)
+            $accountDefault = AccountDefault::where('key', $accountDefaultKey)
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->first();
 
-        $account = self::where('id', $accountDefault->account_id)
-            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
-            ->first();
+            if (! $accountDefault) {
+                throw new \RuntimeException(sprintf(
+                    'The default account for COA key "%s" is not configured. Please set up the default account in the chart of accounts settings.',
+                    $accountDefaultKey->value
+                ));
+            }
 
-        if (! $account) {
+            // Find the Account linked to the AccountDefault
+            $account = self::where('id', $accountDefault->account_id)
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->first();
+
+            if (! $account) {
+                throw new \RuntimeException(sprintf(
+                    'The account linked to COA key "%s" (ID: %d) could not be found. Please verify your chart of accounts configuration.',
+                    $accountDefaultKey->value,
+                    $accountDefault->account_id
+                ));
+            }
+
+            return $account;
+        } catch (\Throwable $e) {
             throw new \RuntimeException(sprintf(
-                'Account "%s" not found when called from %s().',
+                'Failed to retrieve account for COA key "%s"%s. Please ensure that the default account is properly configured in your chart of accounts. Details: %s',
                 $accountDefaultKey->value,
-                debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2)[1]['function'] ?? 'unknown'
-            ));
+                $companyId ? " (Company ID: {$companyId})" : '',
+                $e->getMessage()
+            ), 0, $e);
         }
-
-        return $account;
     }
+
 
     public static function getAccountsReceivableAccount(?int $companyId = null): self
     {

@@ -109,7 +109,7 @@ class AccountTransactions extends BaseReportPage
                         ->keyBindings(['mod+s'])
                         ->button(),
                 ])->alignEnd()->verticallyAlignEnd(),
-                ...FilterProjectCompany::make(),
+                // ...FilterProjectCompany::make(),
             ]);
     }
 

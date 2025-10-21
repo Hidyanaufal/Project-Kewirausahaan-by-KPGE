@@ -73,7 +73,7 @@ class TrialBalance extends BaseReportPage
                     ->selectablePlaceholder(false)
                     ->endDateField('asOfDate'),
                 $this->getAsOfDateFormComponent(),
-                ...FilterProjectCompany::make(),
+                // ...FilterProjectCompany::make(),
             ]);
     }
 

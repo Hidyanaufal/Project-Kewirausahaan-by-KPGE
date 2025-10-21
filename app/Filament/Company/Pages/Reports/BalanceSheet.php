@@ -61,7 +61,7 @@ class BalanceSheet extends BaseReportPage
                 $this->getAsOfDateFormComponent()
                     ->hiddenLabel()
                     ->extraFieldWrapperAttributes([]),
-                ...FilterProjectCompany::make()
+                // ...FilterProjectCompany::make()
             ]);
     }
 

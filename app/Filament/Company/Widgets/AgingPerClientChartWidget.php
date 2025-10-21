@@ -2,11 +2,20 @@
 
 namespace App\Filament\Company\Widgets;
 
+use App\Concerns\HasPermissionCheck;
+use App\Helpers\AuthHelper;
 use App\Models\Accounting\Invoice;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Filament\Widgets\ChartWidget;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
-class AgingPerClientChartWidget extends ChartWidget
+class AgingPerClientChartWidget extends ChartWidget implements HasForms
 {
+    use HasPermissionCheck;
+    use InteractsWithPageFilters;
+    use InteractsWithForms;
+
     protected static ?string $heading = 'Aging Receivables';
 
     protected static ?string $description = 'Breaks down outstanding invoices by aging periods for each client.';
@@ -15,7 +24,7 @@ class AgingPerClientChartWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $data = Invoice::selectRaw("
+        $query = Invoice::selectRaw("
                 client_id,
                 SUM(CASE WHEN DATEDIFF(NOW(), due_date) <= 0 THEN (total - amount_paid) / 100 ELSE 0 END) as current,
                 SUM(CASE WHEN DATEDIFF(NOW(), due_date) BETWEEN 1 AND 30 THEN (total - amount_paid) / 100 ELSE 0 END) as period_1,
@@ -24,9 +33,25 @@ class AgingPerClientChartWidget extends ChartWidget
                 SUM(CASE WHEN DATEDIFF(NOW(), due_date) > 90 THEN (total - amount_paid) / 100 ELSE 0 END) as over_periods
             ")
             ->with('client:id,name')
-            ->groupBy('client_id')
-            ->get();
+            ->where('status', '!=', 'paid')
+            ->groupBy('client_id');
 
+        if (AuthHelper::isPrimaryCompany()) {
+            $query->withoutGlobalScopes();
+        }
+
+        if (!empty($this->filters['company_id'])) {
+            $companyId = $this->filters['company_id'];
+
+            $query->where(function ($q) use ($companyId) {
+                $q->where('company_id', $companyId)
+                    ->orWhereHas('client', function ($sub) use ($companyId) {
+                        $sub->where('company_id', $companyId);
+                    });
+            });
+        }
+
+        $data = $query->get();
         $clients = $data->pluck('client.name')->toArray();
 
         return [
@@ -77,6 +102,10 @@ class AgingPerClientChartWidget extends ChartWidget
                 'bar' => [
                     'borderWidth' => 0,
                 ],
+            ],
+            'animation' => [
+                'duration' => 1000,
+                'easing' => 'easeInOutQuart',
             ],
         ];
     }

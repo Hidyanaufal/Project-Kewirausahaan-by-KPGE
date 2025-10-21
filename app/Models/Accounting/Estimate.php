@@ -273,7 +273,11 @@ class Estimate extends Document
             ->orderBy('id', 'desc')
             ->first();
 
-        $lastNumberNumericPart = $latestDocument->id;
+        if ($latestDocument) {
+            $lastNumberNumericPart = $latestDocument->id;
+        } else {
+            $lastNumberNumericPart = 0;
+        }
 
         $nextNumber = $lastNumberNumericPart + 1;
         $documentNumber = sprintf('%s%04d/%s-%s/%d', $numberPrefix, $nextNumber, $companyCode, $romanMonth, $year);

@@ -266,3 +266,11 @@
     width: 100%;
     max-width: min(100%, 165px);
 }
+
+.fi-wi-stats-overview-stat-value {
+    font-size: x-large !important;
+}
+
+.fi-wi-stats-overview-stat-description {
+    font-size: small !important;
+}

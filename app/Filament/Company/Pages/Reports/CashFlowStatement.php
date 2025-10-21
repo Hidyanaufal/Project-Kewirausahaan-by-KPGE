@@ -61,7 +61,7 @@ class CashFlowStatement extends BaseReportPage
                 ])->extraFieldWrapperAttributes([
                     'class' => 'report-hidden-label',
                 ]),
-                ...FilterProjectCompany::make()
+                // ...FilterProjectCompany::make()
             ]);
     }
 

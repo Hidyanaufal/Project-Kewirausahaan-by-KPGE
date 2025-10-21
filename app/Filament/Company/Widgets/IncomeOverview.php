@@ -27,6 +27,7 @@ class IncomeOverview extends BaseWidget implements HasForms
     {
         $startDate = $this->filters['start_date'] ?? now()->startOfYear()->toDateString();
         $endDate   = $this->filters['end_date'] ?? now()->endOfMonth()->toDateString();
+
         $reportService = app(ReportService::class);
         $reportDTO = $reportService->buildIncomeStatementReport(
             $startDate,
@@ -37,7 +38,7 @@ class IncomeOverview extends BaseWidget implements HasForms
                 'net_movement',
             ],
             projectId: $this->filters['project_id'],
-            companyId: AuthHelper::isPrimaryCompany() ? $this->filters['filter_company_id'] : null,
+            companyId: AuthHelper::isPrimaryCompany() ? $this->filters['company_id'] : null,
         );
 
         $transformer = new IncomeStatementReportTransformer($reportDTO);

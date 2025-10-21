@@ -101,7 +101,7 @@ abstract class BaseAgingReportPage extends BaseReportPage
                     ->mask(RawJs::make(<<<'JS'
                         $input > 10 ? '10' : '99'
                     JS)),
-                ...FilterProjectCompany::make(),
+                // ...FilterProjectCompany::make(),
             ]);
     }
 

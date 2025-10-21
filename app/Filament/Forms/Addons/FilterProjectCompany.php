@@ -12,7 +12,7 @@ class FilterProjectCompany
     public static function make(): array
     {
         return [
-            Forms\Components\Select::make('filter_company_id')
+            Forms\Components\Select::make('company_id')
                 ->label('Company')
                 ->visible(fn() => AuthHelper::isPrimaryCompany())
                 ->searchable()

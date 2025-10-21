@@ -32,26 +32,40 @@
             </div>
         </div>
         <div class="space-y-1 text-xs">
-            <div class="flex gap-5">
-                <div class="w-32">Nomor Kontrak</div>
-                <div>: {{ $document?->detail?->contract_number ?? '-' }}</div>
-            </div>
-            <div class="flex gap-5">
-                <div class="w-32">Ref. Nomor PO</div>
-                <div>: {{ $document?->detail?->po_reference_number ?? '-' }}</div>
-            </div>
-            <div class="flex gap-5">
-                <div class="w-32">Tanggal PO</div>
-                <div>: {{ \Carbon\Carbon::parse($document?->detail?->po_date)->format('d F Y') }}</div>
-            </div>
-            <div class="flex gap-5">
-                <div class="w-32">SPK No.</div>
-                <div>: {{ $document?->detail?->spk_number ?? '-' }}</div>
-            </div>
-            <div class="flex gap-5">
-                <div class="w-32">Tanggal SPK</div>
-                <div>: {{ \Carbon\Carbon::parse($document?->detail?->spk_date)->format('d F Y') }}</div>
-            </div>
+            @if ($document?->detail?->contract_number)
+                <div class="flex gap-5">
+                    <div class="w-32">Nomor Kontrak</div>
+                    <div>: {{ $document->detail->contract_number }}</div>
+                </div>
+            @endif
+
+            @if ($document?->detail?->po_reference_number)
+                <div class="flex gap-5">
+                    <div class="w-32">Ref. Nomor PO</div>
+                    <div>: {{ $document->detail->po_reference_number }}</div>
+                </div>
+            @endif
+
+            @if ($document?->detail?->po_date)
+                <div class="flex gap-5">
+                    <div class="w-32">Tanggal PO</div>
+                    <div>: {{ \Carbon\Carbon::parse($document->detail->po_date)->format('d F Y') }}</div>
+                </div>
+            @endif
+
+            @if ($document?->detail?->spk_number)
+                <div class="flex gap-5">
+                    <div class="w-32">SPK No.</div>
+                    <div>: {{ $document->detail->spk_number }}</div>
+                </div>
+            @endif
+
+            @if ($document?->detail?->spk_date)
+                <div class="flex gap-5">
+                    <div class="w-32">Tanggal SPK</div>
+                    <div>: {{ \Carbon\Carbon::parse($document->detail->spk_date)->format('d F Y') }}</div>
+                </div>
+            @endif
         </div>
     </div>
 
@@ -178,7 +192,7 @@
             </div>
         @endif
 
-        <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>
+        <div class="leading-relaxed" style="margin-top: 50px">Pembayaran harap dilakukan melalui:</div>
         <div class="mb-2 text-xs font-semibold">
             {{ $document->bankName }}<br>
             A/n. {{ $document->accountName }}<br>

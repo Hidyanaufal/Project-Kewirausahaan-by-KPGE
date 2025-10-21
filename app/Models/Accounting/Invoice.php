@@ -263,9 +263,9 @@ class Invoice extends Document
         return $this->total > 1000000000; // Greater than 10jt
     }
 
-    public function client(): BelongsTo
+    public function client()
     {
-        return $this->belongsTo(Client::class);
+        return $this->belongsTo(Client::class, 'client_id', 'id')->withoutGlobalScopes();
     }
 
     public function estimate(): BelongsTo
@@ -476,7 +476,12 @@ class Invoice extends Document
             ->orderBy('id', 'desc')
             ->first();
 
-        $lastNumberNumericPart = $latestDocument->id;
+        if ($latestDocument) {
+            $lastNumberNumericPart = $latestDocument->id;
+        } else {
+            $lastNumberNumericPart = 0;
+        }
+
         $nextNumber = $lastNumberNumericPart + 1;
 
         $documentNumber = sprintf(
@@ -800,7 +805,16 @@ class Invoice extends Document
                             ->send();
                     }
                 } else {
-                    $record->approveDraft();
+                    try {
+                        $record->approveDraft();
+                    } catch (\Throwable $e) {
+                        Notification::make()
+                            ->danger()
+                            ->title('Something went wrong')
+                            ->body($e->getMessage())
+                            ->send();
+                        $action->halt();
+                    }
 
                     $action->success();
                 }

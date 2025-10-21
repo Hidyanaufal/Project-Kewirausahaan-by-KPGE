@@ -59,7 +59,7 @@ class IncomeStatement extends BaseReportPage
                 ])->extraFieldWrapperAttributes([
                     'class' => 'report-hidden-label',
                 ]),
-                ...FilterProjectCompany::make(),
+                // ...FilterProjectCompany::make(),
             ]);
     }
 
@@ -70,7 +70,7 @@ class IncomeStatement extends BaseReportPage
             $this->getFormattedEndDate(),
             $columns,
             $this->getFilterState('project_id'),
-            $this->getFilterState('filter_company_id'),
+            $this->getFilterState('company_id'),
         );
     }
 

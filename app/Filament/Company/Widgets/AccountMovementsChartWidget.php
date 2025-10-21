@@ -2,11 +2,20 @@
 
 namespace App\Filament\Company\Widgets;
 
+use App\Concerns\HasPermissionCheck;
+use App\Helpers\AuthHelper;
 use App\Models\Accounting\JournalEntry;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Filament\Widgets\ChartWidget;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
-class AccountMovementsChartWidget extends ChartWidget
+class AccountMovementsChartWidget extends ChartWidget implements HasForms
 {
+    use HasPermissionCheck;
+    use InteractsWithPageFilters;
+    use InteractsWithForms;
+
     protected static ?string $heading = 'Top Account Movements';
 
     protected static ?string $description = 'Highlights accounts with the largest financial activity';
@@ -15,10 +24,10 @@ class AccountMovementsChartWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $startDate = now()->startOfYear();
-        $endDate   = now()->endOfMonth();
+        $startDate = $this->filters['start_date'] ?? now()->startOfYear()->toDateString();
+        $endDate   = $this->filters['end_date'] ?? now()->endOfMonth()->toDateString();
 
-        $data = JournalEntry::selectRaw("
+        $query = JournalEntry::selectRaw("
             accounts.category,
             accounts.name as account_name,
             SUM(journal_entries.amount) as total
@@ -28,9 +37,17 @@ class AccountMovementsChartWidget extends ChartWidget
             ->whereBetween('transactions.posted_at', [$startDate, $endDate])
             ->groupBy('accounts.category', 'accounts.name')
             ->orderByDesc('total')
-            ->limit(20)
-            ->get();
+            ->limit(20);
 
+        if (AuthHelper::isPrimaryCompany()) {
+            $query->withoutGlobalScopes();
+        }
+
+        if ($this->filters['company_id']) {
+            $query->where('accounts.company_id', $this->filters['company_id']);
+        }
+
+        $data = $query->get();
         $labels = $data->pluck('account_name')->toArray();
         $values = $data->pluck('total')->toArray();
         $colors = $data->map(function ($row) {
