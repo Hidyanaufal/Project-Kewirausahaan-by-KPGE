@@ -90,14 +90,14 @@ readonly class DocumentDTO
         $isEmptyContactName = trim($contactName) === '';
 
         // Handle Case Invoice
-        if (strtolower($settings->header) == 'invoice') {
+        if ($document::documentType() == DocumentType::Invoice) {
             if ($document->status == InvoiceStatus::Draft) {
                 $settings->header = 'Proforma Invoice';
             }
         }
 
         // Handle Case Negotiation
-        if (strtolower($settings->header) == 'penawaran harga') {
+        if ($document::documentType() == DocumentType::Estimate) {
             if ($document->is_negotiation_result) {
                 $settings->header = 'NEGOSIASI HARGA';
             }
@@ -136,7 +136,7 @@ readonly class DocumentDTO
             showLogo: $settings->show_logo ?? false,
             font: $settings->font ?? Font::Inter,
             email: $document->company->profile->email,
-            terbilang: self::generateTerbilang($amountDue),
+            terbilang: self::generateTerbilang($document->total / 100),
             dpp: self::generateDpp($document->subtotal),
             project: $projectName,
             bankName: $settings->bank_name,

@@ -17,7 +17,6 @@ use App\Helpers\AuthHelper;
 use App\Models\Addons\Project;
 use App\Models\Common\Client;
 use App\Models\Company;
-use App\Models\Setting\DocumentDefault;
 use App\Observers\EstimateObserver;
 use Filament\Actions\Action;
 use Filament\Actions\MountableAction;
@@ -506,6 +505,9 @@ class Estimate extends Document
             'subtotal' => $this->subtotal,
             'tax_total' => $this->tax_total,
             'discount_total' => $this->discount_total,
+            'profit_computation' => $this->profit_computation,
+            'profit_rate' => $this->profit_rate,
+            'profit_total' => $this->profit_total,
             'total' => $this->total,
             'terms' => $this->terms,
             'footer' => $this->footer,

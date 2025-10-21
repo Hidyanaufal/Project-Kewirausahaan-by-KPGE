@@ -2,7 +2,6 @@
 
 namespace App\Filament\Company\Resources\Addons\ProjectResource\Pages;
 
-use App\Concerns\HasMediumContentWidth;
 use App\Enums\Addons\ProjectStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource;
 use Filament\Actions;
@@ -18,13 +17,10 @@ use App\Helpers\AuthHelper;
 use App\Models\Addons\Project;
 use Filament\Notifications\Notification;
 use Rmsramos\Activitylog\Actions\ActivityLogTimelineSimpleAction;
-use Rmsramos\Activitylog\Actions\ActivityLogTimelineTableAction;
 
 class ViewProject extends ViewRecord
 {
-
     use \App\Concerns\HideFromSpotlight;
-    use HasMediumContentWidth;
 
     protected static string $resource = ProjectResource::class;
 

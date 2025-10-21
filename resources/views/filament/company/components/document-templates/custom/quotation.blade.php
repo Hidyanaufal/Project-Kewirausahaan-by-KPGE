@@ -22,25 +22,31 @@
     {{-- Metadata --}}
     <div class="flex justify-between text-xs mb-6">
         <div>
-            <p><strong>From</strong></p>
+            <p><strong>From: </strong></p>
             <p class="font-bold">{{ $document->company?->name }}</p>
             <p>{{ $document->company?->addressLine1}}</p>
             <p>{{ $document->company?->addressLine2}}</p>
             <p>{{ $document->company?->city}}</p>
         </div>
-        <div>
-            <p>No. : {{ $document->number ?? '-' }}</p>
-            <p>Date: {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}</p>
+        <div class="space-y-1 text-xs">
+            <div class="flex gap-2">
+                <div class="w-10">No. </div>
+                <div>: {{ $document->number ?? '-' }}</div>
+            </div>
+            <div class="flex gap-2">
+                <div class="w-10">Date </div>
+                <div>: {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}</div>
+            </div>
         </div>
     </div>
 
     <div class="text-xs mb-6">
-        <p><strong>To</strong></p>
+        <p><strong>To: </strong></p>
         <p class="font-bold">{{ $document->client?->name }}</p>
         @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
             {!! $formattedAddress !!}
         @endif
-        <p class="mt-2"><strong>UP :</strong></p>
+        <p class="mt-6"><strong>UP:</strong></p>
         <p class="font-bold">{{$document->contactName}}</p>
     </div>
 
@@ -72,6 +78,9 @@
                             <div class="py-1 pl-2 font-semibold text-left">
                                 {{ $document->project }}
                             </div>
+                            <div class="py-1 pl-2 text-xs text-left">
+                                {{ $document?->detail?->project?->description }}
+                            </div>
                         @endisset
                     </td>
                 </tr>
@@ -99,29 +108,34 @@
                 @endforeach
 
                 <!-- Pajak -->
-                <tr>
-                    <td colspan="5" class="px-2 text-right">PPN 11%</td>
-                    <td class="px-2 text-right">
-                        {{ $document->tax }}
-                    </td>
-                </tr>
+                @if ($document->tax)
+                    <tr>
+                        <td colspan="5" class="px-2 text-right">PPN 11%</td>
+                        <td class="px-2 text-right">
+                            {{ $document->tax }}
+                        </td>
+                    </tr>
+                @endif
                 
                 <!-- Jumlah -->
-                <tr>
-                    <td colspan="5" class="px-2 text-right border-t border-black">Jumlah</td>
-                    <td class="px-2 text-right border-t border-black">
-                        {{ $document->subtotal }}
-                    </td>
-                </tr>
-
+                @if ($document->subtotal)
+                    <tr>
+                        <td colspan="5" class="px-2 text-right border-t border-black">Jumlah</td>
+                        <td class="px-2 text-right border-t border-black">
+                            {{ $document->subtotal }}
+                        </td>
+                    </tr>
+                @endif
 
                 <!-- Profit -->
-                <tr>
-                    <td colspan="5" class="px-2 text-right">Profit {{ $document->profitPercentage }}%</td>
-                    <td class="px-2 text-right">
-                        {{ $document->profit }}
-                    </td>
-                </tr>
+                @if ($document->profit)
+                    <tr>
+                        <td colspan="5" class="px-2 text-right">Profit {{ $document->profitPercentage }}%</td>
+                        <td class="px-2 text-right">
+                            {{ $document->profit }}
+                        </td>
+                    </tr>
+                @endif
 
                 <!-- Total -->
                 <tr>

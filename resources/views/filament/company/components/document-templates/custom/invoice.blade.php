@@ -133,12 +133,14 @@
                 </tr>
 
                 <!-- Profit -->
+                @if ($document->profit)
                 <tr>
                     <td colspan="2" class="px-2 text-right">Profit {{ $document->profitPercentage }}%</td>
                     <td class="px-2 text-right">
                         {{ $document->profit }}
                     </td>
                 </tr>
+                @endif
 
                 <!-- Jumlah -->
                 <tr>

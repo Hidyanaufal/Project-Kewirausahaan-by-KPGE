@@ -19,7 +19,8 @@ enum DocumentType: string implements HasIcon, HasLabel
     public function getLabel(): ?string
     {
         return match ($this) {
-            self::Invoice, self::Bill, self::Estimate => $this->name,
+            self::Invoice, self::Bill => $this->name,
+            self::Estimate => 'Quotation',
             self::RecurringInvoice => 'Recurring Invoice',
         };
     }

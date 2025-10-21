@@ -24,3 +24,7 @@ Todo:
   ✔ bill bisa di approve @done(25-10-21 12:59)
   ✔ flow form nego @done(25-10-21 12:59)
   ✔ revisi invoice ada spk, periode dll @done(25-10-21 14:32)
+  internal fasya
+  ✔ profit tidak tercopy ketika convert quotation ke invoice @done(25-10-21 22:44)
+  ☐ flow reapprove ketika di edit oleh user quotation
+  ☐ flow reapprove ketika di edit oleh user bill

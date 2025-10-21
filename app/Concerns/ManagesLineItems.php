@@ -6,6 +6,7 @@ use App\Enums\Accounting\AdjustmentComputation;
 use App\Enums\Accounting\DocumentDiscountMethod;
 use App\Models\Accounting\Bill;
 use App\Models\Accounting\DocumentLineItem;
+use App\Models\Accounting\Estimate;
 use App\Utilities\Currency\CurrencyAccessor;
 use App\Utilities\Currency\CurrencyConverter;
 use App\Utilities\RateCalculator;
@@ -104,8 +105,12 @@ trait ManagesLineItems
             $currencyCode,
         );
 
-        if ($profitTotal > 0) {
-            $taxTotalCents += $profitTotal * 0.11;
+        $isQuotation = $record instanceof Estimate;
+
+        if (!$isQuotation) {
+            if ($profitTotal > 0) {
+                $taxTotalCents += $profitTotal * 0.11;
+            }
         }
 
         $grandTotalCents = $subtotalCents + $taxTotalCents - $discountTotalCents + $profitTotal;

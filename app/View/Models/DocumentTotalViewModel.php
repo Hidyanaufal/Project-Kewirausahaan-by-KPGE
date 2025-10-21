@@ -39,11 +39,13 @@ class DocumentTotalViewModel
 
         $profitTotal = CurrencyConverter::formatCentsToMoney($profitTotalInCents, $currencyCode);
 
-        if ($profitTotalInCents) {
-            $taxTotalInCents += $profitTotalInCents * 0.11;
-            $taxTotal = $taxTotalInCents > 0
-                ? CurrencyConverter::formatCentsToMoney($taxTotalInCents, $currencyCode)
-                : null;
+        if ($this->documentType == DocumentType::Invoice) {
+            if ($profitTotalInCents) {
+                $taxTotalInCents += $profitTotalInCents * 0.11;
+                $taxTotal = $taxTotalInCents > 0
+                    ? CurrencyConverter::formatCentsToMoney($taxTotalInCents, $currencyCode)
+                    : null;
+            }
         }
 
         $discountTotal = ($isPerDocumentDiscount || $discountTotalInCents > 0)
