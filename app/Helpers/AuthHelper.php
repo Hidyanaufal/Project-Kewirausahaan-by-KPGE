@@ -38,7 +38,7 @@ class AuthHelper
     {
         $companyId = static::currentCompany();
         $company = Company::find($companyId);
-        return $company->is_primary;
+        return $company->is_primary ?? 0;
     }
 
     public static function isUser(): bool

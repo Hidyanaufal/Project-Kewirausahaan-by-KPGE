@@ -47,6 +47,7 @@ use App\Filament\Company\Resources\Sales\RecurringInvoiceResource;
 use App\Filament\Components\PanelShiftDropdown;
 use App\Filament\Pages\Auth\Login;
 use App\Filament\User\Clusters\Account;
+use App\Helpers\AuthHelper;
 use App\Helpers\NavigationHelper;
 use App\Http\Middleware\ConfigureCurrentCompany;
 use App\Livewire\UpdatePassword;
@@ -140,80 +141,86 @@ class CompanyPanelProvider extends PanelProvider
                 'primary' => Color::Green,
             ])
             ->navigation(function (NavigationBuilder $builder): NavigationBuilder {
+                $groups = [
+                    NavigationGroup::make('Projects')
+                        ->label('Projects')
+                        ->icon('heroicon-o-briefcase')
+                        ->items([
+                            ...NavigationHelper::filterNavigationByPermissions(ProjectTypeResource::class),
+                            ...NavigationHelper::filterNavigationByPermissions(ProjectResource::class),
+                        ]),
+
+                    NavigationGroup::make('Sales')
+                        ->label('Sales')
+                        ->icon('heroicon-o-chart-bar')
+                        ->items([
+                            ...NavigationHelper::filterNavigationByPermissions(ClientResource::class),
+                            ...NavigationHelper::filterNavigationByPermissions(EstimateResource::class),
+                            ...NavigationHelper::filterNavigationByPermissions(InvoiceResource::class),
+                        ]),
+
+                    NavigationGroup::make('Purchases')
+                        ->label('Purchases')
+                        ->icon('heroicon-o-shopping-bag')
+                        ->items([
+                            ...NavigationHelper::filterNavigationByPermissions(BillResource::class),
+                            ...NavigationHelper::filterNavigationByPermissions(VendorResource::class),
+                        ]),
+
+                    NavigationGroup::make('Accounting')
+                        ->label('Accounting')
+                        ->icon('heroicon-o-banknotes')
+                        ->items([
+                            ...NavigationHelper::filterNavigationByPermissions(AccountChart::class),
+                            ...NavigationHelper::filterNavigationByPermissions(TransactionResource::class),
+                            ...NavigationHelper::filterNavigationByPermissions(AccountDefaultResource::class),
+                        ]),
+
+                    NavigationGroup::make('Asset')
+                        ->label('Asset')
+                        ->icon('heroicon-o-presentation-chart-bar')
+                        ->items([
+                            ...NavigationHelper::filterNavigationByPermissions(AssetGroupResource::class),
+                            ...NavigationHelper::filterNavigationByPermissions(AssetResource::class),
+                            ...NavigationHelper::filterNavigationByPermissions(DepreciationRecordResource::class),
+                        ]),
+
+                    NavigationGroup::make('Banking')
+                        ->label('Banking')
+                        ->icon('heroicon-o-credit-card')
+                        ->items([
+                            ...NavigationHelper::filterNavigationByPermissions(AccountResource::class),
+                        ]),
+                ];
+
+                // hanya tambahkan group "People" jika company adalah primary
+                if (AuthHelper::isPrimaryCompany()) {
+                    $groups[] = NavigationGroup::make('People')
+                        ->label('People')
+                        ->icon('heroicon-o-users')
+                        ->items([
+                            ...NavigationHelper::filterNavigationByPermissions(UserResource::class),
+                            ...NavigationHelper::filterNavigationByPermissions(RoleResource::class),
+                        ]);
+                }
+
+                // group "Settings" tetap selalu ada
+                $groups[] = NavigationGroup::make('Settings')
+                    ->label('Settings')
+                    ->icon('heroicon-o-cog-6-tooth')
+                    ->items([
+                        ...NavigationHelper::filterNavigationByPermissions(Settings::class),
+                        ...NavigationHelper::filterNavigationByPermissions(OfferingResource::class),
+                        ...NavigationHelper::filterNavigationByPermissions(ConnectedAccount::class),
+                        ...NavigationHelper::filterNavigationByPermissions(LiveCurrency::class),
+                    ]);
+
                 return $builder
                     ->items([
                         ...NavigationHelper::filterNavigationByPermissions(CompanyDashboard::class),
                         ...NavigationHelper::filterNavigationByPermissions(Reports::class),
                     ])
-                    ->groups([
-                        NavigationGroup::make('Projects')
-                            ->label('Projects')
-                            ->icon('heroicon-o-briefcase')
-                            ->items([
-                                ...NavigationHelper::filterNavigationByPermissions(ProjectTypeResource::class),
-                                ...NavigationHelper::filterNavigationByPermissions(ProjectResource::class),
-                            ]),
-
-                        NavigationGroup::make('Sales')
-                            ->label('Sales')
-                            ->icon('heroicon-o-chart-bar')
-                            ->items([
-                                ...NavigationHelper::filterNavigationByPermissions(ClientResource::class),
-                                ...NavigationHelper::filterNavigationByPermissions(EstimateResource::class),
-                                ...NavigationHelper::filterNavigationByPermissions(InvoiceResource::class),
-                            ]),
-
-                        NavigationGroup::make('Purchases')
-                            ->label('Purchases')
-                            ->icon('heroicon-o-shopping-bag')
-                            ->items([
-                                ...NavigationHelper::filterNavigationByPermissions(BillResource::class),
-                                ...NavigationHelper::filterNavigationByPermissions(VendorResource::class),
-                            ]),
-
-                        NavigationGroup::make('Accounting')
-                            ->label('Accounting')
-                            ->icon('heroicon-o-banknotes')
-                            ->items([
-                                ...NavigationHelper::filterNavigationByPermissions(AccountChart::class),
-                                ...NavigationHelper::filterNavigationByPermissions(TransactionResource::class),
-                                ...NavigationHelper::filterNavigationByPermissions(AccountDefaultResource::class),
-                            ]),
-
-                        NavigationGroup::make('Asset')
-                            ->label('Asset')
-                            ->icon('heroicon-o-presentation-chart-bar')
-                            ->items([
-                                ...NavigationHelper::filterNavigationByPermissions(AssetGroupResource::class),
-                                ...NavigationHelper::filterNavigationByPermissions(AssetResource::class),
-                                ...NavigationHelper::filterNavigationByPermissions(DepreciationRecordResource::class),
-                            ]),
-
-                        NavigationGroup::make('Banking')
-                            ->label('Banking')
-                            ->icon('heroicon-o-credit-card')
-                            ->items([
-                                ...NavigationHelper::filterNavigationByPermissions(AccountResource::class),
-                            ]),
-
-                        NavigationGroup::make('People')
-                            ->label('People')
-                            ->icon('heroicon-o-users')
-                            ->items([
-                                ...NavigationHelper::filterNavigationByPermissions(UserResource::class),
-                                ...NavigationHelper::filterNavigationByPermissions(RoleResource::class),
-                            ]),
-
-                        NavigationGroup::make('Settings')
-                            ->label('Settings')
-                            ->icon('heroicon-o-cog-6-tooth')
-                            ->items([
-                                ...NavigationHelper::filterNavigationByPermissions(Settings::class),
-                                ...NavigationHelper::filterNavigationByPermissions(OfferingResource::class),
-                                ...NavigationHelper::filterNavigationByPermissions(ConnectedAccount::class),
-                                ...NavigationHelper::filterNavigationByPermissions(LiveCurrency::class),
-                            ]),
-                    ]);
+                    ->groups($groups);
             })
             ->globalSearch(false)
             ->sidebarCollapsibleOnDesktop()

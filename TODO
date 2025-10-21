@@ -17,7 +17,7 @@ Todo:
   ✔ Untuk revisi invoice, harus bisa edit walaupun sudah diapprove, kemudian invoice yang sudah diedit harus diapprove lagi. Nomor invoicenya tetep sama, namun tanggal invoicenya berubah, admin yang bisa edit @done(25-10-16 21:37)
   ✔ implementasi dept ke coa @done(25-10-20 11:32)
   ✔ Tambahkan tombol export pada form depreciation record https://drive.google.com/file/d/1IhGoB5XbqsvaP4Mj84v7hNrz64oRM9M/view?usp=drive_link @done(25-10-20 11:32)
-  ☐ Backend filter by project and by company
+  ✔ Backend filter by project and by company @done(25-10-21 22:16)
   ✔ export dep record pdf @done(25-10-21 11:07)
   ✔ invoice: tax, total pada ui belum sesuai dengan pdf @done(25-10-20 13:08)
   ✔ ketika reapprove invoice jurnal lama harus dihapus @done(25-10-20 13:08)
