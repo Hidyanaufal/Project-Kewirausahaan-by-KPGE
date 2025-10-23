@@ -34,6 +34,7 @@ Todo:
   ✔ filter nama anggota transaction @done(25-10-23 08:34)
   ✔ Filter project ini by project types @done(25-10-23 08:54)
   ✔ Income statement filter projectnya hilang @done(25-10-23 08:54)
+  ✔ Nilainya dipisah yang debit dan credit @done(25-10-23 09:01)
   ☐ Sesuaikan bentuk laporan keuangan
   ☐ Laporan Keuangan yang diperlukan:
     ☐ 1. Labarugi
@@ -44,5 +45,5 @@ Todo:
   ☐ Export xls minta disamain formatnya dengan pdf (asset)
   ☐ Kalo untung, nambah modal, kalo rugi modalnya berkurang
   ☐ Kalau di klik datanya, langsung muncul detail per invoicenya (transaction)
-  ☐ Nilainya dipisah yang debit dan credit, nomor trx pada saat input harus bisa diedit (saat ini no trx kalau mau diubah, harus disubmit dulu baru diubah)
+  ☐ nomor trx pada saat input harus bisa diedit (saat ini no trx kalau mau diubah, harus disubmit dulu baru diubah)
   ☐ Export excel tambahkan kode transaksi, debit kreditnya dipisah, tambahkan export PDF
