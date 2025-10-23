@@ -233,7 +233,8 @@ class AccountService
         string $endDate,
         array $accountIds = [],
         $projectId = null,
-        $companyId = null
+        $companyId = null,
+        $projectTypeId = null,
     ): Builder {
         $accountIds = array_map('intval', $accountIds);
 
@@ -249,27 +250,27 @@ class AccountService
             ])
             ->addSelect([
                 DB::raw("
-                    COALESCE(
-                        CASE
-                            WHEN accounts.category IN ('asset', 'expense') THEN
-                                SUM(CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END) -
-                                SUM(CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END)
-                            ELSE
-                                SUM(CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END) -
-                                SUM(CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END)
-                        END, 0
-                    ) AS starting_balance
-                "),
+                COALESCE(
+                    CASE
+                        WHEN accounts.category IN ('asset', 'expense') THEN
+                            SUM(CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END) -
+                            SUM(CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END)
+                        ELSE
+                            SUM(CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END) -
+                            SUM(CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END)
+                    END, 0
+                ) AS starting_balance
+            "),
                 DB::raw("
-                    COALESCE(SUM(
-                        CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at BETWEEN ? AND ? THEN journal_entries.amount ELSE 0 END
-                    ), 0) AS total_debit
-                "),
+                COALESCE(SUM(
+                    CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at BETWEEN ? AND ? THEN journal_entries.amount ELSE 0 END
+                ), 0) AS total_debit
+            "),
                 DB::raw("
-                    COALESCE(SUM(
-                        CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at BETWEEN ? AND ? THEN journal_entries.amount ELSE 0 END
-                    ), 0) AS total_credit
-                "),
+                COALESCE(SUM(
+                    CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at BETWEEN ? AND ? THEN journal_entries.amount ELSE 0 END
+                ), 0) AS total_credit
+            "),
             ])
             ->join('journal_entries', 'journal_entries.account_id', '=', 'accounts.id')
             ->join('transactions', function (JoinClause $join) use ($endDate) {
@@ -295,8 +296,8 @@ class AccountService
             $query->whereIn('accounts.id', $accountIds);
         }
 
-        // If either projectId or companyId is present, join invoices & bills so we can filter by their columns
-        if ($projectId !== null || $companyId !== null) {
+        // Join invoices & bills for filtering
+        if ($projectId !== null || $companyId !== null || $projectTypeId !== null) {
             $query
                 ->leftJoin('invoices', function ($join) {
                     $join->on('invoices.id', '=', 'transactions.transactionable_id')
@@ -305,6 +306,9 @@ class AccountService
                 ->leftJoin('bills', function ($join) {
                     $join->on('bills.id', '=', 'transactions.transactionable_id')
                         ->where('transactions.transactionable_type', '=', Bill::class);
+                })
+                ->leftJoin('projects', function ($join) {
+                    $join->on('projects.id', '=', DB::raw("COALESCE(invoices.project_id, bills.project_id, transactions.project_id)"));
                 });
 
             if ($projectId !== null) {
@@ -322,12 +326,17 @@ class AccountService
                         ->orWhere('transactions.company_id', $companyId);
                 });
             }
+
+            if ($projectTypeId !== null) {
+                $query->where('projects.project_type_id', $projectTypeId);
+            }
         }
 
         $query->addBinding([$startDate, $startDate, $startDate, $startDate, $startDate, $endDate, $startDate, $endDate], 'select');
 
         return $query;
     }
+
 
     /**
      * Cash flow specific account balances (only accounts linked to bank accounts).

@@ -105,28 +105,41 @@ class TransactionResource extends Resource
                     ->label('Account')
                     ->searchable()
                     ->options(static fn() => Transaction::getBankAccountOptions(excludeArchived: false)),
+
                 Tables\Filters\SelectFilter::make('account_id')
                     ->label('Category')
                     ->multiple()
                     ->options(static fn() => Transaction::getChartAccountOptions()),
+
                 Tables\Filters\TernaryFilter::make('reviewed')
-                    ->placeholder('All')
-                    ->native(false)
                     ->label('Status')
+                    ->native(false)
+                    ->placeholder('All')
                     ->trueLabel('Reviewed')
                     ->falseLabel('Not Reviewed'),
+
                 Tables\Filters\SelectFilter::make('type')
                     ->label('Type')
                     ->native(false)
                     ->options(TransactionType::class),
+
                 Tables\Filters\TernaryFilter::make('is_payment')
-                    ->placeholder('All')
+                    ->label('Payment')
                     ->native(false)
-                    ->label('Payment'),
+                    ->placeholder('All'),
+
+                Tables\Filters\SelectFilter::make('member_id')
+                    ->label('Member')
+                    ->searchable()
+                    ->options(static fn() => \App\Models\Addons\Member::query()
+                        ->orderBy('name')
+                        ->pluck('name', 'id')
+                        ->toArray()),
+
                 Tables\Filters\SelectFilter::make('payee')
                     ->label('Payee')
-                    ->options(static fn() => Transaction::getPayeeOptions())
                     ->searchable()
+                    ->options(static fn() => Transaction::getPayeeOptions())
                     ->query(function (Builder $query, array $data): Builder {
                         if (empty($data['value'])) {
                             return $query;
@@ -134,29 +147,34 @@ class TransactionResource extends Resource
 
                         $id = (int) $data['value'];
 
-                        if ($id < 0) {
-                            return $query->where('payeeable_type', Vendor::class)
-                                ->where('payeeable_id', abs($id));
-                        } else {
-                            return $query->where('payeeable_type', Client::class)
-                                ->where('payeeable_id', $id);
-                        }
+                        return $id < 0
+                            ? $query->where('payeeable_type', Vendor::class)
+                            ->where('payeeable_id', abs($id))
+                            : $query->where('payeeable_type', Client::class)
+                            ->where('payeeable_id', $id);
                     }),
+
                 static::buildDateRangeFilter('posted_at', 'Posted', true),
                 static::buildDateRangeFilter('updated_at', 'Last modified'),
             ])
             ->filtersFormSchema(fn(array $filters): array => [
                 Grid::make()
                     ->schema([
+                        // Section: General Filters
                         $filters['bank_account_id'],
                         $filters['account_id'],
                         $filters['reviewed'],
                         $filters['type'],
                         $filters['is_payment'],
+                        $filters['member_id'],
                         $filters['payee'],
                     ])
                     ->columnSpanFull()
-                    ->extraAttributes(['class' => 'border-b border-gray-200 dark:border-white/10 pb-8']),
+                    ->extraAttributes([
+                        'class' => 'border-b border-gray-200 dark:border-white/10 pb-8',
+                    ]),
+
+                // Section: Date Filters
                 $filters['posted_at'],
                 $filters['updated_at'],
             ])

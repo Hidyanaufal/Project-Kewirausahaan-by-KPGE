@@ -2,7 +2,7 @@
 
 namespace App\Filament\Forms\Addons;
 
-use App\Filament\Company\Resources\Addons\ProjectResource;
+use App\Filament\Company\Resources\Addons\ProjectTypeResource;
 use App\Helpers\AuthHelper;
 use App\Models\Company;
 use Filament\Forms;
@@ -23,7 +23,7 @@ class FilterProjectCompany
                         ->toArray();
                     return $companies;
                 }),
-            ProjectResource::options()
+            ProjectTypeResource::options()
                 ->required(false),
         ];
     }

@@ -37,8 +37,9 @@ class IncomeOverview extends BaseWidget implements HasForms
                 'account_name',
                 'net_movement',
             ],
-            projectId: $this->filters['project_id'],
+            projectId: $this->filters['project_id'] ?? null,
             companyId: AuthHelper::isPrimaryCompany() ? $this->filters['company_id'] : null,
+            projectTypeId: $this->filters['project_type_id'] ?? null,
         );
 
         $transformer = new IncomeStatementReportTransformer($reportDTO);

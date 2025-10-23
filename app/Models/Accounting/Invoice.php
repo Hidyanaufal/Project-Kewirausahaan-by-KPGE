@@ -39,6 +39,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
@@ -248,6 +249,69 @@ class Invoice extends Document
                     ]);
                 }
             }
+
+            /**
+             * Merge journal by transaction khusus untuk (PPN, PPN WAPU, PPh23)
+             */
+            DB::transaction(function () use ($record) {
+                // Definisikan akun pajak
+                $pph23Account = Account::getAccountsPPh23();
+                $ppnAccount   = Account::getAccountsPPn();
+                $wapuAccount  = Account::getAccountsWapu();
+
+                $taxAccounts = [
+                    $pph23Account->id,
+                    $ppnAccount->id,
+                    $wapuAccount->id,
+                ];
+
+                // Ambil semua transaksi yang terkait dengan invoice ini
+                $transactions = Transaction::where('transactionable_type', Invoice::class)
+                    ->where('transactionable_id', $record->id)
+                    ->get();
+
+                foreach ($transactions as $trx) {
+                    $journals = JournalEntry::where('transaction_id', $trx->id)->get();
+
+                    if ($journals->isEmpty()) continue;
+
+                    // Filter hanya journal pajak
+                    $taxJournals = $journals->whereIn('account_id', $taxAccounts);
+                    if ($taxJournals->isEmpty()) continue;
+
+                    // Gabungkan per akun pajak agar tetap terpisah (PPN, PPh23, WAPU)
+                    $mergedTax = $taxJournals
+                        ->groupBy(['account_id', 'type'])
+                        ->map(function ($byType, $accountId) use ($trx, $record) {
+                            return collect($byType)->map(function ($group, $type) use ($accountId, $trx, $record) {
+                                return [
+                                    'company_id'     => $trx->company_id,
+                                    'account_id'     => $accountId,
+                                    'transaction_id' => $trx->id,
+                                    'type'           => $type,
+                                    'amount'         => $group->sum('amount'),
+                                    'description'    => "Tax entry ({$group->first()->account->name}) for Invoice #{$record->invoice_number}",
+                                    'created_by'     => $record->updated_by ?? 1,
+                                    'updated_by'     => $record->updated_by ?? 1,
+                                    'created_at'     => now(),
+                                    'updated_at'     => now(),
+                                ];
+                            });
+                        })
+                        ->flatten(1)
+                        ->values();
+
+                    // Hapus journal pajak lama
+                    JournalEntry::where('transaction_id', $trx->id)
+                        ->whereIn('account_id', $taxAccounts)
+                        ->delete();
+
+                    // Insert hasil agregasi
+                    if ($mergedTax->isNotEmpty()) {
+                        JournalEntry::insert($mergedTax->toArray());
+                    }
+                }
+            });
         });
     }
 

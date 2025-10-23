@@ -11,6 +11,7 @@ use App\Enums\Accounting\TransactionType;
 use App\Filament\Company\Resources\Accounting\TransactionResource\Pages\ViewTransaction;
 use App\Filament\Company\Resources\Purchases\BillResource\Pages\ViewBill;
 use App\Filament\Company\Resources\Sales\InvoiceResource\Pages\ViewInvoice;
+use App\Models\Addons\Member;
 use App\Models\Addons\Project;
 use App\Models\Banking\BankAccount;
 use App\Models\Common\Client;
@@ -59,6 +60,7 @@ class Transaction extends Model
         'meta',
         'project_id',
         'transaction_code',
+        'member_id'
     ];
 
     protected $casts = [
@@ -95,6 +97,11 @@ class Transaction extends Model
                 }
             }
         });
+    }
+
+    public function member(): BelongsTo
+    {
+        return $this->belongsTo(Member::class);
     }
 
     public function account(): BelongsTo

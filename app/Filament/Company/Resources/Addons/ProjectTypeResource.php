@@ -2,7 +2,9 @@
 
 namespace App\Filament\Company\Resources\Addons;
 
+use App\Concerns\HasOptions;
 use App\Concerns\HasPermissionCheck;
+use App\Concerns\UnscopedResource;
 use App\Filament\Company\Resources\Addons\ProjectTypeResource\Pages;
 use App\Models\Addons\ProjectType;
 use Filament\Forms;
@@ -14,7 +16,9 @@ use Filament\Tables\Table;
 
 class ProjectTypeResource extends Resource
 {
+    use HasOptions;
     use HasPermissionCheck;
+    use UnscopedResource;
 
     protected static ?string $model = ProjectType::class;
 

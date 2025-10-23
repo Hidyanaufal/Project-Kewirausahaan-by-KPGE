@@ -388,20 +388,21 @@ class ReportService
         string $endDate,
         array $columns = [],
         $projectId = null,
-        $companyId = null
+        $companyId = null,
+        $projectTypeId = null,
     ): ReportDTO {
         // Query only relevant accounts and sort them at the query level
-        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
             ->where('category', AccountCategory::Revenue)
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $cogsAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $cogsAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
             ->whereRelation('subtype', 'name', 'Cost of Goods Sold')
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
             ->where('category', AccountCategory::Expense)
             ->whereRelation('subtype', 'name', '!=', 'Cost of Goods Sold')
             ->orderByRaw('LENGTH(code), code')

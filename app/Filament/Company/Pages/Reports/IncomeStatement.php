@@ -5,6 +5,7 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
+use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Filament\Forms\Addons\FilterProjectCompany;
 use App\Services\ExportService;
 use App\Services\ReportService;
@@ -59,7 +60,8 @@ class IncomeStatement extends BaseReportPage
                 ])->extraFieldWrapperAttributes([
                     'class' => 'report-hidden-label',
                 ]),
-                // ...FilterProjectCompany::make(),
+                ProjectResource::options()
+                    ->required(false),
             ]);
     }
 
