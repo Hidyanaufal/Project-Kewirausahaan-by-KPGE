@@ -117,30 +117,21 @@
                 @endforeach
 
                 <tr>
-                    <td class="px-2 py-1" colspan="2">
-                        @if ($document->referenceNumber || $document->dueDate)
-                            <div class="text-[11px] text-gray-800 leading-snug">
-                                @if ($document->referenceNumber)
-                                    <strong>Ref PO</strong><br>
-                                    No. PO: {{ $document->referenceNumber }}<br>
-                                @endif
+                    <td colspan="2" class="px-2 py-1 text-[11px] text-gray-800 leading-snug">
+                        @if ($document->dueDate)
+                            <div>
                                 @if ($document->dueDate)
                                     Tanggal: {{ \Carbon\Carbon::parse($document->dueDate)->format('d F Y') }}
+                                @endif
+                            </div>
+                            <div>
+                                @if ($document->profit)
+                                    Profit {{ $document->profitPercentage }}%: {{ $document->profit }}
                                 @endif
                             </div>
                         @endif
                     </td>
                 </tr>
-
-                <!-- Profit -->
-                @if ($document->profit)
-                <tr>
-                    <td colspan="2" class="px-2 text-right">Profit {{ $document->profitPercentage }}%</td>
-                    <td class="px-2 text-right">
-                        {{ $document->profit }}
-                    </td>
-                </tr>
-                @endif
 
                 <!-- Jumlah -->
                 <tr>

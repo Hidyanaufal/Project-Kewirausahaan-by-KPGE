@@ -201,7 +201,8 @@ class RecordPayments extends ListRecords
             ->live()
             ->columns(2)
             ->schema([
-                Forms\Components\TextInput::make('transaction_code'),
+                Forms\Components\TextInput::make('transaction_code')
+                    ->default(fn() => Transaction::getNextDocumentNumber()),
                 Forms\Components\Grid::make(2) // Changed from 3 to 4
                     ->schema([
                         Forms\Components\Select::make('bank_account_id')

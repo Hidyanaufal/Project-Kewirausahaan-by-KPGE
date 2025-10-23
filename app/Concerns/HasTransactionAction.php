@@ -42,6 +42,8 @@ trait HasTransactionAction
     {
         $commonDefaults = [
             'posted_at' => company_today()->toDateString(),
+            'bank_account_id' => BankAccount::defaultId(),
+            'transaction_code' => Transaction::getNextDocumentNumber($type)
         ];
 
         return match ($type) {
@@ -83,8 +85,7 @@ trait HasTransactionAction
             ->schema([
                 Forms\Components\Hidden::make('id'),
                 Forms\Components\TextInput::make('transaction_code')
-                    ->required(false)
-                    ->hidden(fn(Forms\Get $get) => empty($get('id'))),
+                    ->required(false),
                 Forms\Components\DatePicker::make('posted_at')
                     ->label('Date')
                     ->required(),
@@ -131,8 +132,7 @@ trait HasTransactionAction
             ->schema([
                 Forms\Components\Hidden::make('id'),
                 Forms\Components\TextInput::make('transaction_code')
-                    ->required(false)
-                    ->hidden(fn(Forms\Get $get) => empty($get('id'))),
+                    ->required(false),
                 Forms\Components\DatePicker::make('posted_at')
                     ->label('Date')
                     ->required(),
@@ -220,6 +220,8 @@ trait HasTransactionAction
                     ->softRequired(),
                 Forms\Components\TextInput::make('description')
                     ->label('Description')
+                    ->columnSpan(2),
+                Forms\Components\TextInput::make('transaction_code')
                     ->columnSpan(2),
             ]);
     }

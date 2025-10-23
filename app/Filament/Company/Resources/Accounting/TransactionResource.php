@@ -86,28 +86,18 @@ class TransactionResource extends Resource
                     ->searchable()
                     ->toggleable()
                     ->state(static fn(Transaction $transaction) => $transaction->account->name ?? 'Journal Entry'),
-                Tables\Columns\TextColumn::make('debit')
-                    ->label('Debit')
-                    ->color(Color::rgb('rgb(' . Color::Green[700] . ')'))
-                    ->state(
-                        fn(Transaction $record) =>
-                        $record->type === TransactionType::Deposit ? $record->amount : null
+                Tables\Columns\TextColumn::make('amount')
+                    ->label('Amount')
+                    ->weight(static fn(Transaction $transaction) => $transaction->reviewed ? null : FontWeight::SemiBold)
+                    ->color(
+                        static fn(Transaction $transaction) => match ($transaction->type) {
+                            TransactionType::Deposit => Color::rgb('rgb(' . Color::Green[700] . ')'),
+                            TransactionType::Journal => 'primary',
+                            default => null,
+                        }
                     )
-                    ->alignRight()
-                    ->currency(fn(Transaction $record) => $record->bankAccount?->account->currency_code)
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('credit')
-                    ->label('Credit')
-                    ->color(Color::rgb('rgb(' . Color::Red[700] . ')'))
-                    ->state(
-                        fn(Transaction $record) =>
-                        $record->type === TransactionType::Withdrawal ? $record->amount : null
-                    )
-                    ->alignRight()
-                    ->currency(fn(Transaction $record) => $record->bankAccount?->account->currency_code)
-                    ->sortable(),
-
+                    ->sortable()
+                    ->currency(static fn(Transaction $transaction) => $transaction->bankAccount?->account->currency_code),
             ])
             ->defaultSort('id', 'desc')
             ->filters([

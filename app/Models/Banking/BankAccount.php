@@ -51,6 +51,26 @@ class BankAccount extends Model
         'mask',
     ];
 
+    public static function default(): ?BankAccount
+    {
+        $bankDefault = BankAccount::where([
+            'enabled' => true
+        ])->first();
+        if ($bankDefault) {
+            return $bankDefault;
+        }
+        return null;
+    }
+
+    public static function defaultId(): ?int
+    {
+        $bankDefault = static::default();
+        if ($bankDefault) {
+            return $bankDefault->id;
+        }
+        return null;
+    }
+
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'account_id');

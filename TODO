@@ -44,6 +44,6 @@ Todo:
   ☐ Report cashflow, export excel isinya kosong, format disesuaikan dengan pdfnya saja
   ☐ Export xls minta disamain formatnya dengan pdf (asset)
   ☐ Kalo untung, nambah modal, kalo rugi modalnya berkurang
-  ☐ Kalau di klik datanya, langsung muncul detail per invoicenya (transaction)
-  ☐ nomor trx pada saat input harus bisa diedit (saat ini no trx kalau mau diubah, harus disubmit dulu baru diubah)
+  ✘ Kalau di klik datanya, langsung muncul detail per invoicenya (transaction) @cancelled(25-10-23 14:43)
+  ☐ nomor trx pada saat input harus bisa diedit (saat ini no trx kalau mau diubah, harus disubmit dulu baru diubah) @started(25-10-23 14:44)
   ☐ Export excel tambahkan kode transaksi, debit kreditnya dipisah, tambahkan export PDF

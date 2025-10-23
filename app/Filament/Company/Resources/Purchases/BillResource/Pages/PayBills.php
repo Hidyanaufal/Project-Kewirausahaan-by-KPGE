@@ -151,7 +151,8 @@ class PayBills extends ListRecords
             ->live()
             ->columns(3)
             ->schema([
-                Forms\Components\TextInput::make('transaction_code'),
+                Forms\Components\TextInput::make('transaction_code')
+                    ->default(fn() => Transaction::getNextDocumentNumber()),
                 Forms\Components\Grid::make(3)
                     ->schema([
                         Forms\Components\Select::make('bank_account_id')

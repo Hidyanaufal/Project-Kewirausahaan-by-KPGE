@@ -75,28 +75,60 @@ class Transaction extends Model
     protected static function boot()
     {
         parent::boot();
+
         static::creating(function ($model) {
             if (!$model->transaction_code) {
-                $date = $model->posted_at ?? now();
-                $prefix = match ($model->type) {
-                    TransactionType::Deposit => 'BM', // Bank Masuk
-                    TransactionType::Withdrawal => 'BK', // Bank Keluar
-                    default => 'TRX',
-                };
-                $bankCode = $model?->bankAccount?->account?->bank_code ?? '';
-                $ym = $date->format('ym');
-                $count = static::where('type', $model->type)
-                    ->whereYear('posted_at', $date->year)
-                    ->whereMonth('posted_at', $date->month)
-                    ->count() + 1;
-                $sequence = str_pad($count, 3, '0', STR_PAD_LEFT);
-                if ($bankCode) {
-                    $model->transaction_code = "{$bankCode}/{$prefix}/{$ym}/{$sequence}";
-                } else {
-                    $model->transaction_code = "{$prefix}/{$ym}/{$sequence}";
-                }
+                $model->transaction_code = static::generateTransactionCode(
+                    type: $model->type,
+                    bankCode: $model?->bankAccount?->account?->bank_code ?? null,
+                    date: $model->posted_at ?? now()
+                );
             }
         });
+    }
+
+    /**
+     * Generate transaction code (e.g. BANK/BM/2510/001)
+     */
+    public static function generateTransactionCode(
+        ?TransactionType $type = null,
+        ?string $bankCode = null,
+        ?\Carbon\Carbon $date = null
+    ): string {
+        $date = $date ?? now();
+
+        $prefix = match ($type) {
+            TransactionType::Deposit => 'BM', // Bank Masuk
+            TransactionType::Withdrawal => 'BK', // Bank Keluar
+            default => 'TRX',
+        };
+
+        $ym = $date->format('ym');
+        $count = static::where('type', $type?->value)
+            ->whereYear('posted_at', $date->year)
+            ->whereMonth('posted_at', $date->month)
+            ->count() + 1;
+
+        $sequence = str_pad($count, 3, '0', STR_PAD_LEFT);
+
+        return $bankCode
+            ? "{$bankCode}/{$prefix}/{$ym}/{$sequence}"
+            : "{$prefix}/{$ym}/{$sequence}";
+    }
+
+    /**
+     * Get next document number (without saving)
+     */
+    public static function getNextDocumentNumber(?TransactionType $type = null): string
+    {
+        $bankAccount = BankAccount::default();
+        if ($type == TransactionType::Journal) {
+            $bankAccount = null;
+        }
+        return static::generateTransactionCode(
+            type: $type,
+            bankCode: $bankAccount?->account?->bank_code ?? null
+        );
     }
 
     public function member(): BelongsTo
