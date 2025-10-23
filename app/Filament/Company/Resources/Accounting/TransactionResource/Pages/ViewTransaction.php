@@ -29,8 +29,8 @@ use function Filament\Support\get_model_label;
 
 class ViewTransaction extends ViewRecord
 {
-
     use \App\Concerns\HideFromSpotlight;
+
     protected static string $resource = TransactionResource::class;
 
     protected $listeners = [

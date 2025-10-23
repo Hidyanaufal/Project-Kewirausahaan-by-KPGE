@@ -85,6 +85,10 @@ abstract class BaseAccountCategoryChartWidget extends ChartWidget implements Has
                     'borderWidth' => 0,
                 ],
             ],
+            'animation' => [
+                'duration' => 1000,
+                'easing' => 'easeInOutQuart',
+            ],
         ];
     }
 }

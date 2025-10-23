@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\Accounting\DocumentType;
 use App\Models\Accounting\AccountSubtype;
+use App\Models\Accounting\JournalEntry;
 use App\Models\Addons\Asset;
 use App\Models\Addons\AssetGroup;
 use App\Models\Addons\DepreciationRecord;
@@ -248,5 +249,10 @@ class Company extends FilamentCompaniesCompany implements HasAvatar
     public function accountDefaults(): HasMany
     {
         return $this->hasMany(AccountDefault::class, 'company_id');
+    }
+
+    public function journalEntries(): HasMany
+    {
+        return $this->hasMany(JournalEntry::class, 'company_id');
     }
 }

@@ -33,6 +33,7 @@ class ViewBill extends ViewRecord
                 ->label('Edit bill')
                 ->outlined()
                 ->requiresConfirmation()
+                ->visible(fn(Model $record) => $record->status == BillStatus::Draft)
                 ->action(function (Model $record) {
                     $isAdmin = AuthHelper::isAdmin();
                     if (!$isAdmin) {

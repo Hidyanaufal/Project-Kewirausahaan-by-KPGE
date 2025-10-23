@@ -87,6 +87,10 @@ class AccountMovementsChartWidget extends ChartWidget implements HasForms
                     'borderWidth' => 0,
                 ],
             ],
+            'animation' => [
+                'duration' => 1000,
+                'easing' => 'easeInOutQuart',
+            ],
         ];
     }
 }

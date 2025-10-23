@@ -132,18 +132,13 @@ trait HasTransactionAction
             ->schema([
                 Forms\Components\Hidden::make('id'),
                 Forms\Components\TextInput::make('transaction_code')
+                    ->columnSpanFull()
                     ->required(false),
                 Forms\Components\DatePicker::make('posted_at')
                     ->label('Date')
                     ->required(),
                 Forms\Components\TextInput::make('description')
                     ->label('Description'),
-                Forms\Components\Select::make('bank_account_id')
-                    ->label('From account')
-                    ->options(fn(Forms\Get $get, ?Transaction $transaction) => Transaction::getBankAccountOptions(excludedAccountId: $get('account_id'), currentBankAccountId: $transaction?->bank_account_id))
-                    ->live()
-                    ->searchable()
-                    ->required(),
                 Forms\Components\Select::make('type')
                     ->label('Type')
                     ->options([
@@ -155,6 +150,12 @@ trait HasTransactionAction
                 Forms\Components\TextInput::make('amount')
                     ->label('Amount')
                     ->money(static fn(Forms\Get $get) => BankAccount::find($get('bank_account_id'))?->account?->currency_code ?? CurrencyAccessor::getDefaultCurrency())
+                    ->required(),
+                Forms\Components\Select::make('bank_account_id')
+                    ->label('From account')
+                    ->options(fn(Forms\Get $get, ?Transaction $transaction) => Transaction::getBankAccountOptions(excludedAccountId: $get('account_id'), currentBankAccountId: $transaction?->bank_account_id))
+                    ->live()
+                    ->searchable()
                     ->required(),
                 Forms\Components\Select::make('account_id')
                     ->label('To account')

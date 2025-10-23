@@ -2,7 +2,6 @@
 
 namespace App\Providers\Filament;
 
-use AchyutN\FilamentLogViewer\FilamentLogViewer;
 use App\Actions\FilamentCompanies\AddCompanyEmployee;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use App\Actions\FilamentCompanies\CreateConnectedAccount;
@@ -27,6 +26,7 @@ use App\Filament\Company\Pages\ManageCompany;
 use App\Filament\Company\Pages\Reports;
 use App\Filament\Company\Pages\Service\ConnectedAccount;
 use App\Filament\Company\Pages\Service\LiveCurrency;
+use App\Filament\Company\Resources\Accounting\JournalEntryResource;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
 use App\Filament\Company\Resources\Addons\AccountDefaultResource;
 use App\Filament\Company\Resources\Addons\AssetGroupResource;
@@ -43,7 +43,6 @@ use App\Filament\Company\Resources\Purchases\VendorResource;
 use App\Filament\Company\Resources\Sales\ClientResource;
 use App\Filament\Company\Resources\Sales\EstimateResource;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
-use App\Filament\Company\Resources\Sales\RecurringInvoiceResource;
 use App\Filament\Components\PanelShiftDropdown;
 use App\Filament\Pages\Auth\Login;
 use App\Filament\User\Clusters\Account;
@@ -172,7 +171,7 @@ class CompanyPanelProvider extends PanelProvider
                         ->icon('heroicon-o-banknotes')
                         ->items([
                             ...NavigationHelper::filterNavigationByPermissions(AccountChart::class),
-                            ...NavigationHelper::filterNavigationByPermissions(TransactionResource::class),
+                            ...NavigationHelper::filterNavigationByPermissions(JournalEntryResource::class),
                             ...NavigationHelper::filterNavigationByPermissions(AccountDefaultResource::class),
                         ]),
 
@@ -193,7 +192,6 @@ class CompanyPanelProvider extends PanelProvider
                         ]),
                 ];
 
-                // hanya tambahkan group "People" jika company adalah primary
                 if (AuthHelper::isPrimaryCompany()) {
                     $groups[] = NavigationGroup::make('People')
                         ->label('People')
@@ -204,7 +202,6 @@ class CompanyPanelProvider extends PanelProvider
                         ]);
                 }
 
-                // group "Settings" tetap selalu ada
                 $groups[] = NavigationGroup::make('Settings')
                     ->label('Settings')
                     ->icon('heroicon-o-cog-6-tooth')
