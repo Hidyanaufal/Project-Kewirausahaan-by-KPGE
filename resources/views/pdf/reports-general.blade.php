@@ -25,6 +25,10 @@
         table th, table td {
             padding: 0px;
         }
+        table th{
+            padding: 0px;
+            border-bottom: 2px solid #000;
+        }
         .category-header {
             font-weight: bold;
         }
@@ -46,19 +50,26 @@
             </thead>
             <tbody>
                 @foreach ($data['categories'] as $category)
-                    <tr class="category-header">
-                        <td>{{ $category['name'] }}</td>
-                    </tr>
-                    @foreach ($category['items'] as $item)
-                        <tr>
-                            <td>
-                                <p style="padding-left: 20px">
-                                    {{ $item['name'] }}
-                                </p>
-                            </td>
-                            <td style="text-align: right;">{{ number_format($item['value'], 2, ',', '.') }}</td>
+                    @if (isset($category['items']))
+                        <tr class="category-header">
+                            <td>{{ $category['name'] }}</td>
                         </tr>
-                    @endforeach
+                        @foreach ($category['items'] as $item)
+                            <tr>
+                                <td>
+                                    <p style="padding-left: 20px">
+                                        {{ $item['name'] }}
+                                    </p>
+                                </td>
+                                <td style="text-align: right;">{{ number_format($item['value'], 2, ',', '.') }}</td>
+                            </tr>
+                        @endforeach
+                    @else
+                        <tr class="category-header">
+                            <td>{{ $category['name'] }}</td>
+                            <td style="text-align: right;">{{ number_format($category['value'], 2, ',', '.') }}</td>
+                        </tr>
+                    @endif
                 @endforeach
             </tbody>
         </table>

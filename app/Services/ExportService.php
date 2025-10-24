@@ -376,6 +376,7 @@ class ExportService
             'company_name' => 'PT. KASTRIA PRATAMA PERSADA ENERGY',
             'report_title' => 'Profit & Loss (Standard)',
             'report_period' => 'From 01 Jan 2024 to 31 Dec 2024',
+            'report_period_date' => '01 Jan - 31 Dec 2024',
             'categories' => [
                 [
                     'name' => 'OPERATING REVENUE',
@@ -392,6 +393,10 @@ class ExportService
                     ]
                 ],
                 [
+                    'name' => 'Total Cost of OPERATING REVENUE',
+                    'value' => 123255050500
+                ],
+                [
                     'name' => 'Cost of Goods Sold',
                     'items' => [
                         ['name' => 'Total COGS', 'value' => 239049993150],
@@ -406,6 +411,10 @@ class ExportService
                         ['name' => 'HPP TK - Bukit Daun', 'value' => 40296914900],
                         ['name' => 'HPP TK - SCM', 'value' => 123255050500],
                     ]
+                ],
+                [
+                    'name' => 'Total Cost of Goods Sold',
+                    'value' => 123255050500
                 ],
                 [
                     'name' => 'Net Profit/Loss',
