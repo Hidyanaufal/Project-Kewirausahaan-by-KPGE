@@ -6,7 +6,6 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 30px;
             text-align: center;
         }
         h1, h2, h3, p {
@@ -15,14 +14,20 @@
         }
         h1 {
             color: rgb(179, 2, 2);
+            font-size: 20px
+        }
+
+        h3 {
+            font-size: 15px;
         }
         table {
-            width: 75%;
+            width: 90%;
             border-collapse: collapse;
-            margin-top: 50px;
+            margin-top: 30px;
         }
         table th, table td {
             padding: 0px;
+            font-size: 10px;
         }
         table th{
             padding: 0px;
@@ -30,6 +35,7 @@
         }
         .category-header {
             font-weight: bold;
+            font-size: 11px;
         }
     </style>
 </head>
