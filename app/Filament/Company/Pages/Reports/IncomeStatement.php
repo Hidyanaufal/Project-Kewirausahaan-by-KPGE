@@ -88,7 +88,8 @@ class IncomeStatement extends BaseReportPage
 
     public function exportPDF(): StreamedResponse
     {
-        return $this->exportService->exportToPdf($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'), $this->getActiveTab());
+        // return $this->exportService->exportToPdf($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'), $this->getActiveTab());
+        return $this->exportService->exportToPdf2($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'), $this->getActiveTab());
     }
 
     public function exportXLSX(): BinaryFileResponse

@@ -364,4 +364,63 @@ class ExportService
 
         return Excel::download($export, $filename);
     }
+
+    public function exportToPdf2(Company $company, ExportableReport $report, ?string $startDate = null, ?string $endDate = null): StreamedResponse
+    {
+        $formattedStartDate = Carbon::parse($startDate)->toDateString();
+        $formattedEndDate = Carbon::parse($endDate)->toDateString();
+        $dateLabel = $formattedStartDate . ' to ' . $formattedEndDate;
+        $timestamp = Carbon::now()->format('Y-m-d_H-i-s');
+        $filename = $company->name . ' ' . $report->getTitle() . ' ' . $dateLabel . ' ' . $timestamp . '.pdf';
+        $data = [
+            'company_name' => 'PT. KASTRIA PRATAMA PERSADA ENERGY',
+            'report_title' => 'Profit & Loss (Standard)',
+            'report_period' => 'From 01 Jan 2024 to 31 Dec 2024',
+            'categories' => [
+                [
+                    'name' => 'OPERATING REVENUE',
+                    'items' => [
+                        ['name' => 'Pendapatan', 'value' => 258177117700],
+                        ['name' => 'Pendapatan Korpel', 'value' => 51409223700],
+                        ['name' => 'Pendapatan SDM', 'value' => 80560146600],
+                        ['name' => 'Pendapatan Welsite', 'value' => 22031957900],
+                        ['name' => 'Pendapatan Tiket', 'value' => 35919143500],
+                        ['name' => 'Pendapatan Pengadaan Barang', 'value' => 107192399900],
+                        ['name' => 'Pendapatan Tenaga Kerja Bukit Daun', 'value' => 43410375300],
+                        ['name' => 'Pendapatan Survey', 'value' => 56231009000],
+                        ['name' => 'Pendapatan Tenaga Kerja SCM', 'value' => 25345648700],
+                    ]
+                ],
+                [
+                    'name' => 'Cost of Goods Sold',
+                    'items' => [
+                        ['name' => 'Total COGS', 'value' => 239049993150],
+                        ['name' => 'HPP TK - Korpel', 'value' => 394617833600],
+                        ['name' => 'HPP TK - SDM', 'value' => 7452557001],
+                        ['name' => 'HPP TK - Website / PSD', 'value' => 205274608500],
+                        ['name' => 'HPP Tiket', 'value' => 35074562202],
+                        ['name' => 'HPP - BPJS', 'value' => 105472910100],
+                        ['name' => 'HPP - PPh 21', 'value' => 30678363700],
+                        ['name' => 'HPP Pengadaan Barang', 'value' => 94740288600],
+                        ['name' => 'HPP Survey', 'value' => 54747185200],
+                        ['name' => 'HPP TK - Bukit Daun', 'value' => 40296914900],
+                        ['name' => 'HPP TK - SCM', 'value' => 123255050500],
+                    ]
+                ],
+                [
+                    'name' => 'Net Profit/Loss',
+                    'items' => [
+                        ['name' => 'NET PROFIT/LOSS (Before Tax)', 'value' => 335395413427],
+                        ['name' => 'NET PROFIT/LOSS (After Tax)', 'value' => 335395413427],
+                    ]
+                ],
+            ]
+        ];
+        $pdf = SnappyPdf::loadView('pdf.reports-general', [
+            'data' => $data,
+        ]);
+        return response()->streamDownload(function () use ($pdf) {
+            echo $pdf->inline();
+        }, $filename);
+    }
 }

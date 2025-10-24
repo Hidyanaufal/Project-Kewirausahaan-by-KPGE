@@ -38,11 +38,11 @@ abstract class BaseReportPage extends Page
 
     abstract protected function buildReport(array $columns): ReportDTO;
 
+    abstract public function exportXLSX(): BinaryFileResponse;
+
     abstract public function exportCSV(): StreamedResponse;
 
     abstract public function exportPDF(): StreamedResponse;
-
-    // abstract public function exportEXCEL(): BinaryFileResponse;
 
     abstract protected function getTransformer(ReportDTO $reportDTO): ExportableReport;
 
@@ -228,9 +228,6 @@ abstract class BaseReportPage extends Page
                 Action::make('exportXLSX')
                     ->label('XLSX')
                     ->action(fn() => $this->exportXLSX()),
-                Action::make('exportCSV')
-                    ->label('CSV')
-                    ->action(fn() => $this->exportCSV()),
                 Action::make('exportPDF')
                     ->label('PDF')
                     ->hidden(is_demo_environment())
