@@ -427,14 +427,9 @@ class ExportService
         ];
         $pdf = SnappyPdf::loadView('pdf.reports-general', [
             'data' => $data,
-        ])
-            ->setOption('page-size', 'A4')
-            ->setOption('margin-top', '10mm')
-            ->setOption('margin-bottom', '10mm')
-            ->setOption('margin-left', '15mm')
-            ->setOption('margin-right', '15mm');
+        ]);
         return response()->streamDownload(function () use ($pdf) {
-            echo $pdf->inline();
+            echo $pdf->output();
         }, $filename);
     }
 }

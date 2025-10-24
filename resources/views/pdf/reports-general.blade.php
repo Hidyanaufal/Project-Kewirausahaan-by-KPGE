@@ -1,13 +1,12 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $data['company_name'] }} - {{ $data['report_title'] }}</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px 100px;
+            margin: 30px;
             text-align: center;
         }
         h1, h2, h3, p {
