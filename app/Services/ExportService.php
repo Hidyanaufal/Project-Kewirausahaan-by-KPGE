@@ -295,10 +295,10 @@ class ExportService
             'zoom' => 1,
             'enable-local-file-access' => true,
             'encoding' => 'UTF-8',
-            'margin-top' => 0,
-            'margin-bottom' => 0,
-            'margin-left' => 0,
-            'margin-right' => 0,
+            'margin-top' => 5,
+            'margin-bottom' => 5,
+            'margin-left' => 5,
+            'margin-right' => 5,
             'disable-smart-shrinking' => true,
         ]);
 
@@ -397,10 +397,10 @@ class ExportService
             'zoom' => 1,
             'enable-local-file-access' => true,
             'encoding' => 'UTF-8',
-            'margin-top' => 0,
-            'margin-bottom' => 0,
-            'margin-left' => 0,
-            'margin-right' => 0,
+            'margin-top' => 5,
+            'margin-bottom' => 5,
+            'margin-left' => 5,
+            'margin-right' => 5,
             'disable-smart-shrinking' => true,
         ]);
 

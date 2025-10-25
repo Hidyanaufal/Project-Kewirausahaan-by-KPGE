@@ -106,7 +106,6 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                 'data' => $companyHeader,
                 'style' => [
                     'font-weight' => 'bold',
-                    'font-size' => '11px',
                 ],
             ]);
 
@@ -137,7 +136,6 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
 
                 $rows->push([
                     'data' => $rowData,
-                    'style' => ['font-size' => '10px'],
                 ]);
             }
 
@@ -155,7 +153,6 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                 'data' => $subtotalRow,
                 'style' => [
                     'font-weight' => 'bold',
-                    'font-size' => '10.5px',
                     'color' => 'rgb(6, 6, 174)'
                 ],
             ]);
@@ -232,8 +229,7 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                 $rows->push([
                     'data' => $rowData,
                     'style' => [
-                        'font-size' => '10px',
-                        'padding-left' => '20px',
+                        'padding-left' => '15px',
                     ],
                 ]);
             }

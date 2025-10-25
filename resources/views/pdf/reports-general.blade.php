@@ -25,6 +25,7 @@
         body {
             font-family: 'Roboto', sans-serif;
             text-align: center;
+            font-size: 9px;
         }
         h1, h2, h3, p {
             margin: 0;
@@ -44,7 +45,6 @@
         }
         table th, table td {
             padding: 0;
-            font-size: 10px;
         }
         table th {
             border-bottom: 1px solid #000;

@@ -100,7 +100,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
 
         $toNumber = fn($v) => is_null($v)
             ? 0
-            : (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $v));
+            : (float) str_replace(',', '.', preg_replace('/[^\d]/', '', $v));
 
         $data = [
             'filename'           => "{$company->name} {$report->getTitle()} {$now}.pdf",
@@ -120,7 +120,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
             $headerName = strtoupper($cat->header['account_name'] ?? 'UNKNOWN');
             $rows->push([
                 'data' => [$headerName],
-                'style' => ['font-weight' => 'bold', 'font-size' => '11px'],
+                'style' => ['font-weight' => 'bold'],
             ]);
 
             foreach ($cat->data as $item) {
@@ -133,7 +133,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
                         $name,
                         $toNumber($item['net_movement'] ?? 0),
                     ],
-                    'style' => ['font-size' => '10px', 'padding-left' => '20px'],
+                    'style' => ['padding-left' => '20px'],
                 ]);
             }
 
@@ -142,23 +142,23 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
                     "Total Cost of {$headerName}",
                     $toNumber($cat->summary['net_movement'] ?? 0),
                 ],
-                'style' => ['font-weight' => 'bold', 'font-size' => '10px'],
+                'style' => ['font-weight' => 'bold'],
             ]);
         }
 
         $rows->push([
             'data' => ['GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement'])],
-            'style' => ['font-weight' => 'bold', 'font-size' => '11px'],
+            'style' => ['font-weight' => 'bold'],
         ]);
 
         $rows->push([
             'data' => ['NET PROFIT/LOSS (Before Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
-            'style' => ['font-weight' => 'bold', 'font-size' => '11px'],
+            'style' => ['font-weight' => 'bold'],
         ]);
 
         $rows->push([
             'data' => ['NET PROFIT/LOSS (After Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
-            'style' => ['font-weight' => 'bold', 'font-size' => '11px'],
+            'style' => ['font-weight' => 'bold'],
         ]);
 
         $data['rows'] = $rows->toArray();
