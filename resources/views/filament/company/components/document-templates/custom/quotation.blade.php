@@ -170,6 +170,7 @@
             <div class="text-center w-1/2">
                 <p>{{ $document->client?->name }}</p>
                 <div class="mt-20">
+                    <p>(.................................................)</p>
                 </div>
             </div>
 
@@ -180,7 +181,6 @@
                     <div class="h-16"></div>
                 </div>
                 <p class="mt-2 font-bold">{{ $document->beneficiaryName }}</p>
-                {{-- <p>{{ $document->beneficiaryTitle }}</p> --}}
             </div>
         </div>
 
