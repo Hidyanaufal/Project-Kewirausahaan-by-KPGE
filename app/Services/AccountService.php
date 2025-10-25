@@ -558,7 +558,8 @@ class AccountService
             ->select([
                 'invoices.id',
                 'invoices.client_id',
-                'invoices.due_date',
+                'invoices.invoice_number as code',
+                'invoices.date',
                 'invoices.amount_due',
                 'invoices.currency_code',
                 DB::raw("{$datediff} as days_overdue"),

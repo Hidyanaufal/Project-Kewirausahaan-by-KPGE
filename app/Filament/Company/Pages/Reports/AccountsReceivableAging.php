@@ -7,6 +7,10 @@ use App\Enums\Accounting\DocumentEntityType;
 use App\Helpers\AuthHelper;
 use App\Models\Company;
 use Carbon\Carbon;
+use Filament\Forms;
+use Filament\Actions\Action;
+use Filament\Support\Enums\IconPosition;
+use Filament\Support\Enums\MaxWidth;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedReport
@@ -16,7 +20,126 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
         return DocumentEntityType::Client;
     }
 
-    public function buildReportEnhanced(): array
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('export')
+                ->label('Export')
+                ->button()
+                ->outlined()
+                ->icon('heroicon-m-chevron-down')
+                ->iconPosition(IconPosition::After)
+                ->slideOver()
+                ->modalWidth(MaxWidth::Small)
+                ->form([
+                    Forms\Components\Select::make('format')
+                        ->options([
+                            'pdf' => 'PDF',
+                            'xlsx' => 'XLSX',
+                        ])
+                        ->default('pdf')
+                        ->required(),
+                    Forms\Components\Select::make('template')
+                        ->options([
+                            'default' => 'Aging Receivable Summary',
+                            'detail' => 'Aging Receivable Detail',
+                            'outstanding' => 'Outstanding Invoice',
+                        ])
+                        ->required(),
+                ])
+                ->action(function (array $data) {
+                    $format     = $data['format'];
+                    $template   = $data['template'];
+
+                    if ($format == 'xlsx') {
+                        return $this->exportXLSX();
+                    }
+
+                    if ($format == 'pdf') {
+                        return $this->exportPDF($template);
+                    }
+                })
+        ];
+    }
+
+    public function buildReportEnhanced($template = null): array
+    {
+        if ($template == 'detail') {
+            return $this->__buildReportDetail();
+        }
+        if ($template == 'outstanding') {
+            return $this->__buildReportOutstanding();
+        }
+        return $this->__buildReportDefault();
+    }
+
+    public function __buildReportOutstanding(): array
+    {
+        return [];
+    }
+
+    public function __buildReportDetail(): array
+    {
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+        $asOfDate = $this->report->getStartDate();
+        $now = Carbon::now()->format('Y-m-d_H-i-s');
+
+        $daysPerPeriod = (int) ($this->getFilterState('days_per_period') ?? 30);
+        $numberOfPeriods = (int) ($this->getFilterState('number_of_periods') ?? 4);
+
+        $dataDetail = $this->reportService->buildAgingReportInvoiceLevel(
+            $this->getFormattedAsOfDate(),
+            $this->getEntityType(),
+            $daysPerPeriod,
+            $numberOfPeriods
+        );
+
+        $columns = $dataDetail['columns'];
+        $rows = collect();
+
+        $grouped = collect($dataDetail['rows'])->groupBy('customer_name');
+
+        foreach ($grouped as $customerName => $invoices) {
+            $companyHeader = array_fill(0, count($columns), null);
+            $companyHeader[0] = $customerName;
+
+            $rows->push([
+                'data' => $companyHeader,
+                'style' => [
+                    'font-weight' => 'bold',
+                    'font-size' => '11px',
+                ],
+            ]);
+
+            foreach ($invoices as $r) {
+                $rowData = [
+                    $r['invoice_number'],
+                    $r['invoice_date'],
+                    number_format($r['total_prime'], 2, ',', '.'),
+                ];
+
+                foreach ($r['aging'] as $value) {
+                    $rowData[] = number_format($value, 2, ',', '.');
+                }
+
+                $rows->push([
+                    'data' => $rowData,
+                    'style' => ['font-size' => '10px'],
+                ]);
+            }
+        }
+
+        return [
+            'filename' => "{$company->name} Aging Receivable Detail {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'Aging Receivable Detail',
+            'report_period' => "As of " . Carbon::parse($asOfDate)->format('d M Y'),
+            'columns' => $columns,
+            'rows' => $rows->toArray(),
+        ];
+    }
+
+    public function __buildReportDefault(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $report = $this->report;
@@ -31,7 +154,6 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
         $overallTotal = $report->getOverallTotals();
         $columns = array_keys($overallTotal);
 
-        // Mapping kolom dinamis
         $columnMap = [
             'entity_name'  => 'Customer Name',
             'current'      => 'Current',
@@ -45,18 +167,15 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
         }
 
         $columnMap['over_periods'] = "> " . ($numberOfPeriods * $daysPerPeriod) . " Days";
-
-        // Urutkan mapped columns sesuai urutan aslinya
         $mappedColumns = array_map(fn($col) => $columnMap[$col] ?? ucfirst(str_replace('_', ' ', $col)), $columns);
-
         $toNumber = fn($v) => is_null($v)
             ? 0
             : (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $v));
 
         $data = [
-            'filename'           => "{$company->name} {$report->getTitle()} {$now}.pdf",
+            'filename'           => "{$company->name} Aging Receivable Summary {$now}.pdf",
             'company_name'       => $company->name,
-            'report_title'       => $report->getTitle(),
+            'report_title'       => "Aging Receivable Summary",
             'report_period'      => "As of {$startFormatted}",
             'columns'            => $mappedColumns,
             'rows'               => [],
@@ -64,10 +183,8 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
 
         $rows = collect();
 
-        // === Mulai mapping data ===
         foreach ($report->getCategories() as $cat) {
             foreach ($cat->data as $item) {
-                // Susun urutan data sesuai kolom
                 $rowData = [];
 
                 foreach ($columns as $colKey) {
@@ -90,32 +207,15 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
             }
         }
 
-        // === Tambahkan baris total akhir (optional) ===
-        $totalRow = [];
-        foreach ($columns as $colKey) {
-            $totalRow[] = $colKey === 'entity_name'
-                ? 'Total'
-                : $toNumber($overallTotal[$colKey] ?? 0);
-        }
-
-        $rows->push([
-            'data' => $totalRow,
-            'style' => [
-                'font-weight' => 'bold',
-                'font-size' => '11px',
-            ],
-        ]);
-
         $data['rows'] = $rows->toArray();
 
         return $data;
     }
 
-
-    public function exportPDF(): StreamedResponse
+    public function exportPDF($template = null): StreamedResponse
     {
         return $this->exportService->exportToPdfEnhanced(
-            data: $this->buildReportEnhanced()
+            data: $this->buildReportEnhanced($template)
         );
     }
 }

@@ -888,6 +888,75 @@ class ReportService
         );
     }
 
+    public function buildAgingReportInvoiceLevel(
+        string $asOfDate,
+        DocumentEntityType $entityType,
+        int $daysPerPeriod = 30,
+        int $numberOfPeriods = 4
+    ): array {
+        $asOfDateCarbon = Carbon::parse($asOfDate);
+
+        $documents = $entityType === DocumentEntityType::Client
+            ? $this->accountService->getUnpaidClientInvoices($asOfDate)
+            ->with(['client:id,name'])
+            ->get()
+            : $this->accountService->getUnpaidVendorBills($asOfDate)
+            ->with(['vendor:id,name'])
+            ->get();
+
+        $agingColumns = ['not_yet_due' => 'Not Yet'];
+
+        for ($i = 1; $i <= $numberOfPeriods; $i++) {
+            $min = ($i - 1) * $daysPerPeriod + 1;
+            $max = $i * $daysPerPeriod;
+            $agingColumns["period_{$i}"] = "{$min}-{$max}";
+        }
+
+        $agingColumns['over_periods'] = "> " . ($numberOfPeriods * $daysPerPeriod);
+
+        $rows = [];
+
+        foreach ($documents as $doc) {
+            $entity = $entityType === DocumentEntityType::Client ? $doc->client : $doc->vendor;
+            $days = $doc->days_overdue ?? 0;
+
+            $bucket = 'not_yet_due';
+            if ($days > 0) {
+                for ($i = 1; $i <= $numberOfPeriods; $i++) {
+                    $min = ($i - 1) * $daysPerPeriod;
+                    $max = $i * $daysPerPeriod;
+                    if ($days > $min && $days <= $max) {
+                        $bucket = "period_{$i}";
+                        break;
+                    }
+                }
+                if ($days > ($numberOfPeriods * $daysPerPeriod)) {
+                    $bucket = 'over_periods';
+                }
+            }
+
+            $agingData = array_fill_keys(array_keys($agingColumns), 0);
+            $agingData[$bucket] = $doc->amount_due;
+
+            $rows[] = [
+                'customer_name' => $entity->name ?? '-',
+                'invoice_number' => $doc->code ?? '-',
+                'invoice_date' => optional($doc->date)->format('d M Y'),
+                'total_prime' => $doc->amount_due,
+                'aging' => $agingData,
+            ];
+        }
+
+        return [
+            'columns' => array_merge(
+                ['Invoice No.', 'Invoice Date', 'Total Prime'],
+                array_values($agingColumns)
+            ),
+            'rows' => $rows,
+            'as_of' => $asOfDateCarbon->format('d M Y'),
+        ];
+    }
+
     public function buildEntityBalanceSummaryReport(string $startDate, string $endDate, DocumentEntityType $entityType, array $columns = []): ReportDTO
     {
         $documents = match ($entityType) {
