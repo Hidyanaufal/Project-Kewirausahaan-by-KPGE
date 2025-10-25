@@ -13,6 +13,8 @@ use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+use function PHPSTORM_META\type;
+
 class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedReport
 {
     protected function getEntityType(): DocumentEntityType

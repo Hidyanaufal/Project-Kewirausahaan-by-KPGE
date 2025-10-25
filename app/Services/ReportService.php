@@ -997,7 +997,7 @@ class ReportService
                 'invoice_amount'  => $invoiceAmount,
                 'prime_owing'     => $primeOwing,
                 'tax_owing'       => $taxOwing,
-                'age_from_due'    => $ageFromDue > 0 ? $ageFromDue : 0,
+                'age_from_due'    => $ageFromDue > 0 ? floor($ageFromDue) . ' Day' : 0,
             ];
         }
 
