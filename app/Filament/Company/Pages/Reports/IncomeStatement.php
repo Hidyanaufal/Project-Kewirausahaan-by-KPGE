@@ -6,11 +6,13 @@ use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
 use App\Filament\Company\Resources\Addons\ProjectResource;
-use App\Filament\Forms\Addons\FilterProjectCompany;
+use App\Helpers\AuthHelper;
+use App\Models\Company;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
 use App\Transformers\IncomeStatementReportTransformer;
+use Carbon\Carbon;
 use Filament\Forms\Form;
 use Filament\Support\Enums\Alignment;
 use Guava\FilamentClusters\Forms\Cluster;
@@ -76,6 +78,74 @@ class IncomeStatement extends BaseReportPage
         );
     }
 
+    protected function buildReportEnhanced(): array
+    {
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+        $report = $this->report;
+        $startDate = $report->getStartDate();
+        $endDate = $report->getEndDate();
+
+        $formattedStartDate = Carbon::parse($startDate)->toDateString();
+        $formattedEndDate = Carbon::parse($endDate)->toDateString();
+        $dateLabel = $formattedStartDate . ' to ' . $formattedEndDate;
+        $timestamp = Carbon::now()->format('Y-m-d_H-i-s');
+        $filename = $company->name . ' ' . $report->getTitle() . ' ' . $dateLabel . ' ' . $timestamp . '.pdf';
+
+        $reportPeriod = "From {$startDate} to {$endDate}";
+        $reportPeriodDate = "{$startDate} - {$endDate}";
+        $data = [
+            'filename'              => $filename,
+            'company_name'          => $company->name,
+            'report_title'          => $report->getTitle(),
+            'report_period'         => $reportPeriod,
+            'report_period_date'    => $reportPeriodDate,
+            'categories'            => [],
+        ];
+
+        $categories = $report->getCategories();
+
+        function toNumber($value)
+        {
+            if (is_null($value)) return 0;
+            if (is_numeric($value)) return $value;
+
+            $numeric = str_replace(['Rp', '.', ' '], '', $value);
+            $numeric = str_replace(',', '.', $numeric);
+
+            return (float) $numeric;
+        }
+
+        foreach ($categories as $categoryDTO) {
+            $categoryName = strtoupper($categoryDTO->header['account_name'] ?? 'UNKNOWN');
+            $items = collect($categoryDTO->data)->map(function ($item) {
+                return [
+                    'name' => is_array($item['account_name'])
+                        ? ($item['account_name']['name'] ?? '')
+                        : $item['account_name'],
+                    'value' => toNumber($item['net_movement'] ?? 0),
+                ];
+            })->toArray();
+
+            $categories[] = [
+                'name' => $categoryName,
+                'items' => $items,
+            ];
+
+            $categories[] = [
+                'name' => 'Total Cost of ' . $categoryName,
+                'value' => toNumber($categoryDTO->summary['net_movement'] ?? 0),
+            ];
+        }
+
+        $categories = array_filter(
+            $categories,
+            fn($item) => !($item instanceof \App\DTO\ReportCategoryDTO)
+        );
+
+        $data['categories'] = $categories;
+        return $data;
+    }
+
     protected function getTransformer(ReportDTO $reportDTO): ExportableReport
     {
         return new IncomeStatementReportTransformer($reportDTO);
@@ -83,16 +153,30 @@ class IncomeStatement extends BaseReportPage
 
     public function exportCSV(): StreamedResponse
     {
-        return $this->exportService->exportToCsv($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'), $this->getActiveTab());
-    }
-
-    public function exportPDF(): StreamedResponse
-    {
-        return $this->exportService->exportToPdf2($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'), $this->getActiveTab());
+        return $this->exportService->exportToCsv(
+            $this->company,
+            $this->report,
+            $this->getFilterState('startDate'),
+            $this->getFilterState('endDate'),
+            $this->getActiveTab()
+        );
     }
 
     public function exportXLSX(): BinaryFileResponse
     {
-        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'), $this->getActiveTab());
+        return $this->exportService->exportToExcel(
+            $this->company,
+            $this->report,
+            $this->getFilterState('startDate'),
+            $this->getFilterState('endDate'),
+            $this->getActiveTab()
+        );
+    }
+
+    public function exportPDF(): StreamedResponse
+    {
+        return $this->exportService->exportToPdfEnhanced(
+            data: $this->buildReportEnhanced()
+        );
     }
 }

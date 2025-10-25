@@ -39,23 +39,23 @@ Todo:
   ✔ nomor trx pada saat input harus bisa diedit (saat ini no trx kalau mau diubah, harus disubmit dulu baru diubah) @started(25-10-23 14:44) @done(25-10-24 05:55) @lasted(15h11m18s)
   ✔ Export excel tambahkan kode transaksi, debit kreditnya dipisah, tambahkan export PDF @done(25-10-24 05:55)
 
-  # Report PDF
-  ☐ 1. Labarugi
-  ☐ 2. Neraca
-  ☐ 3. Perubahan modal
-  ☐ 4. Cashflow Direct Method
-  ☐ 5. Account List -> Account Transaction
-  ☐ 6. Aging Receivable Detail
-  ☐ 7. Aging Receivable Summary
-  ☐ 8. All Journals
-  ☐ 9. Cashflow Detail
-  ☐ 10. Cashflow Summary
-  ☐ 11. Financial Ratio
-  ☐ 12. General Journal Voucher
-  ☐ 13. General Ledger Detail
-  ☐ 14. General Ledger Summary
-  ☐ 15. Outstanding Invoice
-  ☐ 16. Statement of Owner Equity Changes
-  ☐ 17. Trial Balance Classic
-  ☐ 18. Trial Balance 
-  ☐ 19. Bank Book
+Laporan Keuangan yang diperlukan:
+  ☐ Labarugi (income Statement)
+  ☐ Neraca (Balance Sheet)
+  ☐ Perubahan modal (Other Reports)
+  ☐ Cashflow Direct Method (Cashflow Statement)
+  ☐ Account List (Account Transaction)
+  ☐ Aging Receivable Detail (Account Receivable Aging)
+  ☐ Aging Receivable Summary (Account Receivable Aging)
+  ☐ All Journals (Transaction)
+  ☐ Cashflow Detail (Cashflow Statement)
+  ☐ Cashflow Summary (Cashflow Statement)
+  ☐ Financial Ratio (Other Reports)
+  ☐ General Journal Voucher  (Other Reports)
+  ☐ General Ledger Detail (Other Reports)
+  ☐ General Ledger Summary (Other Reports)
+  ☐ Outstanding Invoice (Account Receivable Aging)
+  ☐ Statement of Owner Equity Changes (Other Reports)
+  ☐ Trial Balance Classic (Trial Balance)
+  ☐ Trial Balance (Trial Balance)
+  ☐ Bank Book (Account Transaction)

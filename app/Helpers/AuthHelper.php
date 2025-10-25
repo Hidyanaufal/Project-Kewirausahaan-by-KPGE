@@ -16,11 +16,21 @@ class AuthHelper
         return $guard->user();
     }
 
+    public static function company(): ?Company
+    {
+        $company = Company::find(static::currentCompany());
+        if ($company) {
+            return $company;
+        }
+        return null;
+    }
+
     public static function currentUser(): int
     {
         $guard = Filament::auth();
         return $guard->user()->id;
     }
+
 
     public static function currentCompany(): ?int
     {
