@@ -77,13 +77,22 @@
                     @endphp
                     <tr>
                         @foreach ($row['data'] as $cell)
-                            <td style="text-align: {{ is_numeric($cell) ? 'right' : 'left' }}">
-                                <p style="{{$style}}">
-                                    {{ is_numeric($cell) ? number_format($cell, 2, ',', '.') : $cell }}
+                            @php
+                                $isMarkedString = Str::startsWith($cell, '__str');
+                                if ($isMarkedString) {
+                                    $cell = Str::replaceFirst('__str', '', $cell);
+                                }
+                            @endphp
+                            <td style="text-align: {{ !$isMarkedString && is_numeric($cell) ? 'right' : 'left' }}">
+                                <p style="{{ $style }}">
+                                    {{ (!$isMarkedString && is_numeric($cell))
+                                        ? number_format($cell, 2, ',', '.')
+                                        : $cell }}
                                 </p>
                             </td>
                         @endforeach
                     </tr>
+
                 @endforeach
             </tbody>
         </table>
