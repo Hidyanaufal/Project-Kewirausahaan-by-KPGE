@@ -4,8 +4,26 @@
     <meta charset="UTF-8">
     <title>{{ $data['company_name'] }} - {{ $data['report_title'] }}</title>
     <style>
+          @font-face {
+            font-family: 'Roboto';
+            src: url('file:///usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Regular.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Roboto';
+            src: url('file:///usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Bold.ttf') format('truetype');
+            font-weight: bold;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Roboto';
+            src: url('file:///usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Italic.ttf') format('truetype');
+            font-weight: normal;
+            font-style: italic;
+        }
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Roboto', sans-serif;
             text-align: center;
         }
         h1, h2, h3, p {

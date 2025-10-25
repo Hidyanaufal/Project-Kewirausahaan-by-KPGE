@@ -290,8 +290,20 @@ class ExportService
             'endDate' => $endDate ? Carbon::parse($endDate)->toDefaultDateFormat() : null,
         ]);
 
+        $pdf->setOptions([
+            'dpi' => 96,
+            'zoom' => 1,
+            'enable-local-file-access' => true,
+            'encoding' => 'UTF-8',
+            'margin-top' => 0,
+            'margin-bottom' => 0,
+            'margin-left' => 0,
+            'margin-right' => 0,
+            'disable-smart-shrinking' => true,
+        ]);
+
         return response()->streamDownload(function () use ($pdf) {
-            echo $pdf->inline();
+            echo $pdf->output();
         }, $filename);
     }
 
@@ -374,12 +386,24 @@ class ExportService
         return Excel::download($export, $filename);
     }
 
-    public function exportToPdfEnhanced(
-        array $data
-    ): StreamedResponse {
+    public function exportToPdfEnhanced(array $data): StreamedResponse
+    {
         $pdf = SnappyPdf::loadView('pdf.reports-general', [
             'data' => $data,
         ]);
+
+        $pdf->setOptions([
+            'dpi' => 96,
+            'zoom' => 1,
+            'enable-local-file-access' => true,
+            'encoding' => 'UTF-8',
+            'margin-top' => 0,
+            'margin-bottom' => 0,
+            'margin-left' => 0,
+            'margin-right' => 0,
+            'disable-smart-shrinking' => true,
+        ]);
+
         return response()->streamDownload(function () use ($pdf) {
             echo $pdf->output();
         }, $data['filename']);
