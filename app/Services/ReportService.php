@@ -957,6 +957,66 @@ class ReportService
         ];
     }
 
+    public function buildOutstandingReportInvoiceLevel(
+        string $asOfDate,
+        DocumentEntityType $entityType,
+    ): array {
+        $asOfDateCarbon = Carbon::parse($asOfDate);
+
+        $documents = $entityType === DocumentEntityType::Client
+            ? $this->accountService->getUnpaidClientInvoices($asOfDate)
+            ->with(['client:id,name'])
+            ->get()
+            : $this->accountService->getUnpaidVendorBills($asOfDate)
+            ->with(['vendor:id,name'])
+            ->get();
+
+        $rows = [];
+
+        foreach ($documents as $doc) {
+            $entity = $entityType === DocumentEntityType::Client ? $doc->client : $doc->vendor;
+
+            $invoiceAmount = $doc->amount ?? 0;
+            $primeOwing = $doc->amount_due ?? 0;
+            $taxOwing = $doc->tax_amount ?? 0;
+
+            $dueDate = optional($doc->due_date)->format('d M Y');
+            $invoiceDate = optional($doc->date)->format('d M Y');
+
+            $ageFromDue = null;
+            if ($doc->due_date) {
+                $due = Carbon::parse($doc->due_date);
+                $ageFromDue = $due->diffInDays($asOfDateCarbon, false);
+            }
+
+            $rows[] = [
+                'customer_name'   => $entity->name ?? '-',
+                'invoice_number'  => $doc->code ?? '-',
+                'invoice_date'    => $invoiceDate,
+                'due_date'        => $dueDate,
+                'invoice_amount'  => $invoiceAmount,
+                'prime_owing'     => $primeOwing,
+                'tax_owing'       => $taxOwing,
+                'age_from_due'    => $ageFromDue > 0 ? $ageFromDue : 0,
+            ];
+        }
+
+        return [
+            'columns' => [
+                'Invoice',
+                'No. Invoice',
+                'Date',
+                'Due Date',
+                'Invoice Amount',
+                'Prime Owing',
+                'Tax Owing',
+                'Age fr Due',
+            ],
+            'rows' => $rows,
+            'as_of' => $asOfDateCarbon->format('d M Y'),
+        ];
+    }
+
     public function buildEntityBalanceSummaryReport(string $startDate, string $endDate, DocumentEntityType $entityType, array $columns = []): ReportDTO
     {
         $documents = match ($entityType) {

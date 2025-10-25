@@ -75,7 +75,85 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
 
     public function __buildReportOutstanding(): array
     {
-        return [];
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+        $asOfDate = $this->report->getStartDate();
+        $now = Carbon::now()->format('Y-m-d_H-i-s');
+
+        $data = $this->reportService->buildOutstandingReportInvoiceLevel(
+            $this->getFormattedAsOfDate(),
+            $this->getEntityType()
+        );
+
+        $columns = array_filter($data['columns'], fn($col) => strtolower($col) !== 'invoice');
+        $columns = array_values($columns);
+
+        $rows = collect();
+        $grouped = collect($data['rows'])->groupBy('customer_name');
+
+        foreach ($grouped as $customerName => $invoices) {
+            $headerRow = array_fill(0, count($columns), null);
+            $headerRow[0] = $customerName;
+
+            $rows->push([
+                'data' => $headerRow,
+                'style' => [
+                    'font-weight' => 'bold',
+                ],
+            ]);
+
+            $subtotal = [
+                'invoice_amount' => 0,
+                'prime_owing' => 0,
+                'tax_owing' => 0,
+            ];
+
+            foreach ($invoices as $inv) {
+                $rowData = [
+                    $inv['invoice_number'],
+                    $inv['invoice_date'],
+                    $inv['due_date'],
+                    number_format($inv['invoice_amount'], 2, ',', '.'),
+                    number_format($inv['prime_owing'], 2, ',', '.'),
+                    number_format($inv['tax_owing'], 2, ',', '.'),
+                    $inv['age_from_due'],
+                ];
+
+                $subtotal['invoice_amount'] += $inv['invoice_amount'];
+                $subtotal['prime_owing'] += $inv['prime_owing'];
+                $subtotal['tax_owing'] += $inv['tax_owing'];
+
+                $rows->push([
+                    'data' => $rowData,
+                ]);
+            }
+
+            $subtotalRow = [
+                '',
+                '',
+                '',
+                number_format($subtotal['invoice_amount'], 2, ',', '.'),
+                number_format($subtotal['prime_owing'], 2, ',', '.'),
+                number_format($subtotal['tax_owing'], 2, ',', '.'),
+                '',
+            ];
+
+            $rows->push([
+                'data' => $subtotalRow,
+                'style' => [
+                    'font-weight' => 'bold',
+                    'color' => 'rgb(6, 6, 174)',
+                ],
+            ]);
+        }
+
+        return [
+            'filename' => "{$company->name} Outstanding Invoice {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'Outstanding Invoice',
+            'report_period' => "As of " . Carbon::parse($asOfDate)->format('d M Y'),
+            'columns' => $columns,
+            'rows' => $rows->toArray(),
+        ];
     }
 
     public function __buildReportDetail(): array
