@@ -40,8 +40,8 @@ Todo:
   ✔ Export excel tambahkan kode transaksi, debit kreditnya dipisah, tambahkan export PDF @done(25-10-24 05:55)
 
 Laporan Keuangan yang diperlukan:
-  ☐ Labarugi (income Statement) @started(25-10-25 14:20)
-  ☐ Neraca (Balance Sheet)
+  ✔ Labarugi (income Statement) @started(25-10-25 14:20) @done(25-10-25 14:46) @lasted(26m28s)
+  ☐ Neraca (Balance Sheet) @started(25-10-25 14:46)
   ☐ Perubahan modal (Other Reports)
   ☐ Cashflow Direct Method (Cashflow Statement)
   ☐ Account List (Account Transaction)

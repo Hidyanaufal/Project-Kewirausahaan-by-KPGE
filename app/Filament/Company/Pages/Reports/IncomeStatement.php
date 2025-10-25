@@ -105,6 +105,7 @@ class IncomeStatement extends BaseReportPage
             ? 0
             : (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $v));
 
+
         $data['categories'] = collect($report->getCategories())->flatMap(function ($cat) use ($toNumber) {
             $name = strtoupper($cat->header['account_name'] ?? 'UNKNOWN');
 
@@ -120,6 +121,21 @@ class IncomeStatement extends BaseReportPage
                 ['name' => "Total Cost of {$name}", 'value' => $toNumber($cat->summary['net_movement'] ?? 0)],
             ];
         })->toArray();
+
+        $data['categories'][] = [
+            'name'  => 'GROSS PROFIT',
+            'value' => $toNumber($report->getGrossProfit()['net_movement'])
+        ];
+
+        $data['categories'][] = [
+            'name'  => 'NET PROFIT/LOSS (Before Tax)',
+            'value' => $toNumber($report->getOverallTotals()['net_movement'])
+        ];
+
+        $data['categories'][] = [
+            'name'  => 'NET PROFIT/LOSS (After Tax)',
+            'value' => $toNumber($report->getOverallTotals()['net_movement'])
+        ];
 
         return $data;
     }
