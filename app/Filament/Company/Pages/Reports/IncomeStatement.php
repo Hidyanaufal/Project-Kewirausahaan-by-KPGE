@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Pages\Reports;
 
+use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
@@ -19,7 +20,7 @@ use Guava\FilamentClusters\Forms\Cluster;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-class IncomeStatement extends BaseReportPage
+class IncomeStatement extends BaseReportPage implements EnhancedReport
 {
     use HasReportTabs;
 
@@ -78,7 +79,12 @@ class IncomeStatement extends BaseReportPage
         );
     }
 
-    protected function buildReportEnhanced(): array
+    protected function getTransformer(ReportDTO $reportDTO): ExportableReport
+    {
+        return new IncomeStatementReportTransformer($reportDTO);
+    }
+
+    public function buildReportEnhanced(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $report = $this->report;
@@ -97,7 +103,7 @@ class IncomeStatement extends BaseReportPage
             : (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $v));
 
         $data = [
-            'filename'           => "{$company->name} {$report->getTitle()} {$startFormatted} to {$endFormatted} {$now}.pdf",
+            'filename'           => "{$company->name} {$report->getTitle()} {$now}.pdf",
             'company_name'       => $company->name,
             'report_title'       => $report->getTitle(),
             'report_period'      => "From {$startFormatted} to {$endFormatted}",
@@ -112,14 +118,11 @@ class IncomeStatement extends BaseReportPage
 
         foreach ($report->getCategories() as $cat) {
             $headerName = strtoupper($cat->header['account_name'] ?? 'UNKNOWN');
-
-            // Header kategori
             $rows->push([
                 'data' => [$headerName],
                 'style' => ['font-weight' => 'bold', 'font-size' => '11px'],
             ]);
 
-            // Data per akun
             foreach ($cat->data as $item) {
                 $name = is_array($item['account_name'])
                     ? ($item['account_name']['name'] ?? '')
@@ -134,7 +137,6 @@ class IncomeStatement extends BaseReportPage
                 ]);
             }
 
-            // Summary kategori
             $rows->push([
                 'data' => [
                     "Total Cost of {$headerName}",
@@ -162,11 +164,6 @@ class IncomeStatement extends BaseReportPage
         $data['rows'] = $rows->toArray();
 
         return $data;
-    }
-
-    protected function getTransformer(ReportDTO $reportDTO): ExportableReport
-    {
-        return new IncomeStatementReportTransformer($reportDTO);
     }
 
     public function exportCSV(): StreamedResponse
