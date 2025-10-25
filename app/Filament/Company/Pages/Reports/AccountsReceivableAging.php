@@ -96,7 +96,6 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
 
         $columns = $dataDetail['columns'];
         $rows = collect();
-
         $grouped = collect($dataDetail['rows'])->groupBy('customer_name');
 
         foreach ($grouped as $customerName => $invoices) {
@@ -111,6 +110,15 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                 ],
             ]);
 
+            $subtotal = [
+                'total_prime' => 0,
+            ];
+
+            $agingKeys = array_keys($invoices->first()['aging']);
+            foreach ($agingKeys as $key) {
+                $subtotal[$key] = 0;
+            }
+
             foreach ($invoices as $r) {
                 $rowData = [
                     $r['invoice_number'],
@@ -122,11 +130,35 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                     $rowData[] = number_format($value, 2, ',', '.');
                 }
 
+                $subtotal['total_prime'] += $r['total_prime'];
+                foreach ($r['aging'] as $key => $value) {
+                    $subtotal[$key] += $value;
+                }
+
                 $rows->push([
                     'data' => $rowData,
                     'style' => ['font-size' => '10px'],
                 ]);
             }
+
+            $subtotalRow = [
+                "",
+                "",
+                number_format($subtotal['total_prime'], 2, ',', '.'),
+            ];
+
+            foreach ($agingKeys as $key) {
+                $subtotalRow[] = number_format($subtotal[$key], 2, ',', '.');
+            }
+
+            $rows->push([
+                'data' => $subtotalRow,
+                'style' => [
+                    'font-weight' => 'bold',
+                    'font-size' => '10.5px',
+                    'color' => 'rgb(6, 6, 174)'
+                ],
+            ]);
         }
 
         return [
