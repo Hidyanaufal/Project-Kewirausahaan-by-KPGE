@@ -82,67 +82,45 @@ class IncomeStatement extends BaseReportPage
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $report = $this->report;
-        $startDate = $report->getStartDate();
-        $endDate = $report->getEndDate();
 
-        $formattedStartDate = Carbon::parse($startDate)->toDateString();
-        $formattedEndDate = Carbon::parse($endDate)->toDateString();
-        $dateLabel = $formattedStartDate . ' to ' . $formattedEndDate;
-        $timestamp = Carbon::now()->format('Y-m-d_H-i-s');
-        $filename = $company->name . ' ' . $report->getTitle() . ' ' . $dateLabel . ' ' . $timestamp . '.pdf';
+        $start = Carbon::parse($report->getStartDate());
+        $end = Carbon::parse($report->getEndDate());
+        $now = Carbon::now()->format('Y-m-d_H-i-s');
 
-        $reportPeriod = "From {$startDate} to {$endDate}";
-        $reportPeriodDate = "{$startDate} - {$endDate}";
+        $startFormatted = $start->format('d M Y'); // 01 Jan 2024
+        $endFormatted = $end->format('d M Y');     // 31 Dec 2024
+        $startShort = $start->format('j M');       // 1 Jan
+        $endShort = $end->format('j M Y');         // 31 Dec 2024
+
         $data = [
-            'filename'              => $filename,
-            'company_name'          => $company->name,
-            'report_title'          => $report->getTitle(),
-            'report_period'         => $reportPeriod,
-            'report_period_date'    => $reportPeriodDate,
-            'categories'            => [],
+            'filename'           => "{$company->name} {$report->getTitle()} {$startFormatted} to {$endFormatted} {$now}.pdf",
+            'company_name'       => $company->name,
+            'report_title'       => $report->getTitle(),
+            'report_period'      => "From {$startFormatted} to {$endFormatted}",
+            'report_period_date' => "{$startShort}-{$endShort}",
+            'categories'         => [],
         ];
 
-        $categories = $report->getCategories();
+        $toNumber = fn($v) => is_null($v)
+            ? 0
+            : (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $v));
 
-        function toNumber($value)
-        {
-            if (is_null($value)) return 0;
-            if (is_numeric($value)) return $value;
+        $data['categories'] = collect($report->getCategories())->flatMap(function ($cat) use ($toNumber) {
+            $name = strtoupper($cat->header['account_name'] ?? 'UNKNOWN');
 
-            $numeric = str_replace(['Rp', '.', ' '], '', $value);
-            $numeric = str_replace(',', '.', $numeric);
+            $items = collect($cat->data)->map(fn($i) => [
+                'name'  => is_array($i['account_name'])
+                    ? ($i['account_name']['name'] ?? '')
+                    : $i['account_name'],
+                'value' => $toNumber($i['net_movement'] ?? 0),
+            ]);
 
-            return (float) $numeric;
-        }
-
-        foreach ($categories as $categoryDTO) {
-            $categoryName = strtoupper($categoryDTO->header['account_name'] ?? 'UNKNOWN');
-            $items = collect($categoryDTO->data)->map(function ($item) {
-                return [
-                    'name' => is_array($item['account_name'])
-                        ? ($item['account_name']['name'] ?? '')
-                        : $item['account_name'],
-                    'value' => toNumber($item['net_movement'] ?? 0),
-                ];
-            })->toArray();
-
-            $categories[] = [
-                'name' => $categoryName,
-                'items' => $items,
+            return [
+                ['name' => $name, 'items' => $items],
+                ['name' => "Total Cost of {$name}", 'value' => $toNumber($cat->summary['net_movement'] ?? 0)],
             ];
+        })->toArray();
 
-            $categories[] = [
-                'name' => 'Total Cost of ' . $categoryName,
-                'value' => toNumber($categoryDTO->summary['net_movement'] ?? 0),
-            ];
-        }
-
-        $categories = array_filter(
-            $categories,
-            fn($item) => !($item instanceof \App\DTO\ReportCategoryDTO)
-        );
-
-        $data['categories'] = $categories;
         return $data;
     }
 
