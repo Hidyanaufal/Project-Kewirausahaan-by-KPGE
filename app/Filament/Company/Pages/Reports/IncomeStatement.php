@@ -87,55 +87,79 @@ class IncomeStatement extends BaseReportPage
         $end = Carbon::parse($report->getEndDate());
         $now = Carbon::now()->format('Y-m-d_H-i-s');
 
-        $startFormatted = $start->format('d M Y'); // 01 Jan 2024
-        $endFormatted = $end->format('d M Y');     // 31 Dec 2024
-        $startShort = $start->format('j M');       // 1 Jan
-        $endShort = $end->format('j M Y');         // 31 Dec 2024
+        $startFormatted = $start->format('d M Y');
+        $endFormatted = $end->format('d M Y');
+        $startShort = $start->format('j M');
+        $endShort = $end->format('j M Y');
+
+        $toNumber = fn($v) => is_null($v)
+            ? 0
+            : (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $v));
 
         $data = [
             'filename'           => "{$company->name} {$report->getTitle()} {$startFormatted} to {$endFormatted} {$now}.pdf",
             'company_name'       => $company->name,
             'report_title'       => $report->getTitle(),
             'report_period'      => "From {$startFormatted} to {$endFormatted}",
-            'report_period_date' => "{$startShort}-{$endShort}",
-            'categories'         => [],
+            'columns'            => [
+                "Description",
+                "{$startShort} - {$endShort}"
+            ],
+            'rows'               => [],
         ];
 
-        $toNumber = fn($v) => is_null($v)
-            ? 0
-            : (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $v));
+        $rows = collect();
 
+        foreach ($report->getCategories() as $cat) {
+            $headerName = strtoupper($cat->header['account_name'] ?? 'UNKNOWN');
 
-        $data['categories'] = collect($report->getCategories())->flatMap(function ($cat) use ($toNumber) {
-            $name = strtoupper($cat->header['account_name'] ?? 'UNKNOWN');
-
-            $items = collect($cat->data)->map(fn($i) => [
-                'name'  => is_array($i['account_name'])
-                    ? ($i['account_name']['name'] ?? '')
-                    : $i['account_name'],
-                'value' => $toNumber($i['net_movement'] ?? 0),
+            // Header kategori
+            $rows->push([
+                'data' => [$headerName],
+                'style' => ['font-weight' => 'bold', 'font-size' => '11px'],
             ]);
 
-            return [
-                ['name' => $name, 'items' => $items],
-                ['name' => "Total Cost of {$name}", 'value' => $toNumber($cat->summary['net_movement'] ?? 0)],
-            ];
-        })->toArray();
+            // Data per akun
+            foreach ($cat->data as $item) {
+                $name = is_array($item['account_name'])
+                    ? ($item['account_name']['name'] ?? '')
+                    : $item['account_name'];
 
-        $data['categories'][] = [
-            'name'  => 'GROSS PROFIT',
-            'value' => $toNumber($report->getGrossProfit()['net_movement'])
-        ];
+                $rows->push([
+                    'data' => [
+                        $name,
+                        $toNumber($item['net_movement'] ?? 0),
+                    ],
+                    'style' => ['font-size' => '10px', 'padding-left' => '20px'],
+                ]);
+            }
 
-        $data['categories'][] = [
-            'name'  => 'NET PROFIT/LOSS (Before Tax)',
-            'value' => $toNumber($report->getOverallTotals()['net_movement'])
-        ];
+            // Summary kategori
+            $rows->push([
+                'data' => [
+                    "Total Cost of {$headerName}",
+                    $toNumber($cat->summary['net_movement'] ?? 0),
+                ],
+                'style' => ['font-weight' => 'bold', 'font-size' => '10px'],
+            ]);
+        }
 
-        $data['categories'][] = [
-            'name'  => 'NET PROFIT/LOSS (After Tax)',
-            'value' => $toNumber($report->getOverallTotals()['net_movement'])
-        ];
+        $rows->push([
+            'data' => ['GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement'])],
+            'style' => ['font-weight' => 'bold', 'font-size' => '11px'],
+        ]);
+
+        $rows->push([
+            'data' => ['NET PROFIT/LOSS (Before Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
+            'style' => ['font-weight' => 'bold', 'font-size' => '11px'],
+        ]);
+
+        $rows->push([
+            'data' => ['NET PROFIT/LOSS (After Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
+            'style' => ['font-weight' => 'bold', 'font-size' => '11px'],
+        ]);
+
+        $data['rows'] = $rows->toArray();
 
         return $data;
     }

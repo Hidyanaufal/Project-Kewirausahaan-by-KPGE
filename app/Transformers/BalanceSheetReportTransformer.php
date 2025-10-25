@@ -25,7 +25,7 @@ class BalanceSheetReportTransformer extends SummaryReportTransformer
 
     public function getTitle(): string
     {
-        return 'Balance Sheet';
+        return 'Balance Sheet (Standard)';
     }
 
     public function calculateTotals(): void

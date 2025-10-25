@@ -16,7 +16,6 @@
             color: rgb(179, 2, 2);
             font-size: 20px
         }
-
         h3 {
             font-size: 15px;
         }
@@ -26,16 +25,12 @@
             margin-top: 30px;
         }
         table th, table td {
-            padding: 0px;
+            padding: 0;
             font-size: 10px;
         }
-        table th{
-            padding: 0px;
-            border-bottom: 2px solid #000;
-        }
-        .category-header {
-            font-weight: bold;
-            font-size: 11px;
+        table th {
+            border-bottom: 1px solid #000;
+            text-align: center;
         }
     </style>
 </head>
@@ -45,36 +40,32 @@
         <h1>{{ $data['report_title'] }}</h1>
         <h3>{{ $data['report_period'] }}</h3>
     </center>
+
     <center>
         <table>
             <thead>
                 <tr style="color: rgb(6, 6, 174)">
-                    <th style="text-align: left">Description</th>
-                    <th style="text-align: right">{{ $data['report_period_date'] }}</th>
+                    @foreach ($data['columns'] as $col)
+                        <th>{{ $col }}</th>
+                    @endforeach
                 </tr>
             </thead>
             <tbody>
-                @foreach ($data['categories'] as $category)
-                    @if (isset($category['items']))
-                        <tr class="category-header">
-                            <td>{{ $category['name'] }}</td>
-                        </tr>
-                        @foreach ($category['items'] as $item)
-                            <tr>
-                                <td>
-                                    <p style="padding-left: 20px">
-                                        {{ $item['name'] }}
-                                    </p>
-                                </td>
-                                <td style="text-align: right;">{{ number_format($item['value'], 2, ',', '.') }}</td>
-                            </tr>
+                @foreach ($data['rows'] as $row)
+                    @php
+                        $style = isset($row['style'])
+                            ? collect($row['style'])->map(fn($v, $k) => "$k: $v")->join('; ')
+                            : '';
+                    @endphp
+                    <tr>
+                        @foreach ($row['data'] as $cell)
+                            <td style="text-align: {{ is_numeric($cell) ? 'right' : 'left' }}">
+                                <p style="{{$style}}">
+                                    {{ is_numeric($cell) ? number_format($cell, 2, ',', '.') : $cell }}
+                                </p>
+                            </td>
                         @endforeach
-                    @else
-                        <tr class="category-header">
-                            <td>{{ $category['name'] }}</td>
-                            <td style="text-align: right;">{{ number_format($category['value'], 2, ',', '.') }}</td>
-                        </tr>
-                    @endif
+                    </tr>
                 @endforeach
             </tbody>
         </table>
