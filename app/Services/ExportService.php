@@ -388,6 +388,7 @@ class ExportService
 
     public function exportToPdfEnhanced(array $data): StreamedResponse
     {
+        dd($data);
         $pdf = SnappyPdf::loadView('pdf.reports-general', [
             'data' => $data,
         ]);
@@ -408,4 +409,104 @@ class ExportService
             echo $pdf->output();
         }, $data['filename']);
     }
+
+    public function exportToExcelEnhanced(array $data): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $filename = str_replace('.pdf', '.xlsx', $data['filename']);
+
+        $export = new class($data) implements 
+            \Maatwebsite\Excel\Concerns\FromArray,
+            \Maatwebsite\Excel\Concerns\WithStyles,
+            \Maatwebsite\Excel\Concerns\WithEvents,
+            \Maatwebsite\Excel\Concerns\WithTitle
+        {
+            use \Maatwebsite\Excel\Concerns\RegistersEventListeners;
+
+            public function __construct(protected array $data) {}
+
+            public function array(): array
+            {
+                $rows = [];
+
+                // Header umum laporan
+                $rows[] = ['', $this->data['company_name']];
+                $rows[] = ['', $this->data['report_title']];
+                $rows[] = ['', $this->data['report_period']];
+                // Baris 4: Header tabel
+                $rows[] = array_merge([''], $this->data['columns']);
+
+                // Data isi tabel
+                foreach ($this->data['rows'] as $row) {
+                    $rows[] = array_merge([''], $row['data']);
+                }
+
+                return $rows;
+            }
+
+            public function styles(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet)
+            {
+                $highestRow = $sheet->getHighestRow();
+                $highestCol = $sheet->getHighestColumn();
+
+                // ====== STYLE HEADER LAPORAN ======
+                $sheet->getStyle('B1')->getFont()->setBold(true)->setSize(14);
+                $sheet->getStyle('B2')->getFont()->setBold(true)->setSize(12);
+                $sheet->getStyle('B3')->getFont()->setItalic(true)->setSize(10);
+
+                // ====== BORDER TABLE (mulai B4) ======
+                $tableRange = "B4:" . $highestCol . $highestRow;
+                $sheet->getStyle($tableRange)->getBorders()->getAllBorders()
+                    ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+
+                // ====== HEADER TABLE ======
+                $sheet->getStyle("B4:" . $highestCol . "4")->getFont()->setBold(true);
+
+                // ====== FORMAT ANGKA ======
+                foreach (range('C', $highestCol) as $col) {
+                    $sheet->getStyle("{$col}5:{$col}{$highestRow}")
+                        ->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle("{$col}5:{$col}{$highestRow}")
+                        ->getAlignment()->setHorizontal('right');
+                }
+
+                // ====== TEKS RATA KIRI ======
+                $sheet->getStyle('B4:B' . $highestRow)->getAlignment()->setHorizontal('left');
+
+                // ====== TERAPKAN STYLE BOLD SESUAI DATA ======
+                foreach ($this->data['rows'] as $index => $row) {
+                    $rowNumber = $index + 5; // karena header tabel di baris 4
+                    $cellRange = "B{$rowNumber}:" . $highestCol . "{$rowNumber}";
+
+                    if (isset($row['style']['font-weight']) && $row['style']['font-weight'] === 'bold') {
+                        $sheet->getStyle($cellRange)->getFont()->setBold(true);
+                    }
+                }
+
+                // ====== AUTO FIT SEMUA KOLOM DINAMIS ======
+                foreach (range('B', $highestCol) as $col) {
+                    $sheet->getColumnDimension($col)->setAutoSize(true);
+                }
+
+                // ====== MARGIN KIRI (KOLOM A) ======
+                $sheet->getColumnDimension('A')->setWidth(60); // beri ruang 60 pixel
+
+                return [];
+            }
+
+            public static function afterSheet(\Maatwebsite\Excel\Events\AfterSheet $event)
+            {
+                // Freeze di bawah header (baris 5)
+                $event->sheet->freezePane('B5');
+            }
+
+            public function title(): string
+            {
+                return $this->data['report_title'] ?? 'Report';
+            }
+        };
+
+        return \Maatwebsite\Excel\Facades\Excel::download($export, $filename);
+    }
+
+
 }

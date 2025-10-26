@@ -84,7 +84,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
         return new IncomeStatementReportTransformer($reportDTO);
     }
 
-    public function buildReportEnhanced(): array
+    public function buildReportEnhanced(string $format = 'pdf'): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $report = $this->report;
@@ -103,7 +103,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
             : (float) str_replace(',', '.', preg_replace('/[^\d]/', '', $v));
 
         $data = [
-            'filename'           => "{$company->name} {$report->getTitle()} {$now}.pdf",
+            'filename'           => "{$company->name} {$report->getTitle()} {$now}.{$format}",
             'company_name'       => $company->name,
             'report_title'       => $report->getTitle(),
             'report_period'      => "From {$startFormatted} to {$endFormatted}",
@@ -179,19 +179,15 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
 
     public function exportXLSX(): BinaryFileResponse
     {
-        return $this->exportService->exportToExcel(
-            $this->company,
-            $this->report,
-            $this->getFilterState('startDate'),
-            $this->getFilterState('endDate'),
-            $this->getActiveTab()
+        return $this->exportService->exportToExcelEnhanced(
+            data: $this->buildReportEnhanced('xlsx')
         );
     }
 
     public function exportPDF(): StreamedResponse
     {
         return $this->exportService->exportToPdfEnhanced(
-            data: $this->buildReportEnhanced()
+            data: $this->buildReportEnhanced('pdf')
         );
     }
 }

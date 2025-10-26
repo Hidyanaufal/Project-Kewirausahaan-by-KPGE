@@ -11,6 +11,7 @@ use Filament\Forms;
 use Filament\Actions\Action;
 use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 use function PHPSTORM_META\type;
@@ -324,6 +325,13 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
     {
         return $this->exportService->exportToPdfEnhanced(
             data: $this->buildReportEnhanced($template)
+        );
+    }
+
+    public function exportXLSX(): BinaryFileResponse
+    {
+        return $this->exportService->exportToExcelEnhanced(
+            data: $this->buildReportEnhanced('xlsx')
         );
     }
 }
