@@ -388,7 +388,6 @@ class ExportService
 
     public function exportToPdfEnhanced(array $data): StreamedResponse
     {
-        dd($data);
         $pdf = SnappyPdf::loadView('pdf.reports-general', [
             'data' => $data,
         ]);
@@ -413,8 +412,7 @@ class ExportService
     public function exportToExcelEnhanced(array $data): \Symfony\Component\HttpFoundation\BinaryFileResponse
     {
         $filename = str_replace('.pdf', '.xlsx', $data['filename']);
-
-        $export = new class($data) implements 
+        $export = new class($data) implements
             \Maatwebsite\Excel\Concerns\FromArray,
             \Maatwebsite\Excel\Concerns\WithStyles,
             \Maatwebsite\Excel\Concerns\WithEvents,
@@ -437,7 +435,7 @@ class ExportService
 
                 // Data isi tabel
                 foreach ($this->data['rows'] as $row) {
-                    $rows[] = array_merge([''], $row['data']);
+                    $rows[] = array_merge([''], str_replace('__str', '', $row['data']));
                 }
 
                 return $rows;
@@ -507,6 +505,4 @@ class ExportService
 
         return \Maatwebsite\Excel\Facades\Excel::download($export, $filename);
     }
-
-
 }

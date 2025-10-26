@@ -84,8 +84,10 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
         return new IncomeStatementReportTransformer($reportDTO);
     }
 
-    public function buildReportEnhanced(string $format = 'pdf'): array
-    {
+    public function buildReportEnhanced(
+        ?string $template = null,
+        string $format = 'pdf'
+    ): array {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $report = $this->report;
 
@@ -180,14 +182,18 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
     public function exportXLSX(): BinaryFileResponse
     {
         return $this->exportService->exportToExcelEnhanced(
-            data: $this->buildReportEnhanced('xlsx')
+            data: $this->buildReportEnhanced(
+                format: 'xlsx'
+            )
         );
     }
 
     public function exportPDF(): StreamedResponse
     {
         return $this->exportService->exportToPdfEnhanced(
-            data: $this->buildReportEnhanced('pdf')
+            data: $this->buildReportEnhanced(
+                format: 'pdf'
+            )
         );
     }
 }

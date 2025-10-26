@@ -2,6 +2,7 @@
 
 namespace App\Filament\Company\Pages\Reports;
 
+use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
@@ -16,7 +17,7 @@ use Guava\FilamentClusters\Forms\Cluster;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-class CashFlowStatement extends BaseReportPage
+class CashFlowStatement extends BaseReportPage implements EnhancedReport
 {
     use HasReportTabs;
 
@@ -61,7 +62,6 @@ class CashFlowStatement extends BaseReportPage
                 ])->extraFieldWrapperAttributes([
                     'class' => 'report-hidden-label',
                 ]),
-                // ...FilterProjectCompany::make()
             ]);
     }
 
@@ -73,6 +73,13 @@ class CashFlowStatement extends BaseReportPage
     protected function getTransformer(ReportDTO $reportDTO): ExportableReport
     {
         return new CashFlowStatementReportTransformer($reportDTO);
+    }
+
+    public function buildReportEnhanced(
+        ?string $template = null,
+        string $format = 'pdf',
+    ): array {
+        return [];
     }
 
     public function exportCSV(): StreamedResponse

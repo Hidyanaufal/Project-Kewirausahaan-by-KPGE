@@ -75,7 +75,7 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
                     $template   = $data['template'];
 
                     if ($format == 'xlsx') {
-                        return $this->exportXLSX();
+                        return $this->exportXLSX($template);
                     }
 
                     if ($format == 'pdf') {
@@ -90,7 +90,6 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         return [
             Column::make('account_code')
                 ->label('ACCOUNT CODE')
-                ->toggleable(isToggledHiddenByDefault: true)
                 ->alignment(Alignment::Left),
             Column::make('account_name')
                 ->label('ACCOUNTS')
@@ -134,8 +133,10 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         return new TrialBalanceReportTransformer($reportDTO);
     }
 
-    public function buildReportEnhanced($template = null): array
-    {
+    public function buildReportEnhanced(
+        ?string $template = null,
+        string $format = 'pdf',
+    ): array {
         if ($template == 'advance') {
             return $this->__buildReportAdvance();
         }
@@ -245,8 +246,10 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         );
     }
 
-    public function exportXLSX(): BinaryFileResponse
+    public function exportXLSX($template = null): BinaryFileResponse
     {
-        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
+        return $this->exportService->exportToExcelEnhanced(
+            data: $this->buildReportEnhanced($template)
+        );
     }
 }

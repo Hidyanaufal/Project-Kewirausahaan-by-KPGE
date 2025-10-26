@@ -77,8 +77,10 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
         return new BalanceSheetReportTransformer($reportDTO);
     }
 
-    public function buildReportEnhanced(): array
-    {
+    public function buildReportEnhanced(
+        ?string $template = null,
+        string $format = 'pdf',
+    ): array {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $report = $this->report;
 

@@ -55,7 +55,7 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                     $template   = $data['template'];
 
                     if ($format == 'xlsx') {
-                        return $this->exportXLSX();
+                        return $this->exportXLSX($template);
                     }
 
                     if ($format == 'pdf') {
@@ -65,8 +65,10 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
         ];
     }
 
-    public function buildReportEnhanced($template = null): array
-    {
+    public function buildReportEnhanced(
+        ?string $template = null,
+        string $format = 'pdf',
+    ): array {
         if ($template == 'detail') {
             return $this->__buildReportDetail();
         }
@@ -324,14 +326,20 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
     public function exportPDF($template = null): StreamedResponse
     {
         return $this->exportService->exportToPdfEnhanced(
-            data: $this->buildReportEnhanced($template)
+            data: $this->buildReportEnhanced(
+                template: $template,
+                format: 'pdf'
+            )
         );
     }
 
-    public function exportXLSX(): BinaryFileResponse
+    public function exportXLSX($template = null): BinaryFileResponse
     {
         return $this->exportService->exportToExcelEnhanced(
-            data: $this->buildReportEnhanced('xlsx')
+            data: $this->buildReportEnhanced(
+                template: $template,
+                format: 'xlsx'
+            )
         );
     }
 }
