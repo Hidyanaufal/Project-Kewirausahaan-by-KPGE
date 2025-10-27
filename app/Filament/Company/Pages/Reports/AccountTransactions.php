@@ -2,10 +2,10 @@
 
 namespace App\Filament\Company\Pages\Reports;
 
+use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
-use App\Filament\Forms\Addons\FilterProjectCompany;
 use App\Models\Accounting\Account;
 use App\Models\Common\Client;
 use App\Models\Common\Vendor;
@@ -13,19 +13,21 @@ use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
 use App\Transformers\AccountTransactionReportTransformer;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Actions;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
+use Filament\Forms;
 use Filament\Support\Enums\Alignment;
+use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
-use Filament\Tables\Actions\Action;
 use Guava\FilamentClusters\Forms\Cluster;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-class AccountTransactions extends BaseReportPage
+class AccountTransactions extends BaseReportPage implements EnhancedReport
 {
     protected static string $view = 'filament.company.pages.reports.account-transactions';
 
@@ -109,7 +111,6 @@ class AccountTransactions extends BaseReportPage
                         ->keyBindings(['mod+s'])
                         ->button(),
                 ])->alignEnd()->verticallyAlignEnd(),
-                // ...FilterProjectCompany::make(),
             ]);
     }
 
@@ -167,19 +168,99 @@ class AccountTransactions extends BaseReportPage
         return new AccountTransactionReportTransformer($reportDTO);
     }
 
+    public function buildReportEnhanced(
+        ?string $template = null,
+        string $format = 'pdf',
+    ): array {
+        if ($template == 'all') {
+            return $this->__buildReportAllJournal();
+        }
+        if ($template == 'bank') {
+            return $this->__buildReportBankBook();
+        }
+        return $this->__buildReportDefault();
+    }
+
+    public function __buildReportDefault(): array
+    {
+        return [];
+    }
+
+    public function __buildReportAllJournal(): array
+    {
+        return [];
+    }
+
+    public function __buildReportBankBook(): array
+    {
+        return [];
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('export')
+                ->label('Export')
+                ->button()
+                ->outlined()
+                ->icon('heroicon-m-chevron-down')
+                ->iconPosition(IconPosition::After)
+                ->slideOver()
+                ->modalWidth(MaxWidth::Small)
+                ->form([
+                    Forms\Components\Select::make('format')
+                        ->options([
+                            'pdf' => 'PDF',
+                            'xlsx' => 'XLSX',
+                        ])
+                        ->default('pdf')
+                        ->required(),
+                    Forms\Components\Select::make('template')
+                        ->options([
+                            'default' => 'Account List',
+                            'all' => 'All Journal',
+                            'bank' => 'Bank Book',
+                        ])
+                        ->required(),
+                ])
+                ->action(function (array $data) {
+                    $format     = $data['format'];
+                    $template   = $data['template'];
+
+                    if ($format == 'xlsx') {
+                        return $this->exportXLSX($template);
+                    }
+
+                    if ($format == 'pdf') {
+                        return $this->exportPDF($template);
+                    }
+                })
+        ];
+    }
+
     public function exportCSV(): StreamedResponse
     {
         return $this->exportService->exportToCsv($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
     }
 
-    public function exportPDF(): StreamedResponse
+    public function exportPDF($template = null): StreamedResponse
     {
-        return $this->exportService->exportToPdf($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
+        return $this->exportService->exportToPdfEnhanced(
+            data: $this->buildReportEnhanced(
+                template: $template,
+                format: 'pdf'
+            )
+        );
     }
 
-    public function exportXLSX(): BinaryFileResponse
+    public function exportXLSX($template = null): BinaryFileResponse
     {
-        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
+        return $this->exportService->exportToExcelEnhanced(
+            data: $this->buildReportEnhanced(
+                template: $template,
+                format: 'xlsx'
+            )
+        );
     }
 
     public function getEmptyStateHeading(): string | Htmlable

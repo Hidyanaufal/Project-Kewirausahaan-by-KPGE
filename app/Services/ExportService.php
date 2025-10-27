@@ -426,16 +426,17 @@ class ExportService
             {
                 $rows = [];
 
-                // Header umum laporan
-                $rows[] = ['', $this->data['company_name']];
-                $rows[] = ['', $this->data['report_title']];
-                $rows[] = ['', $this->data['report_period']];
-                // Baris 4: Header tabel
-                $rows[] = array_merge([''], $this->data['columns']);
+                // Header umum laporan (baris 1-3)
+                $rows[] = [$this->data['company_name']];
+                $rows[] = [$this->data['report_title']];
+                $rows[] = [$this->data['report_period']];
+
+                // Header tabel (baris 4)
+                $rows[] = $this->data['columns'];
 
                 // Data isi tabel
                 foreach ($this->data['rows'] as $row) {
-                    $rows[] = array_merge([''], str_replace('__str', '', $row['data']));
+                    $rows[] = str_replace('__str', '', $row['data']);
                 }
 
                 return $rows;
@@ -446,55 +447,105 @@ class ExportService
                 $highestRow = $sheet->getHighestRow();
                 $highestCol = $sheet->getHighestColumn();
 
-                // ====== STYLE HEADER LAPORAN ======
-                $sheet->getStyle('B1')->getFont()->setBold(true)->setSize(14);
-                $sheet->getStyle('B2')->getFont()->setBold(true)->setSize(12);
-                $sheet->getStyle('B3')->getFont()->setItalic(true)->setSize(10);
+                // Hitung lebar header (biar bisa merge cell A1 sampai kolom terakhir)
+                $mergeRange = 'A1:' . $highestCol . '1';
+                $sheet->mergeCells($mergeRange);
+                $sheet->mergeCells('A2:' . $highestCol . '2');
+                $sheet->mergeCells('A3:' . $highestCol . '3');
 
-                // ====== BORDER TABLE (mulai B4) ======
-                $tableRange = "B4:" . $highestCol . $highestRow;
+                // ===== STYLE UNTUK JUDUL LAPORAN =====
+                $sheet->getStyle('A1')->applyFromArray([
+                    'font' => [
+                        'name' => 'Roboto',
+                        'size' => 12,
+                        'bold' => true,
+                        'color' => ['rgb' => '333333'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                    ],
+                ]);
+
+                $sheet->getStyle('A2')->applyFromArray([
+                    'font' => [
+                        'name' => 'Roboto',
+                        'size' => 15,
+                        'bold' => true,
+                        'color' => ['rgb' => 'B30202'], // merah seperti PDF
+                    ],
+                    'alignment' => [
+                        'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                    ],
+                ]);
+
+                $sheet->getStyle('A3')->applyFromArray([
+                    'font' => [
+                        'name' => 'Roboto',
+                        'size' => 12,
+                        'italic' => true,
+                        'color' => ['rgb' => '333333'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                    ],
+                ]);
+
+                // ====== HEADER TABLE ======
+                $sheet->getStyle("A4:" . $highestCol . "4")->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => '0606AE'], // biru seperti PDF
+                    ],
+                    'alignment' => [
+                        'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                        'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                    ],
+                    'borders' => [
+                        'bottom' => [
+                            'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                            'color' => ['rgb' => '000000'],
+                        ],
+                    ],
+                ]);
+
+                // ====== BORDER UNTUK SEMUA DATA ======
+                $tableRange = "A4:" . $highestCol . $highestRow;
                 $sheet->getStyle($tableRange)->getBorders()->getAllBorders()
                     ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 
-                // ====== HEADER TABLE ======
-                $sheet->getStyle("B4:" . $highestCol . "4")->getFont()->setBold(true);
-
                 // ====== FORMAT ANGKA ======
-                foreach (range('C', $highestCol) as $col) {
+                foreach (range('B', $highestCol) as $col) {
                     $sheet->getStyle("{$col}5:{$col}{$highestRow}")
                         ->getNumberFormat()->setFormatCode('#,##0.00');
                     $sheet->getStyle("{$col}5:{$col}{$highestRow}")
                         ->getAlignment()->setHorizontal('right');
                 }
 
-                // ====== TEKS RATA KIRI ======
-                $sheet->getStyle('B4:B' . $highestRow)->getAlignment()->setHorizontal('left');
+                // ====== TEKS RATA KIRI UNTUK KOLOM A ======
+                $sheet->getStyle('A4:A' . $highestRow)
+                    ->getAlignment()->setHorizontal('left');
 
-                // ====== TERAPKAN STYLE BOLD SESUAI DATA ======
+                // ====== BOLD BARIS SESUAI DATA ======
                 foreach ($this->data['rows'] as $index => $row) {
-                    $rowNumber = $index + 5; // karena header tabel di baris 4
-                    $cellRange = "B{$rowNumber}:" . $highestCol . "{$rowNumber}";
-
+                    $rowNumber = $index + 5;
+                    $cellRange = "A{$rowNumber}:" . $highestCol . "{$rowNumber}";
                     if (isset($row['style']['font-weight']) && $row['style']['font-weight'] === 'bold') {
                         $sheet->getStyle($cellRange)->getFont()->setBold(true);
                     }
                 }
 
-                // ====== AUTO FIT SEMUA KOLOM DINAMIS ======
-                foreach (range('B', $highestCol) as $col) {
+                // ====== AUTO SIZE KOLOM ======
+                foreach (range('A', $highestCol) as $col) {
                     $sheet->getColumnDimension($col)->setAutoSize(true);
                 }
-
-                // ====== MARGIN KIRI (KOLOM A) ======
-                $sheet->getColumnDimension('A')->setWidth(60); // beri ruang 60 pixel
 
                 return [];
             }
 
             public static function afterSheet(\Maatwebsite\Excel\Events\AfterSheet $event)
             {
-                // Freeze di bawah header (baris 5)
-                $event->sheet->freezePane('B5');
+                // Freeze di bawah header tabel
+                $event->sheet->freezePane('A5');
             }
 
             public function title(): string
