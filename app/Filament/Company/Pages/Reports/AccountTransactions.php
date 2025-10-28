@@ -6,13 +6,17 @@ use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
+use App\Helpers\AuthHelper;
 use App\Models\Accounting\Account;
+use App\Models\Accounting\Transaction;
 use App\Models\Common\Client;
 use App\Models\Common\Vendor;
+use App\Models\Company;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
 use App\Transformers\AccountTransactionReportTransformer;
+use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Actions;
 use Filament\Forms\Components\Select;
@@ -24,6 +28,7 @@ use Filament\Support\Enums\MaxWidth;
 use Guava\FilamentClusters\Forms\Cluster;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -183,12 +188,148 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
 
     public function __buildReportDefault(): array
     {
-        return [];
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+
+        $now = now()->format('Y-m-d_H-i-s');
+
+        $toNumber = fn($value) => number_format((float)$value, 2, ',', '.');
+
+        $accounts = Account::query()
+            ->where('company_id', $company->id)
+            ->with(['journalEntries' => function ($q) {
+                $q->select('account_id', DB::raw('SUM(CASE WHEN type = "debit" THEN amount ELSE 0 END) as total_debit'))
+                    ->addSelect(DB::raw('SUM(CASE WHEN type = "credit" THEN amount ELSE 0 END) as total_credit'))
+                    ->groupBy('account_id');
+            }])
+            ->get();
+
+        $rows = collect();
+
+        foreach ($accounts as $account) {
+            $totalDebit = $account->journalEntries->first()->total_debit ?? 0;
+            $totalCredit = $account->journalEntries->first()->total_credit ?? 0;
+            $balance = $totalDebit - $totalCredit;
+
+            $rows->push([
+                'data' => [
+                    '__str' . $account->code,
+                    $account->name,
+                    $account->type->getLabel() ?? '-',
+                    $toNumber($balance),
+                ],
+            ]);
+        }
+
+        $header = [
+            'Account No.',
+            'Account Name',
+            'Account Type',
+            'Balance',
+        ];
+
+        return [
+            'filename'      => "{$company->name} Account List {$now}.pdf",
+            'company_name'  => $company->name,
+            'report_title'  => 'Account List',
+            'report_period' => 'As of ' . now()->format('d M Y'),
+            'columns'       => $header,
+            'rows'          => $rows->toArray(),
+        ];
     }
 
     public function __buildReportAllJournal(): array
     {
-        return [];
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+
+        $now = now()->format('Y-m-d_H-i-s');
+
+        $toNumber = fn($v) => is_null($v) ? 0 : (float) $v;
+
+        $transactions = Transaction::query()
+            ->where('company_id', $company->id)
+            ->with([
+                'journalEntries.account:id,code,name',
+            ])
+            ->orderBy('posted_at')
+            ->get();
+
+        $rows = collect();
+
+        foreach ($transactions as $txn) {
+            $txnDate = $txn->posted_at ? Carbon::parse($txn->posted_at)->format('d M Y') : '-';
+            $txnDesc = trim("{$txn->description} {$txn->transaction_code} {$txn->notes}");
+
+            // Row Header
+            $rows->push([
+                'data' => [
+                    $txnDate,
+                    $txn->transaction_code,
+                    $txn->type->getLabel(),
+                    $txnDesc,
+                ],
+                'style' => [
+                    'font-weight' => 'bold',
+                ],
+            ]);
+
+            $totalDebit = 0;
+            $totalCredit = 0;
+
+            // Row Detail
+            foreach ($txn->journalEntries as $je) {
+                $account = $je->account;
+                $amount = $toNumber($je->amount ?? 0);
+                $isDebit = $je->type->value === 'debit';
+
+                $debit = $isDebit ? $amount : 0;
+                $credit = !$isDebit ? $amount : 0;
+
+                $totalDebit += $debit;
+                $totalCredit += $credit;
+
+                $rows->push([
+                    'data' => [
+                        '__str' . ($account->code ?? '-'),
+                        $account->name ?? '-',
+                        $debit,
+                        $credit,
+                    ],
+                    'style' => [
+                        'padding-left' => '20px',
+                    ],
+                ]);
+            }
+
+            // Row Subtotal
+            $rows->push([
+                'data' => [
+                    '',
+                    '',
+                    $totalDebit,
+                    $totalCredit,
+                ],
+                'style' => [
+                    'font-weight' => 'bold',
+                    'color'       => 'rgb(6, 6, 174)',
+                ],
+            ]);
+        }
+
+        $header = [
+            'Account No.',
+            'Account Name',
+            'Debit (Base)',
+            'Credit (Base)',
+        ];
+
+        return [
+            'filename'      => "{$company->name} All Journals {$now}.pdf",
+            'company_name'  => $company->name,
+            'report_title'  => 'All Journals',
+            'report_period' => 'As of ' . now()->format('d M Y'),
+            'columns'       => $header,
+            'rows'          => $rows->toArray(),
+        ];
     }
 
     public function __buildReportBankBook(): array
