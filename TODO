@@ -1,5 +1,6 @@
 
 Todo:
+  # Daftar penyesuaian
   ✔ Tambahan field profit pada invoice @done(25-10-14 20:55)
   ✔ Tambahkan 1 field untuk no transaksi/kode voucher/kode transaksi . contoh BM untuk bank masuk MAN/BM/2401/004 dan BK untuk Bank Keluar MAN/BK/2401/001 @done(25-10-15 07:37)
   ✔ Tambahkan field filter by project dan by company untuk setiap report (field by company hanya muncul pada company utama, tambahkan field company utama) @done(25-10-16 20:17)
@@ -42,7 +43,6 @@ Todo:
 Laporan Keuangan (pdf):
   ✔ Labarugi (income Statement) @started(25-10-25 14:20) @done(25-10-25 14:46) @lasted(26m28s)
   ☐ Neraca (Balance Sheet)
-  ☐ Perubahan modal (Other Reports)
   ☐ Cashflow Direct Method (Cashflow Statement)
   ✔ Account List (Account Transaction) @done(25-10-27 11:41)
   ✔ Aging Receivable Detail (Account Receivable Aging) @done(25-10-25 19:14)
@@ -50,15 +50,17 @@ Laporan Keuangan (pdf):
   ✔ All Journals (Transaction) @done(25-10-27 11:30)
   ☐ Cashflow Detail (Cashflow Statement)
   ☐ Cashflow Summary (Cashflow Statement)
+  ☐ Perubahan modal (Other Reports)
   ☐ Financial Ratio (Other Reports)
   ☐ General Journal Voucher  (Other Reports)
   ☐ General Ledger Detail (Other Reports)
   ☐ General Ledger Summary (Other Reports)
+  ✔ Statement of Owner Equity Changes (Other Reports) @done(25-10-28 16:48)
   ✔ Outstanding Invoice (Account Receivable Aging) @started(25-10-25 19:14) @done(25-10-25 20:14) @lasted(1h51s)
-  ☐ Statement of Owner Equity Changes (Other Reports)
   ✔ Trial Balance Classic (Trial Balance) @started(25-10-25 20:22) @done(25-10-25 23:45) @lasted(3h23m26s)
   ☐ Trial Balance (Trial Balance)
-  ☐ Bank Book (Account Transaction)
+  ✔ Bank Book (Account Transaction) @done(25-10-28 15:07)
+
 Laporan Keuangan (excel):
   ✔ Labarugi (income Statement) @done(25-10-26 19:08)
   ☐ Neraca (Balance Sheet)
@@ -75,7 +77,7 @@ Laporan Keuangan (excel):
   ☐ General Ledger Detail (Other Reports)
   ☐ General Ledger Summary (Other Reports)
   ✔ Outstanding Invoice (Account Receivable Aging) @done(25-10-26 19:08)
-  ☐ Statement of Owner Equity Changes (Other Reports)
+  ✔ Statement of Owner Equity Changes (Other Reports) @done(25-10-28 16:48)
   ✔ Trial Balance Classic (Trial Balance) @done(25-10-26 22:17)
   ☐ Trial Balance (Trial Balance)
-  ☐ Bank Book (Account Transaction)
+  ✔ Bank Book (Account Transaction) @done(25-10-28 15:07)

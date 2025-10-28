@@ -192,6 +192,10 @@ class Account extends Model
         }
     }
 
+    public static function getOpeningBalanceAccount(?int $companyId = null): self
+    {
+        return self::findAccountByNameOrFail(AccountDefaultKey::OpenBalance, $companyId);
+    }
 
     public static function getAccountsReceivableAccount(?int $companyId = null): self
     {

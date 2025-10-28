@@ -14,6 +14,7 @@ enum AccountDefaultKey: string implements HasLabel
     case PPh23              = 'pph_23';
     case PPnWapu            = 'ppn_wapu';
     case Profit             = 'profit';
+    case OpenBalance        = 'open_balance';
 
     public function getLabel(): ?string
     {
@@ -26,6 +27,7 @@ enum AccountDefaultKey: string implements HasLabel
             self::PPn                => 'PPN',
             self::PPnWapu            => 'PPN WAPU',
             self::Profit             => 'Profit',
+            self::OpenBalance        => 'Open Balance Equity',
         };
     }
 }

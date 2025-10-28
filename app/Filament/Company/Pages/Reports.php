@@ -11,6 +11,7 @@ use App\Filament\Company\Pages\Reports\CashFlowStatement;
 use App\Filament\Company\Pages\Reports\ClientBalanceSummary;
 use App\Filament\Company\Pages\Reports\ClientPaymentPerformance;
 use App\Filament\Company\Pages\Reports\IncomeStatement;
+use App\Filament\Company\Pages\Reports\OtherReport;
 use App\Filament\Company\Pages\Reports\TrialBalance;
 use App\Filament\Company\Pages\Reports\VendorBalanceSummary;
 use App\Filament\Company\Pages\Reports\VendorPaymentPerformance;
@@ -79,6 +80,13 @@ class Reports extends Page
                             ->icon('heroicon-o-document-currency-dollar')
                             ->iconColor(Color::Cyan)
                             ->url(CashFlowStatement::getUrl()),
+                        ReportEntry::make('other_reports')
+                            ->hiddenLabel()
+                            ->heading('Other Reports')
+                            ->description('Access additional financial and accounting reports such as Capital Changes, Financial Ratios, and General Ledger details.')
+                            ->icon('heroicon-o-folder-open')
+                            ->iconColor(Color::Amber)
+                            ->url(OtherReport::getUrl()),
                     ]),
                 Section::make('Client Reports')
                     ->aside()

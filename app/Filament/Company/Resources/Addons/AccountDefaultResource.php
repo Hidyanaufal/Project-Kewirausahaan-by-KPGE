@@ -40,7 +40,8 @@ class AccountDefaultResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('key'),
+                Tables\Columns\TextColumn::make('key')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('account.name'),
             ])
             ->filters([

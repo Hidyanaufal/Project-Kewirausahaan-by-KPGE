@@ -334,7 +334,87 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
 
     public function __buildReportBankBook(): array
     {
-        return [];
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+
+        $companyId = $company->id;
+
+        $now = now()->format('Y-m-d_H-i-s');
+
+        $toNumber = fn($value) => number_format((float)$value / 100, 2, ',', '.');
+
+        $banks = \App\Models\Banking\BankAccount::query()
+            ->with(['account', 'transactions' => function ($q) use ($companyId) {
+                $q->where('company_id', $companyId)
+                    ->whereNotNull('posted_at')
+                    ->orderBy('posted_at', 'asc');
+            }])
+            ->where('company_id', $companyId)
+            ->get();
+
+        $rows = collect();
+
+        foreach ($banks as $bank) {
+            $rows->push([
+                'data' => [
+                    '__str' . ($bank->account->code ?? '-'),
+                    $bank->account->name ?? '-',
+                    'Currency: IDR',
+                    '',
+                    '',
+                    '',
+                ],
+                'style' => [
+                    'font-weight' => 'bold',
+                    'color'       => 'rgb(6, 6, 174)',
+                ],
+            ]);
+
+            $balance = 0;
+
+            foreach ($bank->transactions as $trx) {
+                $journalEntries = \App\Models\Accounting\JournalEntry::where('transaction_id', $trx->id)
+                    ->where('company_id', $companyId)
+                    ->get();
+
+                $increase = $journalEntries->where('type', 'debit')->sum('amount');
+                $decrease = $journalEntries->where('type', 'credit')->sum('amount');
+
+                $balance += ($increase - $decrease);
+
+                $rows->push([
+                    'data' => [
+                        \Carbon\Carbon::parse($trx->posted_at)->format('d M Y'),
+                        $trx->transaction_code ?? '-',
+                        $trx->description ?? '-',
+                        $increase > 0 ? $toNumber($increase) : '',
+                        $decrease > 0 ? $toNumber($decrease) : '',
+                        $toNumber($balance),
+                    ],
+                ]);
+            }
+
+            $rows->push([
+                'data' => ['', '', '', '', '', ''],
+            ]);
+        }
+
+        $header = [
+            'Date',
+            'Source No',
+            'Description',
+            'Increase (Debit)',
+            'Decrease (Credit)',
+            'Balance',
+        ];
+
+        return [
+            'filename'      => "{$company->name} Bank Book {$now}.pdf",
+            'company_name'  => $company->name,
+            'report_title'  => 'Bank Book',
+            'report_period' => 'As of ' . now()->format('d M Y'),
+            'columns'       => $header,
+            'rows'          => $rows->toArray(),
+        ];
     }
 
     protected function getHeaderActions(): array
