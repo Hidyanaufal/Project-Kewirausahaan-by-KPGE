@@ -7,6 +7,7 @@ use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Filament\Forms\Components\DateRangeSelect;
 use App\Helpers\AuthHelper;
+use App\Models\Accounting\Account;
 use App\Models\Company;
 use App\Services\ExportService;
 use App\Services\ReportService;
@@ -20,6 +21,7 @@ use Filament\Forms;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -145,7 +147,161 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
 
     public function __buildReportAdvance(): array
     {
-        return [];
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+
+        $start = Carbon::parse($this->getFilterState('startDate'));
+        $end = Carbon::parse($this->getFilterState('endDate'));
+        $now = Carbon::now()->format('Y-m-d_H-i-s');
+
+        $startFormatted = $start->format('d M Y');
+        $endFormatted = $end->format('d M Y');
+
+        $header = [
+            'Account No',
+            'Account Name',
+            'Op Bal Debit',
+            'Op Bal Credit',
+            'Change Debit',
+            'Change Credit',
+            'End Bal Debit',
+            'End Bal Credit',
+        ];
+
+        // Ambil semua akun aktif
+        $accounts = Account::where('archived', false)
+            ->where('company_id', $company->id)
+            ->orderBy('code')
+            ->get(['id', 'code', 'name']);
+
+        $accountIds = $accounts->pluck('id')->toArray();
+        $scale = 100; // ubah ke 1 jika amount sudah dalam rupiah
+
+        // Opening balance: semua transaksi sebelum tanggal start
+        $opening = DB::table('journal_entries')
+            ->join('transactions', 'journal_entries.transaction_id', '=', 'transactions.id')
+            ->select(
+                'journal_entries.account_id',
+                DB::raw("SUM(CASE WHEN journal_entries.type = 'debit' THEN journal_entries.amount ELSE 0 END) as opening_debit"),
+                DB::raw("SUM(CASE WHEN journal_entries.type = 'credit' THEN journal_entries.amount ELSE 0 END) as opening_credit")
+            )
+            ->where('journal_entries.company_id', $company->id)
+            ->whereIn('journal_entries.account_id', $accountIds)
+            ->where('transactions.posted_at', '<', $start->toDateString())
+            ->groupBy('journal_entries.account_id')
+            ->pluck('opening_debit', 'journal_entries.account_id')
+            ->toArray();
+
+        $openingCredit = DB::table('journal_entries')
+            ->join('transactions', 'journal_entries.transaction_id', '=', 'transactions.id')
+            ->select(
+                'journal_entries.account_id',
+                DB::raw("SUM(CASE WHEN journal_entries.type = 'credit' THEN journal_entries.amount ELSE 0 END) as opening_credit")
+            )
+            ->where('journal_entries.company_id', $company->id)
+            ->whereIn('journal_entries.account_id', $accountIds)
+            ->where('transactions.posted_at', '<', $start->toDateString())
+            ->groupBy('journal_entries.account_id')
+            ->pluck('opening_credit', 'journal_entries.account_id')
+            ->toArray();
+
+        // Mutasi selama periode (Change)
+        $period = DB::table('journal_entries')
+            ->join('transactions', 'journal_entries.transaction_id', '=', 'transactions.id')
+            ->select(
+                'journal_entries.account_id',
+                DB::raw("SUM(CASE WHEN journal_entries.type = 'debit' THEN journal_entries.amount ELSE 0 END) as period_debit"),
+                DB::raw("SUM(CASE WHEN journal_entries.type = 'credit' THEN journal_entries.amount ELSE 0 END) as period_credit")
+            )
+            ->where('journal_entries.company_id', $company->id)
+            ->whereIn('journal_entries.account_id', $accountIds)
+            ->whereBetween('transactions.posted_at', [$start->toDateString(), $end->toDateString()])
+            ->groupBy('journal_entries.account_id')
+            ->get()
+            ->keyBy('account_id');
+
+        $rows = collect();
+
+        // Total keseluruhan
+        $totals = [
+            'op_debit' => 0,
+            'op_credit' => 0,
+            'chg_debit' => 0,
+            'chg_credit' => 0,
+            'end_debit' => 0,
+            'end_credit' => 0,
+        ];
+
+        foreach ($accounts as $account) {
+            $aid = $account->id;
+
+            $opDebit = ($opening[$aid] ?? 0);
+            $opCredit = ($openingCredit[$aid] ?? 0);
+
+            $chgDebit = $period[$aid]->period_debit ?? 0;
+            $chgCredit = $period[$aid]->period_credit ?? 0;
+
+            // Hitung ending balance
+            $endDebit = 0;
+            $endCredit = 0;
+            $balance = ($opDebit - $opCredit) + ($chgDebit - $chgCredit);
+
+            if ($balance > 0) {
+                $endDebit = $balance;
+            } elseif ($balance < 0) {
+                $endCredit = abs($balance);
+            }
+
+            // Skip akun tanpa aktivitas
+            if ($opDebit == 0 && $opCredit == 0 && $chgDebit == 0 && $chgCredit == 0 && $endDebit == 0 && $endCredit == 0) {
+                continue;
+            }
+
+            $rows->push([
+                'data' => [
+                    '__str' . $account->code,
+                    $account->name,
+                    $opDebit / 100,
+                    $opCredit / 100,
+                    $chgDebit / 100,
+                    $chgCredit / 100,
+                    $endDebit / 100,
+                    $endCredit / 100,
+                ],
+            ]);
+
+            $totals['op_debit'] += $opDebit / $scale;
+            $totals['op_credit'] += $opCredit / $scale;
+            $totals['chg_debit'] += $chgDebit / $scale;
+            $totals['chg_credit'] += $chgCredit / $scale;
+            $totals['end_debit'] += $endDebit / $scale;
+            $totals['end_credit'] += $endCredit / $scale;
+        }
+
+        // Tambahkan total di akhir
+        $rows->push([
+            'data' => [
+                '',
+                'TOTAL',
+                $totals['op_debit'] / 100,
+                $totals['op_credit'] / 100,
+                $totals['chg_debit'] / 100,
+                $totals['chg_credit'] / 100,
+                $totals['end_debit'] / 100,
+                $totals['end_credit'] / 100,
+            ],
+            'style' => [
+                'font-weight' => 'bold',
+            ],
+        ]);
+
+        return [
+            'filename'      => "{$company->name} Trial Balance Advance {$now}.pdf",
+            'company_name'  => $company->name,
+            'report_title'  => "Trial Balance (Advance)",
+            'report_period' => "From {$startFormatted} to {$endFormatted}",
+            'columns'       => $header,
+            'rows'          => $rows->toArray(),
+        ];
     }
 
     public function __buildReportDefault(): array
