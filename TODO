@@ -77,13 +77,13 @@ Laporan Keuangan (excel):
   ✔ Trial Balance Classic (Trial Balance) @done(25-10-26 22:17)
   ✔ Trial Balance (Trial Balance) @done(25-10-29 09:10)
   ✔ Bank Book (Account Transaction) @done(25-10-28 15:07)
-  ☐ Cashflow Direct Method (Cashflow Statement)
   ✔ Cashflow Detail (Cashflow Statement) @done(25-10-30 15:49)
+  ☐ Cashflow Direct Method (Cashflow Statement)
   ☐ Cashflow Summary (Cashflow Statement)
   ☐ Financial Ratio (Other Reports)
 
 Tamabahan Fixing 30-Oct-2025:
-  ☐ Excel dept asset
+  ✔ Excel depresiasi asset @done(25-10-30 16:00)
   ✔ Report all journal urutkan dari data yang terbaru dulu @done(25-10-30 13:15)
   ✔ invoice field profit setara dengan jumlah posisi diatas jumlah @done(25-10-30 13:24)
   ✔ bill admin bisa edit apapun yang terjadi, user kalo belum diapprove bisa edit @done(25-10-30 13:41)
@@ -101,12 +101,12 @@ Bonus:
   ☐ implementasi pagination pada page report > account transaction agar lebih kenceng
 
 report yg kelebihan 00:
+  ✔ trial balance classic @done(25-10-30 15:53)
+  ✔ Account List @done(25-10-30 15:53)
   ✔ profit n loss (standard) @done(25-10-30 15:14)
   ✔ Statement of Cash Flows Detail (Indirect Method) @done(25-10-30 15:14)
   ✔ Aging Receivable Detail As of 30 Oct 2025 @done(25-10-30 15:17)
   ✔ Outstanding Invoice As of 30 Oct 2025 @done(25-10-30 15:18)
-  ✔ trial balance classic @done(25-10-30 15:53)
-  ✔ Account List @done(25-10-30 15:53)
 
 report yg kurang 00:
   ✔ general ledger summary @done(25-10-30 15:20)
