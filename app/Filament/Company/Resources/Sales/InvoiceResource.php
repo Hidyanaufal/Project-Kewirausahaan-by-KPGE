@@ -33,10 +33,13 @@ use App\Models\Accounting\Invoice;
 use App\Models\Addons\TaxCode;
 use App\Models\Common\Client;
 use App\Models\Common\Offering;
+use App\Models\Company;
+use App\Services\ExportService;
 use App\Utilities\Currency\CurrencyAccessor;
 use App\Utilities\Currency\CurrencyConverter;
 use App\Utilities\RateCalculator;
 use Awcodes\TableRepeater\Header;
+use Barryvdh\Snappy\Facades\SnappyPdf;
 use Filament\Forms;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -567,7 +570,67 @@ class InvoiceResource extends Resource
             ])
             ->headerActions([
                 Tables\Actions\ExportAction::make()
+                    ->label('Export Excel')
                     ->exporter(InvoiceExporter::class),
+                Tables\Actions\Action::make('exportPdf')
+                    ->label('Export PDF')
+                    ->color('danger')
+                    ->action(function (Tables\Contracts\HasTable $livewire) {
+                        $companyId = AuthHelper::currentCompany();
+                        $company = Company::find($companyId);
+                        $query = $livewire->getFilteredTableQuery();
+                        $now = now()->format('Y-m-d_H-i-s');
+                        $records = $query->with(['client'])->get();
+                        $filename = "{$company->name} - Invoice List - {$now}.pdf";
+
+                        $columns = [
+                            'Invoice Number',
+                            'Tax Number',
+                            'Due Date',
+                            'Client Name',
+                            'Status',
+                            'Total',
+                            'Amount Paid',
+                            'Amount Due',
+                            'Subtotal',
+                            'Tax Total',
+                        ];
+                        $rows = collect();
+
+                        foreach ($records as $record) {
+                            $rows->push([
+                                'data' => [
+                                    $record->invoice_number, // Invoice Number
+                                    $record->tax_number, // Tax Number
+                                    $record->due_date, // Due Date
+                                    $record->client->name, // Client Name
+                                    $record->status->getLabel(), // Status
+                                    $record->total, // Total
+                                    $record->amount_paid, // Amount Paid
+                                    $record->amount_due, // Amount Due
+                                    $record->subtotal, // Subtotal
+                                    $record->tax_total, // Tax Total
+                                ],
+                                'style' => [],
+                            ]);
+                        }
+
+                        $data = [
+                            'filename'           => $filename,
+                            'company_name'       => $company->name,
+                            'report_title'       => "Invoice List",
+                            'report_period'      => 'As of ' . now()->format('d M Y'),
+                            'columns'            => $columns,
+                            'rows'               => $rows->toArray(),
+                        ];
+
+                        $exportService = new ExportService();
+
+                        return $exportService->exportToPdfEnhanced(
+                            data: $data
+                        );
+                    })
+
             ])
             ->actions([
                 Tables\Actions\ActionGroup::make([
