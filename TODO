@@ -57,7 +57,7 @@ Laporan Keuangan (pdf):
   ✔ Trial Balance (Trial Balance) @done(25-10-29 09:10)
   ✔ Bank Book (Account Transaction) @done(25-10-28 15:07)
   ☐ Cashflow Direct Method (Cashflow Statement)
-  ☐ Cashflow Detail (Cashflow Statement)
+  ✔ Cashflow Detail (Cashflow Statement) @done(25-10-30 15:49)
   ☐ Cashflow Summary (Cashflow Statement)
   ☐ Financial Ratio (Other Reports)
 
@@ -78,7 +78,7 @@ Laporan Keuangan (excel):
   ✔ Trial Balance (Trial Balance) @done(25-10-29 09:10)
   ✔ Bank Book (Account Transaction) @done(25-10-28 15:07)
   ☐ Cashflow Direct Method (Cashflow Statement)
-  ☐ Cashflow Detail (Cashflow Statement)
+  ✔ Cashflow Detail (Cashflow Statement) @done(25-10-30 15:49)
   ☐ Cashflow Summary (Cashflow Statement)
   ☐ Financial Ratio (Other Reports)
 
@@ -105,6 +105,8 @@ report yg kelebihan 00:
   ✔ Statement of Cash Flows Detail (Indirect Method) @done(25-10-30 15:14)
   ✔ Aging Receivable Detail As of 30 Oct 2025 @done(25-10-30 15:17)
   ✔ Outstanding Invoice As of 30 Oct 2025 @done(25-10-30 15:18)
+  ✔ trial balance classic @done(25-10-30 15:53)
+  ✔ Account List @done(25-10-30 15:53)
 
 report yg kurang 00:
   ✔ general ledger summary @done(25-10-30 15:20)

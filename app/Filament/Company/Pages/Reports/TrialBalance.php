@@ -354,8 +354,8 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
                     ? ($item['account_name']['name'] ?? '')
                     : $item['account_name'];
 
-                $debit  = $toNumber($item['debit_balance'] ?? 0);
-                $credit = $toNumber($item['credit_balance'] ?? 0);
+                $debit  = $toNumber($item['debit_balance'] ?? 0) / 100;
+                $credit = $toNumber($item['credit_balance'] ?? 0) / 100;
 
                 $rows->push([
                     'data' => [
@@ -375,8 +375,8 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
                 'data' => [
                     '',
                     '',
-                    $toNumber($totals['debit_balance']),
-                    $toNumber($totals['credit_balance']),
+                    $toNumber($totals['debit_balance']) / 100,
+                    $toNumber($totals['credit_balance']) / 100,
                 ],
                 'style' => [
                     'font-weight' => 'bold',

@@ -9,6 +9,7 @@ use App\Helpers\AuthHelper;
 use App\Models\Addons\Asset;
 use App\Models\Addons\DepreciationRecord;
 use App\Models\Company;
+use App\Services\ExportService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Carbon\Carbon;
 use Filament\Forms;
@@ -102,10 +103,117 @@ class DepreciationRecordResource extends Resource
                     ->options(fn() => Asset::query()->orderBy('name')->pluck('name', 'id')),
             ])
             ->headerActions([
-                Tables\Actions\ExportAction::make()
+                Tables\Actions\Action::make('exportExcel')
                     ->label('Export XLSX')
                     ->icon('heroicon-o-document-arrow-down')
-                    ->action(function () {}),
+                    ->action(function () {
+                        $company = Company::find(AuthHelper::currentCompany());
+
+                        $records = \App\Models\Addons\DepreciationRecord::with('asset.group')
+                            ->where('company_id', $company->id)
+                            ->orderBy('fiscal_year', 'desc')
+                            ->get();
+
+                        $now = now()->format('Y-m-d_H-i-s');
+
+                        $header = [
+                            'No',
+                            'Kelompok / Jenis Harta',
+                            'Bulan / Tahun Perolehan',
+                            'Harga Perolehan (Rp)',
+                            'Nilai Sisa Buku Fiskal Awal Tahun (Rp)',
+                            'Metode Komersial',
+                            'Metode Fiskal',
+                            'Penyusutan / Amortisasi Fiskal Tahun Ini (Rp)',
+                            'Catatan (Nilai Sisa Buku)',
+                        ];
+
+                        $rows = collect();
+
+                        $rowNumber = 1;
+
+                        $grouped = $records->groupBy(fn($r) => $r->asset->group->name ?? 'Lain-lain');
+
+                        foreach ($grouped as $groupName => $groupRecords) {
+                            // Header per kategori
+                            $rows->push([
+                                'data' => [$groupName],
+                                'style' => [
+                                    'bold' => true,
+                                    'underline' => true,
+                                ],
+                            ]);
+
+                            // Detail tiap record
+                            foreach ($groupRecords as $i => $record) {
+                                $rows->push([
+                                    'data' => [
+                                        $rowNumber++,
+                                        $record->asset->name ?? '-',
+                                        optional($record->asset->acquired_at)->format('d M Y') ?? '-',
+                                        $record->asset->purchase_price / 100,
+                                        $record->opening_fiscal_book_value / 100,
+                                        $record->commercial_method?->getLabel() ?? '-',
+                                        $record->fiscal_method?->getLabel() ?? '-',
+                                        $record->depreciation_expense / 100,
+                                        $record->closing_fiscal_book_value / 100,
+                                    ],
+                                    'style' => [],
+                                ]);
+                            }
+
+                            // Subtotal per kategori
+                            $rows->push([
+                                'data' => [
+                                    '',
+                                    "Subtotal {$groupName}",
+                                    '',
+                                    '',
+                                    '',
+                                    '',
+                                    '',
+                                    $groupRecords->sum('depreciation_expense') / 100,
+                                    '',
+                                ],
+                                'style' => ['bold' => true],
+                            ]);
+
+                            // Spacer kosong antar grup
+                            $rows->push([
+                                'data' => [''],
+                                'style' => [],
+                            ]);
+                        }
+
+                        // Grand total
+                        $rows->push([
+                            'data' => [
+                                '',
+                                'JUMLAH PENYUSUTAN FISKAL',
+                                '',
+                                '',
+                                '',
+                                '',
+                                '',
+                                $records->sum('depreciation_expense') / 100,
+                                '',
+                            ],
+                            'style' => ['bold' => true, 'border-top' => true],
+                        ]);
+
+                        $data = [
+                            'filename'      => "{$company->name} Daftar Penyusutan {$now}.xlsx",
+                            'company_name'  => $company->name,
+                            'report_title'  => 'Daftar Penyusutan dan Amortisasi Fiskal',
+                            'report_period' => 'As of ' . now()->format('d M Y'),
+                            'columns'       => $header,
+                            'rows'          => $rows->toArray(),
+                        ];
+
+                        $exportService = new \App\Services\ExportService();
+
+                        return $exportService->exportToExcelEnhanced(data: $data);
+                    }),
                 Tables\Actions\Action::make('exportPdf')
                     ->label('Export PDF')
                     ->color('danger')

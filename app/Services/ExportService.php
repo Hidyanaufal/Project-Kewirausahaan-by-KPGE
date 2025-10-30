@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Contracts\ExportableReport;
 use App\Contracts\HasSummaryReport;
-use App\Helpers\AuthHelper;
 use App\Models\Company;
 use App\Transformers\CashFlowStatementReportTransformer;
 use Barryvdh\Snappy\Facades\SnappyPdf;

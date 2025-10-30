@@ -218,7 +218,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                     '__str' . $account->code,
                     $account->name,
                     $account->type->getLabel() ?? '-',
-                    $toNumber($balance),
+                    $toNumber($balance / 100),
                 ],
             ]);
         }

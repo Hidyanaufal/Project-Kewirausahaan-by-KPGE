@@ -74,7 +74,6 @@ class Asset extends Model
         });
     }
 
-
     public function group(): BelongsTo
     {
         return $this->belongsTo(AssetGroup::class, 'group_id');

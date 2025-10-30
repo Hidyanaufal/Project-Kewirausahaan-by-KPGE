@@ -147,7 +147,7 @@
         </thead>
 
         <tbody>
-            @foreach ($records->groupBy(fn($r) => $r->asset->category->name ?? 'Lain-lain') as $group => $groupRecords)
+            @foreach ($records->groupBy(fn($r) => $r->asset->group->name ?? 'Lain-lain') as $group => $groupRecords)
                 <tr>
                     <td colspan="9" class="section-title">{{ strtoupper($group) }}</td>
                 </tr>
