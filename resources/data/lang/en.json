@@ -251,5 +251,7 @@
     "Asset": "Asset",
     "Depreciation Record": "Depreciation Record",
     "Account Default": "Account Default",
-    "Contract Information": "Contract Information"
+    "Contract Information": "Contract Information",
+    "Chart Of Accounts": "Chart Of Accounts",
+    "Member": "Member"
 }

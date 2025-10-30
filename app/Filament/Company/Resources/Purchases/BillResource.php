@@ -450,8 +450,6 @@ class BillResource extends Resource
             ->actions([
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ActionGroup::make([
-                        Tables\Actions\EditAction::make()
-                            ->url(static fn(Bill $record) => Pages\EditBill::getUrl(['record' => $record])),
                         Tables\Actions\ViewAction::make()
                             ->url(static fn(Bill $record) => Pages\ViewBill::getUrl(['record' => $record])),
                         Bill::getReplicateAction(Tables\Actions\ReplicateAction::class),

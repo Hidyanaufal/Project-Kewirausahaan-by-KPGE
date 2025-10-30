@@ -4,9 +4,11 @@ namespace App\Filament\Company\Resources\Accounting;
 
 use App\Filament\Company\Resources\Accounting\JournalEntryResource\Pages;
 use App\Filament\Company\Resources\Accounting\TransactionResource\Pages\ViewTransaction;
-use App\Filament\Tables\Columns;
 use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Account;
+use App\Models\Addons\Member;
+use App\Models\Common\Client;
+use App\Models\Common\Vendor;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -49,7 +51,6 @@ class JournalEntryResource extends Resource
 
                 Tables\Columns\TextColumn::make('account.name')
                     ->label('Account')
-                    ->description(fn($record) => $record->account?->code)
                     ->sortable()
                     ->searchable(),
 
@@ -86,13 +87,51 @@ class JournalEntryResource extends Resource
                     ->collapsible(),
             ])
             ->filters([
+                // Filter akun
                 Tables\Filters\SelectFilter::make('journal_entries.account_id')
+                    ->native(false)
                     ->label('Account')
                     ->options(Account::pluck('name', 'id'))
                     ->searchable(),
 
-                Tables\Filters\Filter::make('posted_at')
-                    ->label('Date Range')
+                // Filter tipe transaksi
+                Tables\Filters\SelectFilter::make('transactions.type')
+                    ->native(false)
+                    ->label('Type')
+                    ->options([
+                        'deposit' => 'Deposit',
+                        'withdrawal' => 'Withdrawal',
+                        'journal' => 'Journal',
+                    ]),
+
+                // Filter status reviewed
+                Tables\Filters\SelectFilter::make('transactions.reviewed')
+                    ->native(false)
+                    ->label('Reviewed')
+                    ->options([
+                        1 => 'Reviewed',
+                        0 => 'Not Reviewed',
+                    ]),
+
+                // Filter payment
+                Tables\Filters\SelectFilter::make('transactions.is_payment')
+                    ->native(false)
+                    ->label('Payment')
+                    ->options([
+                        1 => 'Payment',
+                        0 => 'Non-payment',
+                    ]),
+
+                // Filter member
+                Tables\Filters\SelectFilter::make('transactions.member_id')
+                    ->native(false)
+                    ->label('Member')
+                    ->options(fn() => Member::orderBy('name')->pluck('name', 'id')->toArray())
+                    ->searchable(),
+
+                // Filter tanggal transaksi
+                Tables\Filters\Filter::make('transactions.posted_at')
+                    ->label('Posted Date')
                     ->form([
                         Forms\Components\DatePicker::make('from')->label('From'),
                         Forms\Components\DatePicker::make('until')->label('Until'),

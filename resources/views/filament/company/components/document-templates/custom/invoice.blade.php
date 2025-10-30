@@ -84,7 +84,7 @@
                     <tr>
                         @if ($index === 0)
                             <td class="px-2 py-1 text-center border border-black align-top"
-                                rowspan="{{ count($document->lineItems) + 2 }}">
+                                rowspan="{{ count($document->lineItems) + ($document->profit ? 3 : 2) }}">
                                 {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
                             </td>
                             <td class="py-1 pl-2 font-semibold text-left border border-black" colspan="2">
@@ -100,7 +100,6 @@
                                 @endisset
                             </td>
                     </tr>
-                    <tr>
                 @endif
                 <td class="py-1 pl-2 text-left border border-black">
                     {{ $item->name }}
@@ -113,25 +112,28 @@
                 <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
                     {{ $item->subtotal }}
                 </td>
-                </tr>
                 @endforeach
 
                 <tr>
-                    <td colspan="2" class="px-2 py-1 text-[11px] text-gray-800 leading-snug">
+                    <td colspan="2" class="px-2 py-1 text-[11px] text-gray-800">
                         @if ($document->dueDate)
                             <div>
                                 @if ($document->dueDate)
                                     Tanggal: {{ \Carbon\Carbon::parse($document->dueDate)->format('d F Y') }}
                                 @endif
                             </div>
-                            <div>
-                                @if ($document->profit)
-                                    Profit {{ $document->profitPercentage }}%: {{ $document->profit }}
-                                @endif
-                            </div>
                         @endif
                     </td>
                 </tr>
+
+                <!-- Profit -->
+                @if ($document->profit && $document->profitPercentage)
+                    <tr>
+                        <td colspan="2" class="px-2 py-1 text-[11px] text-gray-800">
+                            Profit {{ $document->profitPercentage }}% : {{$document->profit}}
+                        </td>
+                    </tr>
+                @endif
 
                 <!-- Jumlah -->
                 <tr>

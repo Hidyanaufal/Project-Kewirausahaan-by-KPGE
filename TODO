@@ -43,14 +43,10 @@ Todo:
 Laporan Keuangan (pdf):
   ✔ Labarugi (income Statement) @started(25-10-25 14:20) @done(25-10-25 14:46) @lasted(26m28s)
   ✔ Neraca (Balance Sheet) @done(25-10-29 09:40)
-  ☐ Cashflow Direct Method (Cashflow Statement)
   ✔ Account List (Account Transaction) @done(25-10-27 11:41)
   ✔ Aging Receivable Detail (Account Receivable Aging) @done(25-10-25 19:14)
   ✔ Aging Receivable Summary (Account Receivable Aging) @started(25-10-25 16:38) @done(25-10-25 19:14) @lasted(2h36m17s)
   ✔ All Journals (Transaction) @done(25-10-27 11:30)
-  ☐ Cashflow Detail (Cashflow Statement)
-  ☐ Cashflow Summary (Cashflow Statement)
-  ☐ Financial Ratio (Other Reports)
   ✔ General Journal Voucher  (Other Reports) @done(25-10-29 08:13)
   ✔ General Ledger Detail (Other Reports) @done(25-10-29 08:13)
   ✔ General Ledger Summary (Other Reports) @done(25-10-29 08:13)
@@ -60,18 +56,18 @@ Laporan Keuangan (pdf):
   ✔ Trial Balance Classic (Trial Balance) @started(25-10-25 20:22) @done(25-10-25 23:45) @lasted(3h23m26s)
   ✔ Trial Balance (Trial Balance) @done(25-10-29 09:10)
   ✔ Bank Book (Account Transaction) @done(25-10-28 15:07)
+  ☐ Cashflow Direct Method (Cashflow Statement)
+  ☐ Cashflow Detail (Cashflow Statement)
+  ☐ Cashflow Summary (Cashflow Statement)
+  ☐ Financial Ratio (Other Reports)
 
 Laporan Keuangan (excel):
   ✔ Labarugi (income Statement) @done(25-10-26 19:08)
   ✔ Neraca (Balance Sheet) @done(25-10-29 09:40)
-  ☐ Cashflow Direct Method (Cashflow Statement)
   ✔ Account List (Account Transaction) @done(25-10-27 11:41)
   ✔ Aging Receivable Detail (Account Receivable Aging) @done(25-10-26 19:08)
   ✔ Aging Receivable Summary (Account Receivable Aging) @done(25-10-26 19:08)
   ✔ All Journals (Transaction) @done(25-10-27 11:30)
-  ☐ Cashflow Detail (Cashflow Statement)
-  ☐ Cashflow Summary (Cashflow Statement)
-  ☐ Financial Ratio (Other Reports)
   ✔ General Journal Voucher  (Other Reports) @done(25-10-29 08:13)
   ✔ General Ledger Detail (Other Reports) @done(25-10-29 08:13)
   ✔ General Ledger Summary (Other Reports) @done(25-10-29 08:13)
@@ -81,3 +77,25 @@ Laporan Keuangan (excel):
   ✔ Trial Balance Classic (Trial Balance) @done(25-10-26 22:17)
   ✔ Trial Balance (Trial Balance) @done(25-10-29 09:10)
   ✔ Bank Book (Account Transaction) @done(25-10-28 15:07)
+  ☐ Cashflow Direct Method (Cashflow Statement)
+  ☐ Cashflow Detail (Cashflow Statement)
+  ☐ Cashflow Summary (Cashflow Statement)
+  ☐ Financial Ratio (Other Reports)
+
+Tamabahan Fixing 30-Oct-2025:
+  ☐ Excel dept asset
+  ✔ Report all journal urutkan dari data yang terbaru dulu @done(25-10-30 13:15)
+  ✔ invoice field profit setara dengan jumlah posisi diatas jumlah @done(25-10-30 13:24)
+  ✔ bill admin bisa edit apapun yang terjadi, user kalo belum diapprove bisa edit @done(25-10-30 13:41)
+  ✔ Page Transaksi filternya di sesuaikan sesuai dengan yang lama, ada filter by member @done(25-10-30 14:09)
+  ✔ Balance Sheet (Standar) @done(25-10-30 14:34)
+  struktur data
+    category
+      type
+          parent
+          child
+          child
+            child
+            
+Bonus:
+  ☐ implementasi pagination pada page report > account transaction agar lebih kenceng

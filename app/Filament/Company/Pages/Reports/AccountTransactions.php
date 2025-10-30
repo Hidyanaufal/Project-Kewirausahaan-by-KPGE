@@ -253,7 +253,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             ->with([
                 'journalEntries.account:id,code,name',
             ])
-            ->orderBy('posted_at')
+            ->orderBy('id', 'desc')
             ->get();
 
         $rows = collect();

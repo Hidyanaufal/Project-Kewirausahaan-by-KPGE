@@ -82,71 +82,109 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
         string $format = 'pdf',
     ): array {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
-        $report = $this->report;
 
-        $start = Carbon::parse($report->getStartDate());
         $now = Carbon::now()->format('Y-m-d_H-i-s');
 
-        $startFormatted = $start->format('d M Y');
+        $startFormatted = now()->format('d M Y');
+
         $toNumber = fn($v) => is_null($v)
             ? 0
             : (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $v));
 
         $data = [
-            'filename'           => "{$company->name} {$report->getTitle()} {$now}.pdf",
-            'company_name'       => $company->name,
-            'report_title'       => $report->getTitle(),
-            'report_period'      => "As of {$startFormatted}",
-            'columns'            => [
-                "Description",
-                "Balance"
-            ],
-            'rows'               => [],
+            'filename'      => "{$company->name} Balance Sheet {$now}.pdf",
+            'company_name'  => $company->name,
+            'report_title'  => "Balance Sheet (Standard)",
+            'report_period' => "As of {$startFormatted}",
+            'columns'       => ["Description", "Balance"],
+            'rows'          => [],
         ];
 
         $rows = collect();
 
-        // dd(
-        //     __CLASS__,
-        //     [
-        //         'getCategories' => $report->getCategories()
-        //     ]
-        // );
+        $accounts = \App\Models\Accounting\Account::where('company_id', $company->id)
+            ->with(['children'])
+            ->orderBy('category')
+            ->orderBy('type')
+            ->orderBy('code')
+            ->get()
+            ->groupBy(['category', 'type']);
 
-        foreach ($report->getCategories() as $cat) {
-            $headerName = strtoupper($cat->header['account_name'] ?? 'UNKNOWN');
-            $rows->push([
-                'data' => [$headerName],
-                'style' => ['font-weight' => 'bold', 'font-size' => '11px'],
-            ]);
+        // Recursive walker untuk hierarki akun
+        $appendAccountRows = function ($accounts, $level = 1) use (&$appendAccountRows, &$rows, $toNumber) {
+            $padding = $level * 15;
 
-            foreach ($cat->data as $item) {
-                $name = is_array($item['account_name'])
-                    ? ($item['account_name']['name'] ?? '')
-                    : $item['account_name'];
-
+            foreach ($accounts as $account) {
                 $rows->push([
                     'data' => [
-                        $name,
-                        $toNumber($item['ending_balance'] ?? 0),
+                        $account->code . ' ' . $account->name,
+                        $toNumber($account->ending_balance),
                     ],
-                    'style' => ['font-size' => '10px', 'padding-left' => '20px'],
+                    'style' => [
+                        'padding-left' => "{$padding}px",
+                    ],
+                ]);
+
+                if ($account->children->isNotEmpty()) {
+                    $appendAccountRows($account->children, $level + 1);
+                }
+            }
+        };
+
+        // Loop kategori (ASSETS, LIABILITIES, EQUITY, dll)
+        foreach ($accounts as $category => $types) {
+            $rows->push([
+                'data' => [strtoupper($category)],
+                'style' => ['font-weight' => 'bold'],
+            ]);
+
+            foreach ($types as $type => $accountsByType) {
+                $rows->push([
+                    'data' => [str_replace('_', ' ', ucwords(strtolower($type)))],
+                    'style' => [
+                        'font-weight' => 'bold',
+                        'padding-left' => '10px',
+                    ],
+                ]);
+
+                $parentAccounts = $accountsByType->whereNull('parent_id');
+                $appendAccountRows($parentAccounts, 2);
+
+                // subtotal per tipe
+                $typeTotal = $accountsByType->sum(fn($a) => $a->ending_balance->getValue());
+                $rows->push([
+                    'data' => [
+                        "Total " . str_replace('_', ' ', ucwords(strtolower($type))),
+                        $toNumber($typeTotal),
+                    ],
+                    'style' => [
+                        'font-weight'   => 'bold',
+                        'padding-left'  => '10px',
+                        'color'         => 'rgb(6, 6, 174)',
+                    ],
                 ]);
             }
 
+            // subtotal per kategori
+            $categoryTotal = collect($types)
+                ->flatten()
+                ->sum(fn($a) => $a->ending_balance->getValue());
+
             $rows->push([
                 'data' => [
-                    "Total Cost of {$headerName}",
-                    $toNumber($cat->summary['ending_balance'] ?? 0),
+                    "Total " . strtoupper($category),
+                    $toNumber($categoryTotal),
                 ],
-                'style' => ['font-weight' => 'bold', 'font-size' => '10px'],
+                'style' => [
+                    'font-weight' => 'bold',
+                ],
             ]);
         }
 
         $data['rows'] = $rows->toArray();
-
         return $data;
     }
+
 
     public function exportCSV(): StreamedResponse
     {
@@ -162,6 +200,10 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
 
     public function exportXLSX(): BinaryFileResponse
     {
-        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'), $this->getActiveTab());
+        return $this->exportService->exportToExcelEnhanced(
+            data: $this->buildReportEnhanced(
+                format: 'xlsx'
+            )
+        );
     }
 }

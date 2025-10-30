@@ -105,7 +105,7 @@ class DepreciationRecordResource extends Resource
                 Tables\Actions\ExportAction::make()
                     ->label('Export XLSX')
                     ->icon('heroicon-o-document-arrow-down')
-                    ->exporter(DepreciationRecordExporter::class),
+                    ->action(function () {}),
                 Tables\Actions\Action::make('exportPdf')
                     ->label('Export PDF')
                     ->color('danger')
@@ -139,6 +139,7 @@ class DepreciationRecordResource extends Resource
                             'margin-left' => 5,
                             'margin-right' => 5,
                             'disable-smart-shrinking' => true,
+                            'orientation' => 'Landscape'
                         ]);
 
                         return response()->streamDownload(

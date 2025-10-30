@@ -18,8 +18,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class ViewBill extends ViewRecord
 {
-
     use \App\Concerns\HideFromSpotlight;
+
     protected static string $resource = BillResource::class;
 
     protected $listeners = [
@@ -33,10 +33,16 @@ class ViewBill extends ViewRecord
                 ->label('Edit bill')
                 ->outlined()
                 ->requiresConfirmation()
-                ->visible(fn(Model $record) => $record->status == BillStatus::Draft)
+                ->visible(function (Model $record) {
+                    if (AuthHelper::isAdmin()) {
+                        return true;
+                    }
+                    if ($record->status == BillStatus::Draft) {
+                        return true;
+                    }
+                })
                 ->action(function (Model $record) {
-                    $isAdmin = AuthHelper::isAdmin();
-                    if (!$isAdmin) {
+                    if (!AuthHelper::isAdmin()) {
                         $record->status = BillStatus::Draft;
                         $record->save();
                     }
