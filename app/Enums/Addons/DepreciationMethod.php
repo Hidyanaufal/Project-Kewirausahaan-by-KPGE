@@ -16,4 +16,12 @@ enum DepreciationMethod: string implements HasLabel
             self::DecliningBalance  => 'Saldo Menurun',
         };
     }
+
+    public function getColor(): ?string
+    {
+        return match ($this) {
+            self::DecliningBalance  => 'primary',
+            self::StraightLine      => 'warning',
+        };
+    }
 }

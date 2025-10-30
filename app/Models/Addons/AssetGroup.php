@@ -3,6 +3,7 @@
 namespace App\Models\Addons;
 
 use App\Concerns\CompanyOwned;
+use App\Enums\Addons\DepreciationMethod;
 use App\Models\Accounting\Account;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -19,6 +20,10 @@ class AssetGroup extends Model
         'company_id',
         'asset_account_id',
         'contra_account_id',
+    ];
+
+    protected $casts = [
+        'default_method' => DepreciationMethod::class,
     ];
 
     public function assetAccount()

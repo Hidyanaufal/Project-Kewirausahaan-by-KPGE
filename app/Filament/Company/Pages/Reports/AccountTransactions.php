@@ -278,7 +278,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             // Row Detail
             foreach ($txn->journalEntries as $je) {
                 $account = $je->account;
-                $amount = $toNumber($je->amount ?? 0);
+                $amount = $toNumber($je->amount / 100 ?? 0);
                 $isDebit = $je->type->value === 'debit';
 
                 $debit = $isDebit ? $amount : 0;

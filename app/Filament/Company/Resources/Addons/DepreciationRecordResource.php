@@ -10,6 +10,7 @@ use App\Models\Addons\Asset;
 use App\Models\Addons\DepreciationRecord;
 use App\Models\Company;
 use Barryvdh\Snappy\Facades\SnappyPdf;
+use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Get;
 use Filament\Resources\Resource;
@@ -24,6 +25,7 @@ class DepreciationRecordResource extends Resource
     public static function form(Forms\Form $form): Forms\Form
     {
         return $form
+            ->columns(1)
             ->schema([
                 Forms\Components\Select::make('asset_id')
                     ->label('Asset')
@@ -78,7 +80,8 @@ class DepreciationRecordResource extends Resource
                     ->currency(),
 
                 Tables\Columns\TextColumn::make('fiscal_method')
-                    ->label('Fiscal Method'),
+                    ->label('Fiscal Method')
+                    ->badge(),
 
                 Tables\Columns\TextColumn::make('updated_at')
                     ->label('Last Updated')
@@ -114,6 +117,8 @@ class DepreciationRecordResource extends Resource
                             ->where('company_id', $companyId)
                             ->get();
 
+                        $now = Carbon::now()->format('Y-m-d_H-i-s');
+                        $filename = "{$company->name} Daftar Penyusutan {$now}.pdf";
                         $view = 'pdf.depreciation-records';
 
                         $pdf = SnappyPdf::loadView($view, [
@@ -124,16 +129,30 @@ class DepreciationRecordResource extends Resource
                             ],
                         ]);
 
+                        $pdf->setOptions([
+                            'dpi' => 96,
+                            'zoom' => 1,
+                            'enable-local-file-access' => true,
+                            'encoding' => 'UTF-8',
+                            'margin-top' => 5,
+                            'margin-bottom' => 5,
+                            'margin-left' => 5,
+                            'margin-right' => 5,
+                            'disable-smart-shrinking' => true,
+                        ]);
+
                         return response()->streamDownload(
                             fn() => print($pdf->output()),
-                            'daftar_penyusutan_' . now()->year . '.pdf'
+                            $filename
                         );
                     }),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->slideOver()
-                    ->modalWidth(\Filament\Support\Enums\MaxWidth::ThreeExtraLarge),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make()
+                        ->slideOver()
+                        ->modalWidth(\Filament\Support\Enums\MaxWidth::Small),
+                ])
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),

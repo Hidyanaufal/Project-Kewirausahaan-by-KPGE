@@ -3,6 +3,7 @@
 namespace App\Models\Addons;
 
 use App\Concerns\CompanyOwned;
+use App\Enums\Addons\DepreciationMethod;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -24,7 +25,9 @@ class DepreciationRecord extends Model
 
     protected $casts = [
         'monthly_breakdown' => 'array',
-        'fiscal_year' => 'integer'
+        'fiscal_year'       => 'integer',
+        'fiscal_method'     => DepreciationMethod::class,
+        'commercial_method' => DepreciationMethod::class,
     ];
 
     public function asset(): BelongsTo

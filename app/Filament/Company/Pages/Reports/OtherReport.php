@@ -221,8 +221,8 @@ class OtherReport extends BaseReportPage implements EnhancedReport
                         '__str' . $entry->account->code,
                         $entry->account->name ?? '',
                         $entry->description ?? $trx->description,
-                        $debit / 100,
-                        $credit / 100,
+                        $debit,
+                        $credit,
                         '',
                     ],
                 ]);
@@ -516,7 +516,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
         ]);
 
         $rows->push([
-            'data' => ["Owner's equity at end of period", 0],
+            'data' => ["Owner's equity at end of period", $toNumber($report->getOverallTotals()['net_movement']) / 100],
             'style' => ['font-weight' => 'bold'],
         ]);
 

@@ -27,8 +27,8 @@ use App\Filament\Company\Pages\Reports;
 use App\Filament\Company\Pages\Service\ConnectedAccount;
 use App\Filament\Company\Pages\Service\LiveCurrency;
 use App\Filament\Company\Resources\Accounting\JournalEntryResource;
-use App\Filament\Company\Resources\Accounting\TransactionResource;
 use App\Filament\Company\Resources\Addons\AccountDefaultResource;
+use App\Filament\Company\Resources\Addons\AccountResource as AddonsAccountResource;
 use App\Filament\Company\Resources\Addons\AssetGroupResource;
 use App\Filament\Company\Resources\Addons\AssetResource;
 use App\Filament\Company\Resources\Addons\DepreciationRecordResource;
@@ -170,7 +170,7 @@ class CompanyPanelProvider extends PanelProvider
                         ->label('Accounting')
                         ->icon('heroicon-o-banknotes')
                         ->items([
-                            ...NavigationHelper::filterNavigationByPermissions(AccountChart::class),
+                            ...NavigationHelper::filterNavigationByPermissions(AddonsAccountResource::class),
                             ...NavigationHelper::filterNavigationByPermissions(JournalEntryResource::class),
                             ...NavigationHelper::filterNavigationByPermissions(AccountDefaultResource::class),
                         ]),

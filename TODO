@@ -42,7 +42,7 @@ Todo:
 
 Laporan Keuangan (pdf):
   ✔ Labarugi (income Statement) @started(25-10-25 14:20) @done(25-10-25 14:46) @lasted(26m28s)
-  ☐ Neraca (Balance Sheet)
+  ✔ Neraca (Balance Sheet) @done(25-10-29 09:40)
   ☐ Cashflow Direct Method (Cashflow Statement)
   ✔ Account List (Account Transaction) @done(25-10-27 11:41)
   ✔ Aging Receivable Detail (Account Receivable Aging) @done(25-10-25 19:14)
@@ -50,7 +50,6 @@ Laporan Keuangan (pdf):
   ✔ All Journals (Transaction) @done(25-10-27 11:30)
   ☐ Cashflow Detail (Cashflow Statement)
   ☐ Cashflow Summary (Cashflow Statement)
-  ☐ Perubahan modal (Other Reports)
   ☐ Financial Ratio (Other Reports)
   ✔ General Journal Voucher  (Other Reports) @done(25-10-29 08:13)
   ✔ General Ledger Detail (Other Reports) @done(25-10-29 08:13)
@@ -64,8 +63,7 @@ Laporan Keuangan (pdf):
 
 Laporan Keuangan (excel):
   ✔ Labarugi (income Statement) @done(25-10-26 19:08)
-  ☐ Neraca (Balance Sheet)
-  ☐ Perubahan modal (Other Reports)
+  ✔ Neraca (Balance Sheet) @done(25-10-29 09:40)
   ☐ Cashflow Direct Method (Cashflow Statement)
   ✔ Account List (Account Transaction) @done(25-10-27 11:41)
   ✔ Aging Receivable Detail (Account Receivable Aging) @done(25-10-26 19:08)

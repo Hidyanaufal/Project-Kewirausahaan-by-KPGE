@@ -44,6 +44,11 @@ class AccountChart extends Page
     #[Url]
     public ?string $activeTab = AccountCategory::Asset->value;
 
+    public static function isDiscovered(): bool
+    {
+        return false;
+    }
+
     protected function configureAction(Action $action): void
     {
         $action

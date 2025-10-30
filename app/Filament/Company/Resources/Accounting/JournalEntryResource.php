@@ -79,7 +79,7 @@ class JournalEntryResource extends Resource
                             : ''
                     ),
             ])
-            ->defaultGroup('transaction.transaction_code')
+            ->defaultSort('id', 'desc')
             ->groups([
                 Tables\Grouping\Group::make('transaction.transaction_code')
                     ->label('Transaction')
