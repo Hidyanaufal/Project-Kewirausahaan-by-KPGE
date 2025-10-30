@@ -258,9 +258,9 @@ class OtherReport extends BaseReportPage implements EnhancedReport
         ]);
 
         return [
-            'filename'      => "{$company->name} General Ledger History {$now}.pdf",
+            'filename'      => "{$company->name} Financial Ratio {$now}.pdf",
             'company_name'  => $company->name,
-            'report_title'  => 'General Ledger History',
+            'report_title'  => 'Financial Ratio',
             'report_period' => "From {$start->format('d M Y')} to {$end->format('d M Y')}",
             'columns'       => $columns,
             'rows'          => $rows->toArray(),
@@ -290,7 +290,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
         ])
             ->whereBetween('posted_at', [$start, $end])
             ->where('company_id', $company->id)
-            ->orderBy('posted_at')
+            ->orderBy('id', 'desc')
             ->get();
 
         $rows = collect();
@@ -349,7 +349,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
             ->whereBetween('posted_at', [$start, $end])
             ->where('company_id', $company->id)
             ->where('type', \App\Enums\Accounting\TransactionType::Journal)
-            ->orderBy('posted_at')
+            ->orderBy('id', 'desc')
             ->get();
 
         $rows = collect();
@@ -408,7 +408,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
         $transactions = \App\Models\Accounting\Transaction::with(['journalEntries.account', 'bankAccount.account'])
             ->whereBetween('posted_at', [$start, $end])
             ->where('company_id', $company->id)
-            ->orderBy('posted_at')
+            ->orderBy('id', 'desc')
             ->get()
             ->groupBy('bank_account_id');
 

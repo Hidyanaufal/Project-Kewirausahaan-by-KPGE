@@ -353,7 +353,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 'journalEntries.account:id,code,name',
                 'member'
             ])
-            ->orderBy('posted_at')
+            ->orderBy('id', 'desc')
             ->get();
 
         $rows = collect();
@@ -453,7 +453,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             ->with(['account', 'transactions' => function ($q) use ($companyId) {
                 $q->where('company_id', $companyId)
                     ->whereNotNull('posted_at')
-                    ->orderBy('posted_at', 'asc');
+                    ->orderBy('id', 'desc');
             }])
             ->where('company_id', $companyId)
             ->get();
