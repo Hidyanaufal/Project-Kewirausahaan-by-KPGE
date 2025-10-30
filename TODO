@@ -88,7 +88,7 @@ Tamabahan Fixing 30-Oct-2025:
   ✔ invoice field profit setara dengan jumlah posisi diatas jumlah @done(25-10-30 13:24)
   ✔ bill admin bisa edit apapun yang terjadi, user kalo belum diapprove bisa edit @done(25-10-30 13:41)
   ✔ Page Transaksi filternya di sesuaikan sesuai dengan yang lama, ada filter by member @done(25-10-30 14:09)
-  ✔ Balance Sheet (Standar) @done(25-10-30 14:34)
+  ✔ Fixing Struktur Balance Sheet (Standar) @done(25-10-30 14:34)
   struktur data
     category
       type

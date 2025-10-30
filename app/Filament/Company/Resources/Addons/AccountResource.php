@@ -159,7 +159,6 @@ class AccountResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('code')
                     ->label('Account Code')
-                    ->description(fn($record) => $record->description)
                     ->sortable()
                     ->searchable(),
 
@@ -170,7 +169,6 @@ class AccountResource extends Resource
 
                 Tables\Columns\TextColumn::make('parent.code')
                     ->label('Parent Code')
-                    ->description(fn($record) => $record->parent?->description)
                     ->sortable()
                     ->searchable(),
 
