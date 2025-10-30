@@ -602,14 +602,14 @@ class InvoiceResource extends Resource
                                 'data' => [
                                     $record->invoice_number, // Invoice Number
                                     $record->tax_number, // Tax Number
-                                    $record->due_date, // Due Date
+                                    $record->due_date->format('d M Y'), // Due Date
                                     $record->client->name, // Client Name
                                     $record->status->getLabel(), // Status
-                                    $record->total, // Total
-                                    $record->amount_paid, // Amount Paid
-                                    $record->amount_due, // Amount Due
-                                    $record->subtotal, // Subtotal
-                                    $record->tax_total, // Tax Total
+                                    $record->total / 100, // Total
+                                    $record->amount_paid / 100, // Amount Paid
+                                    $record->amount_due / 100, // Amount Due
+                                    $record->subtotal / 100, // Subtotal
+                                    $record->tax_total / 100, // Tax Total
                                 ],
                                 'style' => [],
                             ]);
@@ -626,9 +626,26 @@ class InvoiceResource extends Resource
 
                         $exportService = new ExportService();
 
-                        return $exportService->exportToPdfEnhanced(
-                            data: $data
-                        );
+                        $pdf = SnappyPdf::loadView('pdf.reports-general', [
+                            'data' => $data,
+                        ]);
+
+                        $pdf->setOptions([
+                            'dpi' => 96,
+                            'zoom' => 1,
+                            'enable-local-file-access' => true,
+                            'encoding' => 'UTF-8',
+                            'margin-top' => 5,
+                            'margin-bottom' => 5,
+                            'margin-left' => 5,
+                            'margin-right' => 5,
+                            'disable-smart-shrinking' => true,
+                            'orientation' => 'Landscape'
+                        ]);
+
+                        return response()->streamDownload(function () use ($pdf) {
+                            echo $pdf->output();
+                        }, $data['filename']);
                     })
 
             ])
