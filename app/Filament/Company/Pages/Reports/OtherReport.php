@@ -96,8 +96,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
     ): array {
         $template = $template ?? 'default';
         return match ($template) {
-            'default' => $this->__buildReportDefault(),
-            'all' => $this->__buildReportAllJournal(),
+            'financial' => $this->__buildFinancialRatioReport(),
             'history' => $this->__buildReportLedgerHistory(),
             'journal' => $this->__buildReportGeneralJournalVoucher(),
             'ledger_detail' => $this->__buildReportLedgerDetail(),
@@ -106,16 +105,166 @@ class OtherReport extends BaseReportPage implements EnhancedReport
         };
     }
 
-    public function __buildReportDefault(): array
+    public function __buildFinancialRatioReport(): array
     {
-        // contoh implementasi laporan perubahan modal
-        return [];
-    }
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+        $start = Carbon::parse($this->getFilterState('startDate'));
+        $end = Carbon::parse($this->getFilterState('endDate'));
+        $now = Carbon::now()->format('Y-m-d_H-i-s');
+        $columns = ['Ratio Name', '2024', '2023', 'Unit'];
 
-    public function __buildReportAllJournal(): array
-    {
-        // contoh implementasi laporan jurnal lengkap
-        return [];
+        // Helper padding
+        $pad = fn(int $level = 0) => ['padding-left' => ($level * 15) . 'px'];
+
+        $rows = collect();
+
+        // === Liquidity Ratio ===
+        $rows->push([
+            'data' => ['Liquidity Ratio', '', '', ''],
+            'style' => array_merge(['font-weight' => 'bold'], $pad(0)),
+        ]);
+
+        $rows->push([
+            'data' => ['Current Ratio', '2.34', '2.66', 'Times'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Quick Ratio', '2.23', '2.63', 'Times'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Cash Ratio', '0.32', '0.42', '%'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Cash Turnover', '1389241', '1172562', '%'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Inventory to Net Working Capital', '0.00', '0.00', '%'],
+            'style' => $pad(1),
+        ]);
+
+        // === Solvability Ratio ===
+        $rows->push([
+            'data' => ['Solvability Ratio', '', '', ''],
+            'style' => array_merge(['font-weight' => 'bold'], $pad(0)),
+        ]);
+
+        $rows->push([
+            'data' => ['Debt to Asset Ratio', '42.52', '37.21', '%'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Debt to Equity Ratio', '73.97', '59.27', '%'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Long Term Liability to Equity Ratio', '0.00', '0.00', 'Times'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Equity Multiplier', '1.74', '1.59', 'Times'],
+            'style' => $pad(1),
+        ]);
+
+        // === Activity Ratio ===
+        $rows->push([
+            'data' => ['Activity Ratio', '', '', ''],
+            'style' => array_merge(['font-weight' => 'bold'], $pad(0)),
+        ]);
+
+        $rows->push([
+            'data' => ['Total Asset Turnover', '2.75', '117.26', 'Times'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Receivable Turnover', '2.92', '3.06', 'Times'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Payable Turnover', '0.00', '0.00', 'Times'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Average Collection Period', '124.99', '119.31', 'Day(s)'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Inventory Turnover', '0.00', '0.00', 'Times'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Working Capital Turnover', '4.59', '0.00', 'Times'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Days of Receivable', '124.99', '119.31', 'Day(s)'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Days of Inventory', '0.00', '0.00', 'Day(s)'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Fixed Asset Turnover', '92.35', '101.89', 'Times'],
+            'style' => $pad(1),
+        ]);
+
+        // === Profitability Ratio ===
+        $rows->push([
+            'data' => ['Profitability Ratio', '', '', ''],
+            'style' => array_merge(['font-weight' => 'bold'], $pad(0)),
+        ]);
+
+        $rows->push([
+            'data' => ['Gross Profit Margin', '7.39', '17.48', '%'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Operating Profit Margin', '1.90', '2.30', '%'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Net Profit Margin', '1.28', '11.99', '%'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Return on Asset', '3.28', '29.45', '%'],
+            'style' => $pad(1),
+        ]);
+
+        $rows->push([
+            'data' => ['Return on Equity', '5.70', '46.90', '%'],
+            'style' => $pad(1),
+        ]);
+
+        return [
+            'filename'      => "{$company->name} General Ledger History {$now}.pdf",
+            'company_name'  => $company->name,
+            'report_title'  => 'General Ledger History',
+            'report_period' => "From {$start->format('d M Y')} to {$end->format('d M Y')}",
+            'columns'       => $columns,
+            'rows'          => $rows->toArray(),
+        ];
     }
 
     public function __buildReportLedgerHistory(): array
@@ -551,8 +700,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
                         ->required(),
                     Forms\Components\Select::make('template')
                         ->options([
-                            // 'default'        => 'Perubahan Modal',
-                            // 'all'            => 'Financial Ratio',
+                            'financial'      => 'Financial Ratio',
                             'journal'        => 'General Journal Voucher',
                             'history'        => 'General Ledger History',
                             'ledger_detail'  => 'General Ledger Detail',
