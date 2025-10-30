@@ -600,8 +600,8 @@ class InvoiceResource extends Resource
                         foreach ($records as $record) {
                             $rows->push([
                                 'data' => [
-                                    $record->invoice_number, // Invoice Number
-                                    $record->tax_number, // Tax Number
+                                    '__str' . $record->invoice_number, // Invoice Number
+                                    '__str' . $record->tax_number, // Tax Number
                                     $record->due_date->format('d M Y'), // Due Date
                                     $record->client->name, // Client Name
                                     $record->status->getLabel(), // Status
