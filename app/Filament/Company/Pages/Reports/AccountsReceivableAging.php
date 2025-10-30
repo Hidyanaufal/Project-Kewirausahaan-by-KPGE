@@ -117,9 +117,9 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                     $inv['invoice_number'],
                     $inv['invoice_date'],
                     $inv['due_date'],
-                    number_format($inv['invoice_amount'], 2, ',', '.'),
-                    number_format($inv['prime_owing'], 2, ',', '.'),
-                    number_format($inv['tax_owing'], 2, ',', '.'),
+                    number_format($inv['invoice_amount'] / 100, 2, ',', '.'),
+                    number_format($inv['prime_owing'] / 100, 2, ',', '.'),
+                    number_format($inv['tax_owing'] / 100, 2, ',', '.'),
                     $inv['age_from_due'],
                 ];
 
@@ -136,9 +136,9 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                 '',
                 '',
                 '',
-                number_format($subtotal['invoice_amount'], 2, ',', '.'),
-                number_format($subtotal['prime_owing'], 2, ',', '.'),
-                number_format($subtotal['tax_owing'], 2, ',', '.'),
+                number_format($subtotal['invoice_amount'] / 100, 2, ',', '.'),
+                number_format($subtotal['prime_owing'] / 100, 2, ',', '.'),
+                number_format($subtotal['tax_owing'] / 100, 2, ',', '.'),
                 '',
             ];
 
@@ -205,11 +205,11 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                 $rowData = [
                     $r['invoice_number'],
                     $r['invoice_date'],
-                    number_format($r['total_prime'], 2, ',', '.'),
+                    number_format($r['total_prime'] / 100, 2, ',', '.'),
                 ];
 
                 foreach ($r['aging'] as $value) {
-                    $rowData[] = number_format($value, 2, ',', '.');
+                    $rowData[] = number_format($value / 100, 2, ',', '.');
                 }
 
                 $subtotal['total_prime'] += $r['total_prime'];
@@ -225,11 +225,11 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
             $subtotalRow = [
                 "",
                 "",
-                number_format($subtotal['total_prime'], 2, ',', '.'),
+                number_format($subtotal['total_prime'] / 100, 2, ',', '.'),
             ];
 
             foreach ($agingKeys as $key) {
-                $subtotalRow[] = number_format($subtotal[$key], 2, ',', '.');
+                $subtotalRow[] = number_format($subtotal[$key] / 100, 2, ',', '.');
             }
 
             $rows->push([

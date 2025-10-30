@@ -167,7 +167,7 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
                         'data' => [
                             '',
                             $typeDTO->summary['account_name'] ?? 'Subtotal ' . $typeName,
-                            $toNumber($typeDTO->summary['net_movement'] ?? 0),
+                            $toNumber($typeDTO->summary['net_movement'] ?? 0) / 100,
                         ],
                         'style' => [
                             'font-weight' => 'bold',

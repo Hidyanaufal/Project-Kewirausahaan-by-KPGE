@@ -412,11 +412,11 @@ class OtherReport extends BaseReportPage implements EnhancedReport
                 'data' => [
                     '__str' . $account->code,
                     $account->name,
-                    $beg / 100,
-                    $chgDebit / 100,
-                    $chgCredit / 100,
-                    $net / 100,
-                    $ending / 100,
+                    $beg,
+                    $chgDebit,
+                    $chgCredit,
+                    $net,
+                    $ending,
                 ],
             ]);
 
@@ -433,11 +433,11 @@ class OtherReport extends BaseReportPage implements EnhancedReport
             'data' => [
                 'TOTAL',
                 '',
-                $totals['beginning'] / 100,
-                $totals['debit'] / 100,
-                $totals['credit'] / 100,
-                $totals['net'] / 100,
-                $totals['ending'] / 100,
+                $totals['beginning'],
+                $totals['debit'],
+                $totals['credit'],
+                $totals['net'],
+                $totals['ending'],
             ],
             'style' => [
                 'font-weight' => 'bold',

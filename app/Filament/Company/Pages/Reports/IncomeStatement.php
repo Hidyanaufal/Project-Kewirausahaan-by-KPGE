@@ -133,7 +133,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
                 $rows->push([
                     'data' => [
                         $name,
-                        $toNumber($item['net_movement'] ?? 0),
+                        $toNumber($item['net_movement'] ?? 0) / 100,
                     ],
                     'style' => ['padding-left' => '20px'],
                 ]);
@@ -142,24 +142,24 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
             $rows->push([
                 'data' => [
                     "Total Cost of {$headerName}",
-                    $toNumber($cat->summary['net_movement'] ?? 0),
+                    $toNumber($cat->summary['net_movement'] ?? 0) / 100,
                 ],
                 'style' => ['font-weight' => 'bold'],
             ]);
         }
 
         $rows->push([
-            'data' => ['GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement'])],
+            'data' => ['GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement']) / 100],
             'style' => ['font-weight' => 'bold'],
         ]);
 
         $rows->push([
-            'data' => ['NET PROFIT/LOSS (Before Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
+            'data' => ['NET PROFIT/LOSS (Before Tax)', $toNumber($report->getOverallTotals()['net_movement']) / 100],
             'style' => ['font-weight' => 'bold'],
         ]);
 
         $rows->push([
-            'data' => ['NET PROFIT/LOSS (After Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
+            'data' => ['NET PROFIT/LOSS (After Tax)', $toNumber($report->getOverallTotals()['net_movement']) / 100],
             'style' => ['font-weight' => 'bold'],
         ]);
 
