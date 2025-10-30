@@ -183,6 +183,9 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         if ($template == 'bank') {
             return $this->__buildReportBankBook();
         }
+        if ($template == 'deposit') {
+            return $this->__buildReportDeposit();
+        }
         return $this->__buildReportDefault();
     }
 
@@ -332,6 +335,110 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         ];
     }
 
+    public function __buildReportDeposit(): array
+    {
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+
+        $now = now()->format('Y-m-d_H-i-s');
+
+        $toNumber = fn($v) => is_null($v) ? 0 : (float) $v;
+
+        $transactions = Transaction::query()
+            ->where('company_id', $company->id)
+            ->where(function ($query) {
+                $query->whereNotNull('member_id')
+                    ->where('member_id', '!=', '');
+            })
+            ->with([
+                'journalEntries.account:id,code,name',
+                'member'
+            ])
+            ->orderBy('posted_at')
+            ->get();
+
+        $rows = collect();
+
+        foreach ($transactions as $txn) {
+            $txnDate = $txn->posted_at ? Carbon::parse($txn->posted_at)->format('d M Y') : '-';
+
+            // Row Header
+            $rows->push([
+                'data' => [
+                    $txnDate,
+                    $txn->transaction_code,
+                    $txn->type->getLabel(),
+                    '',
+                    $txn->member->name
+
+                ],
+                'style' => [
+                    'font-weight' => 'bold',
+                ],
+            ]);
+
+            $totalDebit = 0;
+            $totalCredit = 0;
+
+            // Row Detail
+            foreach ($txn->journalEntries as $je) {
+                $account = $je->account;
+                $amount = $toNumber($je->amount / 100 ?? 0);
+                $isDebit = $je->type->value === 'debit';
+
+                $debit = $isDebit ? $amount : 0;
+                $credit = !$isDebit ? $amount : 0;
+
+                $totalDebit += $debit;
+                $totalCredit += $credit;
+
+                $rows->push([
+                    'data' => [
+                        '__str' . ($account->code ?? '-'),
+                        $account->name ?? '-',
+                        $debit,
+                        $credit,
+                        ''
+                    ],
+                    'style' => [
+                        'padding-left' => '20px',
+                    ],
+                ]);
+            }
+
+            // Row Subtotal
+            $rows->push([
+                'data' => [
+                    '',
+                    '',
+                    $totalDebit,
+                    $totalCredit,
+                    ''
+                ],
+                'style' => [
+                    'font-weight' => 'bold',
+                    'color'       => 'rgb(6, 6, 174)',
+                ],
+            ]);
+        }
+
+        $header = [
+            'Account No.',
+            'Account Name',
+            'Debit (Base)',
+            'Credit (Base)',
+            'Member',
+        ];
+
+        return [
+            'filename'      => "{$company->name} Member Deposit Report {$now}.pdf",
+            'company_name'  => $company->name,
+            'report_title'  => 'Member Deposit Report',
+            'report_period' => 'As of ' . now()->format('d M Y'),
+            'columns'       => $header,
+            'rows'          => $rows->toArray(),
+        ];
+    }
+
     public function __buildReportBankBook(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
@@ -441,6 +548,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                             'default' => 'Account List',
                             'all' => 'All Journal',
                             'bank' => 'Bank Book',
+                            'deposit' => 'Member Deposit Report',
                         ])
                         ->required(),
                 ])
