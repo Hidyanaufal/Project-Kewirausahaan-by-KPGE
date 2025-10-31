@@ -29,11 +29,14 @@ use Guava\FilamentClusters\Forms\Cluster;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Livewire\WithPagination;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AccountTransactions extends BaseReportPage implements EnhancedReport
 {
+    use WithPagination;
+
     protected static string $view = 'filament.company.pages.reports.account-transactions';
 
     protected ReportService $reportService;
@@ -122,6 +125,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
     protected function getAccountOptions(): array
     {
         $accounts = Account::query()
+            ->limit(10)
             ->get()
             ->groupBy(fn(Account $account) => $account->category->getPluralLabel())
             ->map(fn(Collection $accounts) => $accounts->pluck('name', 'id'))

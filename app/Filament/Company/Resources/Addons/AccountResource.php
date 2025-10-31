@@ -7,6 +7,7 @@ use App\Filament\Company\Resources\Addons\AccountResource\Pages;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\AccountSubtype;
 use App\Enums\Accounting\AccountCategory;
+use App\Enums\Accounting\AccountType;
 use App\Enums\Banking\BankAccountType;
 use App\Filament\Forms\Components\CreateCurrencySelect;
 use App\Utilities\Accounting\AccountCode;
@@ -190,19 +191,13 @@ class AccountResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('category')
                     ->label('Category')
-                    ->options(
-                        collect(\App\Enums\Accounting\AccountCategory::cases())
-                            ->mapWithKeys(fn($c) => [$c->value => $c->name])
-                            ->toArray()
-                    ),
+                    ->searchable()
+                    ->options(AccountCategory::class),
 
                 Tables\Filters\SelectFilter::make('type')
                     ->label('Type')
-                    ->options(
-                        collect(\App\Enums\Accounting\AccountType::cases())
-                            ->mapWithKeys(fn($t) => [$t->value => $t->name])
-                            ->toArray()
-                    ),
+                    ->searchable()
+                    ->options(AccountType::class),
 
                 Tables\Filters\SelectFilter::make('parent_id')
                     ->label('Parent Account')

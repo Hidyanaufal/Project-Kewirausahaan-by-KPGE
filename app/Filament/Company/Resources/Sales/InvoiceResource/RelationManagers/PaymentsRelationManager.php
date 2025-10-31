@@ -2,10 +2,13 @@
 
 namespace App\Filament\Company\Resources\Sales\InvoiceResource\RelationManagers;
 
+use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\InvoiceStatus;
 use App\Enums\Accounting\PaymentMethod;
 use App\Enums\Accounting\TransactionType;
+use App\Models\Accounting\Account;
 use App\Models\Accounting\Invoice;
+use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Transaction;
 use App\Models\Banking\BankAccount;
 use App\Utilities\Currency\CurrencyAccessor;
@@ -121,7 +124,10 @@ class PaymentsRelationManager extends RelationManager
                                     }
                                 },
                             ]),
-                    ])->columns(2),
+                        Forms\Components\TextInput::make('pph23')
+                            ->label('PPh 23')
+                            ->money()
+                    ])->columns(3),
                 Forms\Components\Placeholder::make('currency_conversion')
                     ->label('Currency Conversion')
                     ->content(function (Forms\Get $get, RelationManager $livewire) {
@@ -236,9 +242,18 @@ class PaymentsRelationManager extends RelationManager
                     })
                     ->mountUsing(function (Form $form) {
                         $record = $this->getOwnerRecord();
+                        $trx = Transaction::where('transactionable_type', Invoice::class)
+                            ->where('transactionable_id', $record->id)
+                            ->first();
+                        $journals = JournalEntry::where('transaction_id', $trx->id)->get();
+                        $revenueAccounts = Account::where('company_id', $record->company_id)
+                            ->where('category', AccountCategory::Revenue)
+                            ->pluck('id');
+                        $revenueJournals = $journals->whereIn('account_id', $revenueAccounts)->first();
                         $form->fill([
                             'posted_at'         => company_today()->toDateString(),
                             'amount'            => abs($record->actual_total ?? $record->amount_due),
+                            'pph23'             => abs($revenueJournals->amount * 0.2) / 10,
                             'payment_method'    => PaymentMethod::BankPayment
                         ]);
                     })
@@ -247,11 +262,10 @@ class PaymentsRelationManager extends RelationManager
                     ->action(function (Tables\Actions\CreateAction $action, array $data) {
                         /** @var Invoice $record */
                         $record = $this->getOwnerRecord();
-
+                        $record->pph23 = $data['pph23'];
+                        $record->save();
                         $record->recordPayment($data);
-
                         $action->success();
-
                         $this->dispatch('refresh');
                     }),
             ])

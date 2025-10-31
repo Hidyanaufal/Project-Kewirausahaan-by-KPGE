@@ -96,6 +96,7 @@ class Invoice extends Document
         'po_date',
         'spk_number',
         'spk_date',
+        'pph23',
     ];
 
     protected $casts = [
@@ -255,6 +256,7 @@ class Invoice extends Document
 
             /**
              * Merge journal by transaction khusus untuk (PPN, PPN WAPU, PPh23)
+             * Merge journal by account_category.revenue
              */
             DB::transaction(function () use ($record) {
                 // Definisikan akun pajak
@@ -285,20 +287,35 @@ class Invoice extends Document
                     // Gabungkan per akun pajak agar tetap terpisah (PPN, PPh23, WAPU)
                     $mergedTax = $taxJournals
                         ->groupBy(['account_id', 'type'])
-                        ->map(function ($byType, $accountId) use ($trx, $record) {
-                            return collect($byType)->map(function ($group, $type) use ($accountId, $trx, $record) {
-                                return [
-                                    'company_id'     => $trx->company_id,
-                                    'account_id'     => $accountId,
-                                    'transaction_id' => $trx->id,
-                                    'type'           => $type,
-                                    'amount'         => $group->sum('amount'),
-                                    'description'    => "Tax entry ({$group->first()->account->name}) for Invoice #{$record->invoice_number}",
-                                    'created_by'     => $record->updated_by ?? 1,
-                                    'updated_by'     => $record->updated_by ?? 1,
-                                    'created_at'     => now(),
-                                    'updated_at'     => now(),
-                                ];
+                        ->map(function ($byType, $accountId) use ($trx, $record, $pph23Account) {
+                            return collect($byType)->map(function ($group, $type) use ($accountId, $trx, $record, $pph23Account) {
+                                if ($accountId == $pph23Account->id and $record->pph23) {
+                                    return [
+                                        'company_id'     => $trx->company_id,
+                                        'account_id'     => $accountId,
+                                        'transaction_id' => $trx->id,
+                                        'type'           => $type,
+                                        'amount'         => $record->pph23,
+                                        'description'    => "Tax entry ({$group->first()->account->name}) for Invoice #{$record->invoice_number}",
+                                        'created_by'     => $record->updated_by ?? 1,
+                                        'updated_by'     => $record->updated_by ?? 1,
+                                        'created_at'     => now(),
+                                        'updated_at'     => now(),
+                                    ];
+                                } else {
+                                    return [
+                                        'company_id'     => $trx->company_id,
+                                        'account_id'     => $accountId,
+                                        'transaction_id' => $trx->id,
+                                        'type'           => $type,
+                                        'amount'         => $group->sum('amount'),
+                                        'description'    => "Tax entry ({$group->first()->account->name}) for Invoice #{$record->invoice_number}",
+                                        'created_by'     => $record->updated_by ?? 1,
+                                        'updated_by'     => $record->updated_by ?? 1,
+                                        'created_at'     => now(),
+                                        'updated_at'     => now(),
+                                    ];
+                                }
                             });
                         })
                         ->flatten(1)
@@ -308,6 +325,46 @@ class Invoice extends Document
                     JournalEntry::where('transaction_id', $trx->id)
                         ->whereIn('account_id', $taxAccounts)
                         ->delete();
+
+                    // === Gabungkan journal dengan AccountCategory::Revenue ===
+                    $revenueAccounts = Account::where('company_id', $trx->company_id)
+                        ->where('category', AccountCategory::Revenue)
+                        ->pluck('id');
+
+                    // Ambil semua jurnal dengan akun kategori Revenue
+                    $revenueJournals = $journals->whereIn('account_id', $revenueAccounts);
+
+                    if ($revenueJournals->isNotEmpty()) {
+                        // Group per type (Debit/Kredit)
+                        $mergedRevenue = $revenueJournals
+                            ->groupBy('type')
+                            ->map(function ($group, $type) use ($trx, $record) {
+                                // Ambil data dari item pertama (untuk deskripsi & referensi akun)
+                                $first = $group->first();
+
+                                return [
+                                    'company_id'     => $trx->company_id,
+                                    'account_id'     => $first->account_id,
+                                    'transaction_id' => $trx->id,
+                                    'type'           => $type,
+                                    'amount'         => $group->sum('amount'),
+                                    'description'    => "Merged revenue entry ({$first->account->name}) for Invoice #{$record->invoice_number}",
+                                    'created_by'     => $record->updated_by ?? 1,
+                                    'updated_by'     => $record->updated_by ?? 1,
+                                    'created_at'     => now(),
+                                    'updated_at'     => now(),
+                                ];
+                            })
+                            ->values();
+
+                        // Hapus jurnal Revenue lama
+                        JournalEntry::where('transaction_id', $trx->id)
+                            ->whereIn('account_id', $revenueAccounts)
+                            ->delete();
+
+                        // Insert hasil agregasi Revenue baru
+                        JournalEntry::insert($mergedRevenue->toArray());
+                    }
 
                     // Insert hasil agregasi
                     if ($mergedTax->isNotEmpty()) {
