@@ -357,6 +357,8 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             ->get();
 
         $rows = collect();
+        $totalDebit = 0;
+        $totalCredit = 0;
 
         foreach ($transactions as $txn) {
             $txnDate = $txn->posted_at ? Carbon::parse($txn->posted_at)->format('d M Y') : '-';
@@ -375,9 +377,6 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                     'font-weight' => 'bold',
                 ],
             ]);
-
-            $totalDebit = 0;
-            $totalCredit = 0;
 
             // Row Detail
             foreach ($txn->journalEntries as $je) {
@@ -404,22 +403,22 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                     ],
                 ]);
             }
-
-            // Row Subtotal
-            $rows->push([
-                'data' => [
-                    '',
-                    '',
-                    $totalDebit,
-                    $totalCredit,
-                    ''
-                ],
-                'style' => [
-                    'font-weight' => 'bold',
-                    'color'       => 'rgb(6, 6, 174)',
-                ],
-            ]);
         }
+
+        // Row Total all
+        $rows->push([
+            'data' => [
+                '',
+                '',
+                $totalDebit,
+                $totalCredit,
+                ''
+            ],
+            'style' => [
+                'font-weight' => 'bold',
+                'color'       => 'rgb(6, 6, 174)',
+            ],
+        ]);
 
         $header = [
             'Account No.',

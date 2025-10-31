@@ -110,3 +110,7 @@ report yg kelebihan 00:
 
 report yg kurang 00:
   ✔ general ledger summary @done(25-10-30 15:20)
+
+
+user:
+  ☐ sub total per transaksi dihilangkan ada transaksi di total member deposit

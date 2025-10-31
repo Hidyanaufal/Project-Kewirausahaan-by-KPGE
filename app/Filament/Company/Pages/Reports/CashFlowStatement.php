@@ -641,7 +641,7 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
                         ->required(),
                     Forms\Components\Select::make('template')
                         ->options([
-                            'detail' => 'Cashflow Detail',
+                            'detail' => 'Cashflow Detail (Indirect Method)',
                             'direct' => 'Cashflow Direct Method',
                             'summary' => 'Cashflow Summary',
                         ])
