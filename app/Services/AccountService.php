@@ -590,7 +590,9 @@ class AccountService
         return Bill::query()
             ->select([
                 'bills.id',
+                'bills.bill_number as code',
                 'bills.vendor_id',
+                'bills.date',
                 'bills.due_date',
                 'bills.amount_due',
                 'bills.currency_code',

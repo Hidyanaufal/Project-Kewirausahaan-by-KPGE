@@ -957,6 +957,75 @@ class ReportService
         ];
     }
 
+    public function buildAgingReportBillLevel(
+        string $asOfDate,
+        DocumentEntityType $entityType,
+        int $daysPerPeriod = 30,
+        int $numberOfPeriods = 4
+    ): array {
+        $asOfDateCarbon = Carbon::parse($asOfDate);
+
+        // Ambil semua vendor bills yang belum dibayar sampai tanggal tertentu
+        $bills = $this->accountService->getUnpaidVendorBills($asOfDate)
+            ->with(['vendor:id,name'])
+            ->get();
+
+        // Buat struktur kolom aging
+        $agingColumns = ['not_yet_due' => 'Not Yet'];
+
+        for ($i = 1; $i <= $numberOfPeriods; $i++) {
+            $min = ($i - 1) * $daysPerPeriod + 1;
+            $max = $i * $daysPerPeriod;
+            $agingColumns["period_{$i}"] = "{$min}-{$max}";
+        }
+
+        $agingColumns['over_periods'] = "> " . ($numberOfPeriods * $daysPerPeriod);
+
+        $rows = [];
+
+        foreach ($bills as $bill) {
+            $vendor = $bill->vendor;
+            $days = $bill->days_overdue ?? 0;
+
+            // Tentukan bucket aging
+            $bucket = 'not_yet_due';
+            if ($days > 0) {
+                for ($i = 1; $i <= $numberOfPeriods; $i++) {
+                    $min = ($i - 1) * $daysPerPeriod;
+                    $max = $i * $daysPerPeriod;
+                    if ($days > $min && $days <= $max) {
+                        $bucket = "period_{$i}";
+                        break;
+                    }
+                }
+                if ($days > ($numberOfPeriods * $daysPerPeriod)) {
+                    $bucket = 'over_periods';
+                }
+            }
+
+            // Siapkan data aging
+            $agingData = array_fill_keys(array_keys($agingColumns), 0);
+            $agingData[$bucket] = $bill->amount_due;
+
+            $rows[] = [
+                'vendor_name' => $vendor->name ?? '-',
+                'bill_number' => $bill->code ?? '-',
+                'bill_date'   => optional($bill->date)->format('d M Y'),
+                'total_base'  => $bill->amount_due,
+                'aging'       => $agingData,
+            ];
+        }
+
+        return [
+            'columns' => array_merge(
+                ['Bill No.', 'Bill Date', 'Total Prime'],
+                array_values($agingColumns)
+            ),
+            'rows' => $rows,
+            'as_of' => $asOfDateCarbon->format('d M Y'),
+        ];
+    }
+
     public function buildOutstandingReportInvoiceLevel(
         string $asOfDate,
         DocumentEntityType $entityType,
@@ -1008,6 +1077,62 @@ class ReportService
                 'Date',
                 'Due Date',
                 'Invoice Amount',
+                'Prime Owing',
+                'Tax Owing',
+                'Age fr Due',
+            ],
+            'rows' => $rows,
+            'as_of' => $asOfDateCarbon->format('d M Y'),
+        ];
+    }
+
+    public function buildOutstandingReportBillLevel(
+        string $asOfDate,
+    ): array {
+        $asOfDateCarbon = Carbon::parse($asOfDate);
+
+        // Ambil semua vendor bills yang belum dibayar hingga tanggal tertentu
+        $bills = $this->accountService->getUnpaidVendorBills($asOfDate)
+            ->with(['vendor:id,name'])
+            ->get();
+
+        $rows = [];
+
+        foreach ($bills as $bill) {
+            $vendor = $bill->vendor;
+
+            $billAmount = $bill->amount ?? 0;
+            $primeOwing = $bill->total ?? 0;
+            $taxOwing = $bill->tax_amount ?? 0;
+
+            $dueDate = optional($bill->due_date)->format('d M Y');
+            $billDate = optional($bill->date)->format('d M Y');
+
+            $ageFromDue = null;
+            if ($bill->due_date) {
+                $due = Carbon::parse($bill->due_date);
+                $ageFromDue = $due->diffInDays($asOfDateCarbon, false);
+            }
+
+            $rows[] = [
+                'vendor_name'   => $vendor->name ?? '-',
+                'bill_number'   => $bill->code ?? '-',
+                'bill_date'     => $billDate,
+                'due_date'      => $dueDate,
+                'bill_amount'   => $billAmount,
+                'base_owing'   => $primeOwing,
+                'tax_owing'     => $taxOwing,
+                'age_from_due'  => $ageFromDue > 0 ? floor($ageFromDue) . ' Day' : 0,
+            ];
+        }
+
+        return [
+            'columns' => [
+                'Vendor',
+                'No. Bill',
+                'Date',
+                'Due Date',
+                'Bill Amount',
                 'Prime Owing',
                 'Tax Owing',
                 'Age fr Due',
