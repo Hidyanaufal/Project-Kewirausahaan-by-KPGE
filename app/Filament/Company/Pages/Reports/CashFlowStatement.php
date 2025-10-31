@@ -5,8 +5,11 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
+use App\Enums\Accounting\AccountCategory;
+use App\Enums\Accounting\AccountType;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
 use App\Helpers\AuthHelper;
+use App\Models\Accounting\Account;
 use App\Models\Company;
 use App\Services\ExportService;
 use App\Services\ReportService;
@@ -181,7 +184,8 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
         return $data;
     }
 
-    public function __buildReportSummary(): array
+    # [Template]
+    public function __buildReportSummaryTemplate(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $start = $this->filters['start_date'] ?? now()->startOfYear();
@@ -258,7 +262,134 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
         return $data;
     }
 
-    public function __buildReportIndirect(): array
+    public function __buildReportSummary(): array
+    {
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+        $start = $this->filters['start_date'] ?? now()->startOfYear();
+        $end = $this->filters['end_date'] ?? now()->endOfYear();
+
+        $data = [
+            'filename' => 'Statement of Cash Flows Summary.pdf',
+            'company_name' => strtoupper($company->name),
+            'report_title' => 'Statement of Cash Flows Summary (Indirect Method)',
+            'report_period' => 'Period ' . $start->format('F Y') . ' to ' . $end->format('F Y'),
+            'columns' => ['Status', 'Account Type', 'Balance'],
+            'rows' => [],
+        ];
+
+        $rows = collect();
+        $pad = fn(int $level = 0) => ['padding-left' => ($level * 20) . 'px'];
+
+        // === Helper untuk ambil total per kategori ===
+        $getAccountSums = function (array $categories) use ($company, $start, $end) {
+            return Account::query()
+                ->where('company_id', $company->id)
+                ->whereIn('category', $categories)
+                ->withSum(['journalEntries as total' => function ($q) use ($start, $end) {
+                    $q->whereBetween('created_at', [$start, $end]);
+                }], 'amount')
+                ->get()
+                ->map(fn($a) => [
+                    'name' => $a->name,
+                    'category' => $a->category->name,
+                    'balance' => $a->total ?? 0,
+                ])
+                ->filter(fn($a) => $a['balance'] != 0);
+        };
+
+        /** ==============================
+         *  Operating Activities
+         * ============================== */
+        $rows->push(['data' => ['Operating Activities', '', ''], 'style' => ['font-weight' => 'bold']]);
+
+        $operatingAccounts = $getAccountSums([
+            AccountCategory::Asset,
+            AccountCategory::Liability,
+            AccountCategory::Expense,
+            AccountCategory::Revenue,
+        ]);
+
+        foreach ($operatingAccounts as $acc) {
+            $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
+            $rows->push([
+                'data' => [$status, $acc['name'], number_format($acc['balance'], 2, ',', '.')],
+                'style' => array_merge($pad(1), [
+                    'color' => $acc['balance'] < 0 ? 'red' : 'black',
+                ]),
+            ]);
+        }
+
+        $totalOperating = $operatingAccounts->sum('balance');
+        $rows->push([
+            'data' => ['Total of Operating Activities', '', number_format($totalOperating, 2, ',', '.')],
+            'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+        ]);
+
+        /** ==============================
+         *  Investing
+         * ============================== */
+        $rows->push(['data' => ['Investing', '', ''], 'style' => ['font-weight' => 'bold']]);
+
+        $investingAccounts = $getAccountSums([
+            AccountCategory::Asset,
+        ]);
+
+        foreach ($investingAccounts as $acc) {
+            $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
+            $rows->push([
+                'data' => [$status, $acc['name'], number_format($acc['balance'], 2, ',', '.')],
+                'style' => array_merge($pad(1), [
+                    'color' => $acc['balance'] < 0 ? 'red' : 'black',
+                ]),
+            ]);
+        }
+
+        $totalInvesting = $investingAccounts->sum('balance');
+        $rows->push([
+            'data' => ['Total of Investing', '', number_format($totalInvesting, 2, ',', '.')],
+            'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+        ]);
+
+        /** ==============================
+         *  Financing
+         * ============================== */
+        $rows->push(['data' => ['Financing', '', ''], 'style' => ['font-weight' => 'bold']]);
+
+        $financingAccounts = $getAccountSums([
+            AccountCategory::Equity,
+        ]);
+
+        foreach ($financingAccounts as $acc) {
+            $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
+            $rows->push([
+                'data' => [$status, $acc['name'], number_format($acc['balance'], 2, ',', '.')],
+                'style' => array_merge($pad(1), [
+                    'color' => $acc['balance'] < 0 ? 'red' : 'black',
+                ]),
+            ]);
+        }
+
+        $totalFinancing = $financingAccounts->sum('balance');
+        $rows->push([
+            'data' => ['Total of Financing', '', number_format($totalFinancing, 2, ',', '.')],
+            'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+        ]);
+
+        /** ==============================
+         *  Summary
+         * ============================== */
+        $netChange = $totalOperating + $totalInvesting + $totalFinancing;
+
+        $rows->push(['data' => ['Total of Net Cash Provide (Used) in This Period', '', number_format($netChange, 2, ',', '.')], 'style' => ['font-weight' => 'bold', 'color' => 'blue']]);
+        $rows->push(['data' => ['Total of Cash & Cash Equivalent at Beginning of Period', '', number_format(358051327.93, 2, ',', '.')], 'style' => ['font-weight' => 'bold', 'color' => 'blue']]);
+        $rows->push(['data' => ['Total of Cash & Cash Equivalent at End of Period', '', number_format(358051327.93 + $netChange, 2, ',', '.')], 'style' => ['font-weight' => 'bold', 'color' => 'blue']]);
+
+        $data['rows'] = $rows->toArray();
+        return $data;
+    }
+
+    # [Template]
+    public function __buildReportIndirectTemplate(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $report = $this->report;
@@ -320,7 +451,7 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
             'style' => array_merge(['font-weight' => 'bold'], $pad(2)),
         ]);
 
-        $rows->push(['data' => ['200-3', 'Hutang KPG', 1760000000.00], 'style' => $pad(3)]);
+        $rows->push(['data' => ['2003', 'Hutang KPG', 1760000000.00], 'style' => $pad(3)]);
         $rows->push(['data' => ['1108-6', 'Aset lain-lain - piutang pajak estimasi pengemba', 52581603.00], 'style' => $pad(3)]);
         $rows->push(['data' => ['1108-8', 'Aset lain-lain - Deposit Sewa Kantor', 3340000.00], 'style' => $pad(3)]);
         $rows->push(['data' => ['1103-021', 'Piutang Tenaga Kerja EE', 210521712.00], 'style' => $pad(3)]);
@@ -334,7 +465,7 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
         $rows->push(['data' => ['1103-009', 'Piutang Tiket', 115866595.00], 'style' => $pad(3)]);
         $rows->push(['data' => ['1103-019', 'Piutang Tenaga Kerja SCM', 171867109.00], 'style' => $pad(3)]);
         $rows->push(['data' => ['1107-005', 'Angsuran PPh 25', 1.00], 'style' => $pad(3)]);
-        $rows->push(['data' => ['2100-03', 'Biaya yang masih harus dibayar', 592772439.00], 'style' => $pad(3)]);
+        $rows->push(['data' => ['2100.03', 'Biaya yang masih harus dibayar', 592772439.00], 'style' => $pad(3)]);
 
         $rows->push([
             'data' => ['', 'Total of Except Depreciation', 4075804172.82],
@@ -357,17 +488,17 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
             'style' => array_merge(['font-weight' => 'bold'], $pad(2)),
         ]);
 
-        $rows->push(['data' => ['200-2', 'Hutang KPP', -955000000.00], 'style' => $pad(3)]);
-        $rows->push(['data' => ['200-4', 'PPn Keluaran', -87280396.00], 'style' => $pad(3)]);
-        $rows->push(['data' => ['200-5', 'Hutang PPh Badan', -192137101.00], 'style' => $pad(3)]);
+        $rows->push(['data' => ['2002', 'Hutang KPP', -955000000.00], 'style' => $pad(3)]);
+        $rows->push(['data' => ['2004', 'PPn Keluaran', -87280396.00], 'style' => $pad(3)]);
+        $rows->push(['data' => ['2005', 'Hutang PPh Badan', -192137101.00], 'style' => $pad(3)]);
         $rows->push(['data' => ['1103-011', 'Piutang Pengadaan Barang', -856181763.00], 'style' => $pad(3)]);
         $rows->push(['data' => ['1103-005', 'Piutang Tenaga Kerja Korpel', -299109898.00], 'style' => $pad(3)]);
         $rows->push(['data' => ['1103-017', 'Piutang Survey', -188331534.00], 'style' => $pad(3)]);
         $rows->push(['data' => ['1107-001', 'Sewa Gedung Dibayar Dimuka', -3340000.00], 'style' => $pad(3)]);
         $rows->push(['data' => ['1107-004', 'Prepaid PPh 23', -1.26], 'style' => $pad(3)]);
         $rows->push(['data' => ['1107-006', 'PPh Pasal 28', -436968228.00], 'style' => $pad(3)]);
-        $rows->push(['data' => ['2100-01', 'BPJS yang masih harus dibayar', -46475928.00], 'style' => $pad(3)]);
-        $rows->push(['data' => ['2100-02', 'PPh 21 yang masih harus dibayar', -2874373.00], 'style' => $pad(3)]);
+        $rows->push(['data' => ['2100.01', 'BPJS yang masih harus dibayar', -46475928.00], 'style' => $pad(3)]);
+        $rows->push(['data' => ['2100.02', 'PPh 21 yang masih harus dibayar', -2874373.00], 'style' => $pad(3)]);
 
         $rows->push([
             'data' => ['', 'Total of Except Depreciation', -4783985316.26],
@@ -400,6 +531,91 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
         ]);
 
         $data['rows'] = $rows->toArray();
+
+        return $data;
+    }
+
+    public function __buildReportIndirect(): array
+    {
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+        $start = $this->filters['start_date'] ?? now()->startOfYear();
+        $end = $this->filters['end_date'] ?? now()->endOfYear();
+
+        // Ambil semua akun aktif perusahaan
+        $accounts = Account::query()
+            ->where('company_id', $company->id)
+            ->where('archived', false)
+            ->get();
+
+        // === Dynamic Filtering ===
+        $addedAccounts = $accounts->filter(function ($account) {
+            return match ($account->category) {
+                AccountCategory::Asset => ! $account->type->isContra(),
+                AccountCategory::Revenue => $account->type === AccountType::OperatingRevenue
+                    || $account->type === AccountType::NonOperatingRevenue,
+                AccountCategory::Expense => $account->type->isContra(), // misal biaya kontra dianggap positif
+                default => false,
+            };
+        });
+
+        $deductAccounts = $accounts->filter(function ($account) {
+            return match ($account->category) {
+                AccountCategory::Liability,
+                AccountCategory::Equity => ! $account->type->isContra(),
+                AccountCategory::Expense => $account->type === AccountType::OperatingExpense
+                    || $account->type === AccountType::NonOperatingExpense,
+                AccountCategory::Revenue => $account->type->isContra(), // pendapatan kontra mengurangi
+                default => false,
+            };
+        });
+
+        // === Build data ===
+        $rows = collect();
+
+        $pad = fn(int $level = 0) => ['padding-left' => ($level * 10) . 'px'];
+
+        $rows->push([
+            'data' => ['Cash Flow from Operating Activities'],
+            'style' => array_merge(['font-weight' => 'bold'], $pad(0)),
+        ]);
+
+        foreach ($addedAccounts as $account) {
+            $rows->push([
+                'data' => [
+                    '__str' . $account->code,
+                    $account->name,
+                    $account->ending_balance->getValue(),
+                ],
+                'style' => $pad(1),
+            ]);
+        }
+
+        $rows->push([
+            'data' => ['Less:'],
+            'style' => array_merge(['font-weight' => 'bold'], $pad(0)),
+        ]);
+
+        foreach ($deductAccounts as $account) {
+            $rows->push([
+                'data' => [
+                    '__str' . $account->code,
+                    $account->name,
+                    $account->ending_balance->getValue(),
+                ],
+                'style' => $pad(1),
+            ]);
+        }
+
+        $now = now()->format('Y-m-d_H-i-s');
+
+        $data = [
+            'filename'      => "{$company->name} Statement of Cash Flows Detail (Indirect Method) {$now}.pdf",
+            'company_name'  => $company->name,
+            'report_title'  => 'Statement of Cash Flows Detail (Indirect Method)',
+            'report_period' => "Period " . Carbon::parse($start)->format('F Y') . " to " . Carbon::parse($end)->format('F Y'),
+            'columns'       => ['Account No.', 'Account Name', 'Balance'],
+            'rows'          => $rows->toArray(),
+        ];
 
         return $data;
     }
