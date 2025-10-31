@@ -84,7 +84,7 @@
                     <tr>
                         @if ($index === 0)
                             <td class="px-2 py-1 text-center border border-black align-top"
-                                rowspan="{{ count($document->lineItems) + ($document->profit ? 3 : 2) }}">
+                                rowspan="4">
                                 {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
                             </td>
                             <td class="py-1 pl-2 font-semibold text-left border border-black" colspan="2">
@@ -127,13 +127,12 @@
                 </tr>
 
                 <!-- Profit -->
-                @if ($document->profit && $document->profitPercentage)
-                    <tr>
-                        <td colspan="2" class="px-2 py-1 text-[11px] text-gray-800">
-                            Profit {{ $document->profitPercentage }}% : {{$document->profit}}
-                        </td>
-                    </tr>
-                @endif
+                <tr>
+                    <td colspan="2" class="px-2 text-right border-t border-black">Profit {{ $document->profitPercentage }}%</td>
+                    <td class="px-2 text-right border-t border-black">
+                        {{ $document->profit }}
+                    </td>
+                </tr>
 
                 <!-- Jumlah -->
                 <tr>
@@ -142,7 +141,6 @@
                         {{ $document->subtotal }}
                     </td>
                 </tr>
-
 
                 <!-- PPN -->
                 <tr>
@@ -198,8 +196,7 @@
         <div class="w-64 ml-auto text-left">
             {{ $document->accountName }}<br>
             Jakarta, {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}<br><br><br>
-            <div class="mt-6 font-semibold">{{ $document->beneficiaryName }}</div>
-            {{-- <div>{{ $document->beneficiaryTitle }}</div> --}}
+            <div class="mt-20 font-semibold">{{ $document->beneficiaryName }}</div>
         </div>
     </div>
 </div>
