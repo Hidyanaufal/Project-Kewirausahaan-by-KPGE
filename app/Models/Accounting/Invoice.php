@@ -219,12 +219,14 @@ class Invoice extends Document
 
                     // Penyesuaian uang yang diterima oleh kas
                     $bankAmount = $totalReceivable - $journalAmountTotal;
+
                     JournalEntry::query()
                         ->where([
                             'transaction_id' => $latestTransaction->id,
                             'account_id'     => $latestTransaction->bankAccount->account_id,
                         ])
                         ->delete();
+
                     JournalEntry::create([
                         'transaction_id' => $latestTransaction->id,
                         'account_id'     => $latestTransaction->bankAccount->account_id,
@@ -240,6 +242,7 @@ class Invoice extends Document
                             'account_id'     => $journalReceivable->account_id,
                         ])
                         ->delete();
+
                     JournalEntry::create([
                         'transaction_id' => $latestTransaction->id,
                         'account_id'     => $journalReceivable->account_id,

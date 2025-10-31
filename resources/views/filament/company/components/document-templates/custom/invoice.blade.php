@@ -1,3 +1,38 @@
+@php
+    function rupiahToNumber(string $str, bool $asFloat = false) {
+        // 1) buang semua kecuali digit, minus, koma dan titik
+        $s = trim($str);
+        $s = preg_replace('/[^\d\-\.,]/u', '', $s);
+
+        // 2) catat tanda minus (jika ada)
+        $isNegative = (strpos($s, '-') !== false);
+        $s = str_replace('-', '', $s);
+
+        // 3) hilangkan separator ribuan (titik)
+        $s = str_replace('.', '', $s);
+
+        // 4) ubah koma desimal ke titik (standar PHP)
+        $s = str_replace(',', '.', $s);
+
+        // 5) cast sesuai request
+        $value = $asFloat ? (float) $s : (int) round((float) $s);
+
+        return $isNegative ? -$value : $value;
+    }
+
+    function numberToRupiah($number, $withSymbol = true) {
+    // pastiin number valid
+    if (!is_numeric($number)) return null;
+
+    // format: ribuan pakai titik, desimal pakai koma
+    $formatted = number_format($number, 0, ',', '.');
+
+    return $withSymbol ? 'Rp' . $formatted : $formatted;
+}
+
+
+@endphp
+
 <div class="p-6 text-gray-800 bg-white rounded-md shadow-sm invoice-container">
     {{-- Header --}}
     <div class="mb-4">
@@ -84,7 +119,7 @@
                     <tr>
                         @if ($index === 0)
                             <td class="px-2 py-1 text-center border border-black align-top"
-                                rowspan="4">
+                                rowspan="{{ count($document->lineItems) + 2 }}">
                                 {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
                             </td>
                             <td class="py-1 pl-2 font-semibold text-left border border-black" colspan="2">
@@ -138,7 +173,7 @@
                 <tr>
                     <td colspan="2" class="px-2 text-right border-t border-black">Jumlah</td>
                     <td class="px-2 text-right border-t border-black">
-                        {{ $document->subtotal }}
+                        {{ numberToRupiah(rupiahToNumber($document->subtotal) + rupiahToNumber($document->profit)) . ',00' }}
                     </td>
                 </tr>
 
@@ -169,36 +204,42 @@
         </table>
     </div>
 
-
     {{-- Footer Notes --}}
     <div class="mt-2 text-xs footer">
         @if ($document->terms)
             <div class="leading-relaxed">Terms and Condition:</div>
-             <div class="prose prose-sm max-w-none text-xs">
+            <div class="prose prose-sm max-w-none text-xs">
                 {!! $document->terms !!}
             </div>
         @endif
-        
+
         @if ($document->footer)
-            <div class="mb-4 text-xs" style="font-style: italic">
+            <div class="mb-4 text-xs italic">
                 {{ $document->footer }}
             </div>
         @endif
 
-        <div class="leading-relaxed" style="margin-top: 50px">Pembayaran harap dilakukan melalui:</div>
-        <div class="mb-2 text-xs font-semibold">
-            {{ $document->bankName }}<br>
-            A/n. {{ $document->accountName }}<br>
-            ACCOUNT NO. {{ $document->accountNumber }}
-        </div>
+        {{-- Section Bank Info & Signature sejajar kanan kiri --}}
+        <div class="flex justify-between mt-12 text-xs">
+            {{-- Bank Info --}}
+            <div class="w-1/2">
+                <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>
+                <div class="font-semibold mt-1">
+                    {{ $document->bankName }}<br>
+                    A/n. {{ $document->accountName }}<br>
+                    ACCOUNT NO. {{ $document->accountNumber }}
+                </div>
+            </div>
 
-        {{-- Signature --}}
-        <div class="w-64 ml-auto text-left">
-            {{ $document->accountName }}<br>
-            Jakarta, {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}<br><br><br>
-            <div class="mt-20 font-semibold">{{ $document->beneficiaryName }}</div>
+            {{-- Signature --}}
+            <div class="w-2/2 text-left">
+                {{ $document->accountName }}<br>
+                Jakarta, {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}<br><br><br>
+                <div class="mt-20 font-semibold">{{ $document->beneficiaryName }}</div>
+            </div>
         </div>
     </div>
+
 </div>
 
 <style>

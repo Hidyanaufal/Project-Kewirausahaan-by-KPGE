@@ -5,7 +5,6 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Enums\Accounting\DocumentEntityType;
-use App\Filament\Forms\Addons\FilterProjectCompany;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
@@ -65,7 +64,6 @@ abstract class BaseEntityBalanceSummaryReportPage extends BaseReportPage
                 ])->extraFieldWrapperAttributes([
                     'class' => 'report-hidden-label',
                 ]),
-                // ...FilterProjectCompany::make(),
             ]);
     }
 

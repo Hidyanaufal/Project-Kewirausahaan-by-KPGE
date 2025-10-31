@@ -111,7 +111,9 @@ report yg kelebihan 00:
 report yg kurang 00:
   ✔ general ledger summary @done(25-10-30 15:20)
 
-
 user:
-  ☐ profit field di invoice
+  ✔ profit field di invoice @done(25-10-31 12:22)
+  ☐ total adalah nilai jumlah + profit
+  ☐ excel + pdf dep asset nilai akuisis dan bulan tahun akuisisi
   ✔ sub total per transaksi dihilangkan ada transaksi di total member deposit @done(25-10-31 10:47)
+  ☐ saat buat invoice pendapatan hanya ada 1 jika pendapatan lebih dari 1 di berikan validasi
