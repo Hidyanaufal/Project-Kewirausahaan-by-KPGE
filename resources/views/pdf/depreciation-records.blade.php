@@ -156,8 +156,8 @@
                     <tr>
                         <td>{{ $loop->iteration }}</td>
                         <td class="text-left">{{ $record->asset->name ?? '-' }}</td>
-                        <td>{{ $record->asset->acquired_at?->format('d M Y') ?? '-' }}</td>
-                        <td class="text-right">{{ number_format($record->asset->purchase_price / 100, 0, ',', '.') }}</td>
+                        <td>{{ $record->asset->acquisition_date?->format('d M Y') ?? '-' }}</td>
+                        <td class="text-right">{{ number_format($record->asset->acquisition_cost / 100, 0, ',', '.') }}</td>
                         <td class="text-right">{{ number_format($record->opening_fiscal_book_value / 100, 0, ',', '.') }}</td>
                         <td>{{ $record->commercial_method->getLabel()}}</td>
                         <td>{{ $record->fiscal_method->getLabel() }}</td>

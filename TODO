@@ -113,7 +113,7 @@ report yg kurang 00:
 
 user:
   ✔ profit field di invoice @done(25-10-31 12:22)
-  ☐ total adalah nilai jumlah + profit
+  ✔ total adalah nilai jumlah + profit @done(25-10-31 16:14)
   ☐ excel + pdf dep asset nilai akuisis dan bulan tahun akuisisi
   ✔ sub total per transaksi dihilangkan ada transaksi di total member deposit @done(25-10-31 10:47)
-  ☐ saat buat invoice pendapatan hanya ada 1 jika pendapatan lebih dari 1 di berikan validasi
+  ✔ saat buat invoice pendapatan hanya ada 1 jika pendapatan lebih dari 1 di berikan validasi @done(25-10-31 16:15)

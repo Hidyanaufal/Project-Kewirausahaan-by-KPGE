@@ -133,6 +133,9 @@ class DepreciationRecordResource extends Resource
                         $grouped = $records->groupBy(fn($r) => $r->asset->group->name ?? 'Lain-lain');
 
                         foreach ($grouped as $groupName => $groupRecords) {
+                            // Urutkan berdasarkan asset id
+                            $groupRecords = $groupRecords->sortBy(fn($r) => $r->asset->id);
+
                             // Header per kategori
                             $rows->push([
                                 'data' => [$groupName],
@@ -148,8 +151,8 @@ class DepreciationRecordResource extends Resource
                                     'data' => [
                                         $rowNumber++,
                                         $record->asset->name ?? '-',
-                                        optional($record->asset->acquired_at)->format('d M Y') ?? '-',
-                                        $record->asset->purchase_price / 100,
+                                        optional($record->asset->acquisition_date)->format('d M Y') ?? '-',
+                                        $record->asset->acquisition_cost / 100,
                                         $record->opening_fiscal_book_value / 100,
                                         $record->commercial_method?->getLabel() ?? '-',
                                         $record->fiscal_method?->getLabel() ?? '-',
