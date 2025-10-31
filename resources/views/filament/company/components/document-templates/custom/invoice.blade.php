@@ -1,5 +1,5 @@
 @php
-    function rupiahToNumber(string $str, bool $asFloat = false) {
+    function rupiahToNumber(?string $str, bool $asFloat = false) {
         // 1) buang semua kecuali digit, minus, koma dan titik
         $s = trim($str);
         $s = preg_replace('/[^\d\-\.,]/u', '', $s);
