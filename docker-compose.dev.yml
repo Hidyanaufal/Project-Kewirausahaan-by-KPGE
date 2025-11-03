@@ -1,0 +1,18 @@
+services:
+  nginx:
+    ports:
+      - "8011:80"
+  db:
+    container_name: mykpg_db_dev
+  app:
+    container_name: mykpg_app_dev
+  queue:
+    container_name: mykpg_queue_dev
+networks:
+  app_network:
+    name: mykpg_network_dev
+volumes:
+  app_storage:
+    name: mykpg_dev_storage
+  db_storage:
+    name: mykpg_dev_db

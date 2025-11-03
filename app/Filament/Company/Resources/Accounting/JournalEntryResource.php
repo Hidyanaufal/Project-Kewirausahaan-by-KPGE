@@ -2,13 +2,12 @@
 
 namespace App\Filament\Company\Resources\Accounting;
 
+use App\Concerns\HasPermissionCheck;
 use App\Filament\Company\Resources\Accounting\JournalEntryResource\Pages;
 use App\Filament\Company\Resources\Accounting\TransactionResource\Pages\ViewTransaction;
 use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Account;
 use App\Models\Addons\Member;
-use App\Models\Common\Client;
-use App\Models\Common\Vendor;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -20,6 +19,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class JournalEntryResource extends Resource
 {
+    use HasPermissionCheck;
+
     protected static ?string $model = JournalEntry::class;
 
     protected static ?string $modelLabel = 'Transaction';

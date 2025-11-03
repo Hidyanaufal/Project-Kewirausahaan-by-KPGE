@@ -10,7 +10,7 @@ class Profile extends BaseProfile
 {
     protected static ?string $cluster = Account::class;
 
-    protected static bool $shouldRegisterNavigation = true;
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 10;
 

@@ -43,7 +43,7 @@
                 </span>
 
                 <span class="text-gray-950 dark:text-white text-xs truncate">
-                    {{ $currentTenantName ?? filament()->getUserName($user) }}
+                    {{ $currentTenantName }}
                 </span>
             </span>
 

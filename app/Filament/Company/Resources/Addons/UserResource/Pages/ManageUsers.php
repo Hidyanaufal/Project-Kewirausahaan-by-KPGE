@@ -2,8 +2,10 @@
 
 namespace App\Filament\Company\Resources\Addons\UserResource\Pages;
 
+use App\Actions\Addons\ExcelImportAction;
 use App\Filament\Company\Resources\Addons\UserResource;
 use App\Helpers\AuthHelper;
+use App\Imports\UserImport;
 use App\Models\User;
 use Filament\Actions;
 use Filament\Notifications\Notification;
@@ -14,6 +16,14 @@ use Illuminate\Support\Facades\DB;
 class ManageUsers extends ManageRecords
 {
     protected static string $resource = UserResource::class;
+
+    public static function shouldRegisterSpotlight(): bool
+    {
+        if (AuthHelper::isPrimaryCompany()) {
+            return true;
+        }
+        return false;
+    }
 
     protected function getHeaderActions(): array
     {
@@ -54,6 +64,12 @@ class ManageUsers extends ManageRecords
                     }
                 })
                 ->slideOver(),
+            ExcelImportAction::make(
+                importClass: UserImport::class,
+                context: [
+                    'companyId' => AuthHelper::currentCompany(),
+                ]
+            )
         ];
     }
 }
