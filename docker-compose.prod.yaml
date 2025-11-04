@@ -1,18 +1,32 @@
 services:
-  nginx:
-    container_name: mykpg_nginx_prod
-    ports: [] # clear old ports
-    ports:
-      - "8031:80"
-  db:
-    container_name: mykpg_db_prod
   app:
     container_name: mykpg_app_prod
+    image: tetra/mykpg:prod
+    volumes:
+      - app_storage:/var/www/storage/app
+
   queue:
     container_name: mykpg_queue_prod
+    image: tetra/mykpg:prod
+    volumes:
+      - app_storage:/var/www/storage/app
+
+  nginx:
+    container_name: mykpg_nginx_prod
+    ports:
+      - "8031:80"
+    volumes:
+      - app_storage:/var/www/storage/app
+
+  db:
+    container_name: mykpg_db_prod
+    volumes:
+      - db_storage:/var/lib/mysql
+
 networks:
-  app_network:
+  mykpg_network:
     name: mykpg_network_prod
+
 volumes:
   app_storage:
     name: mykpg_prod_storage

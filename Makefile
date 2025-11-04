@@ -1,18 +1,7 @@
-# ======================================================
-# 🐳 Docker Environment Management
-# ======================================================
-
-# Default environment (bisa dioverride, ex: make deploy ENV=stag)
-ENV ?= dev
-
-# Compose files
+ENV ?= testing
 BASE_COMPOSE = -f docker-compose.yaml
 COMPOSE_FILE = $(BASE_COMPOSE) -f docker-compose.$(ENV).yaml
 ENV_FILE = --env-file .env.$(ENV)
-
-# ======================================================
-# 🧱 Basic Commands
-# ======================================================
 
 up:
 	@echo "🚀 Starting $(ENV) environment..."
@@ -35,33 +24,14 @@ ps:
 	@echo "📦 Containers for $(ENV):"
 	docker compose $(COMPOSE_FILE) $(ENV_FILE) ps
 
-# ======================================================
-# 🚀 Quick Deploy Commands
-# ======================================================
-
-deploy-dev:
-	@$(MAKE) up ENV=dev
-
-deploy-stag:
-	@$(MAKE) up ENV=stag
+deploy-testing:
+	@$(MAKE) up ENV=testing
 
 deploy-prod:
 	@$(MAKE) up ENV=prod
 
-stop-dev:
-	@$(MAKE) down ENV=dev
-
-stop-stag:
-	@$(MAKE) down ENV=stag
+stop-testing:
+	@$(MAKE) down ENV=testing
 
 stop-prod:
 	@$(MAKE) down ENV=prod
-
-# ======================================================
-# 🧹 Cleanup
-# ======================================================
-
-clean:
-	@echo "🧨 Removing all containers, networks, and volumes..."
-	docker-compose down -v --remove-orphans
-	docker system prune -f

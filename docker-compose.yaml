@@ -41,8 +41,6 @@ services:
     image: nginx:alpine
     container_name: mykpg_nginx
     restart: unless-stopped
-    ports:
-      - "8011:80"
     volumes:
       - ./:/var/www
       - ./nginx/conf.d/:/etc/nginx/conf.d/
