@@ -1,6 +1,7 @@
 services:
   nginx:
     container_name: mykpg_nginx_prod
+    ports: [] # clear old ports
     ports:
       - "8031:80"
   db:
