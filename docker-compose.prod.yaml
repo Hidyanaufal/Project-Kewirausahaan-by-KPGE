@@ -1,34 +1,72 @@
 services:
+  # PHP Service
   app:
-    container_name: mykpg_app_prod
+    user: "www-data"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mykpg_prod
     image: tetra/mykpg:prod
+    restart: unless-stopped
+    working_dir: /var/www
     volumes:
-      - app_storage:/var/www/storage/app
+      - ./:/var/www
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - mykpg_prod_storage:/var/www/storage/app
+    networks:
+      - mykpg_prod_network
 
+  # Queue Worker Service
   queue:
-    container_name: mykpg_queue_prod
+    user: "www-data"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mykpg_prod_queue
     image: tetra/mykpg:prod
+    restart: unless-stopped
+    working_dir: /var/www
+    command: php artisan queue:work --verbose --tries=3 --timeout=300
     volumes:
-      - app_storage:/var/www/storage/app
+      - ./:/var/www
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - mykpg_prod_storage:/var/www/storage/app
+    depends_on:
+      - db
+    networks:
+      - mykpg_prod_network
 
+  # Nginx Service
   nginx:
-    container_name: mykpg_nginx_prod
+    image: nginx:alpine
+    container_name: mykpg_prod_nginx
+    restart: unless-stopped
     ports:
       - "8031:80"
     volumes:
-      - app_storage:/var/www/storage/app
+      - ./:/var/www
+      - ./nginx/conf.d/:/etc/nginx/conf.d/
+      - mykpg_prod_storage:/var/www/storage/app
+    networks:
+      - mykpg_prod_network
 
+  # MySQL Service
   db:
-    container_name: mykpg_db_prod
+    image: mysql
+    container_name: mykpg_prod_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - db_storage:/var/lib/mysql
+      - mykpg_prod_db_storage:/var/lib/mysql
+    networks:
+      - mykpg_prod_network
 
 networks:
-  mykpg_network:
-    name: mykpg_network_prod
+  mykpg_prod_network:
+    driver: bridge
 
 volumes:
-  app_storage:
-    name: mykpg_prod_storage
-  db_storage:
-    name: mykpg_prod_db
+  mykpg_prod_storage: {}
+  mykpg_prod_db_storage: {}
