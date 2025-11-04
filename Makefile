@@ -6,8 +6,8 @@
 ENV ?= dev
 
 # Compose files
-BASE_COMPOSE = -f docker-compose.yml
-COMPOSE_FILE = $(BASE_COMPOSE) -f docker-compose.$(ENV).yml
+BASE_COMPOSE = -f docker-compose.yaml
+COMPOSE_FILE = $(BASE_COMPOSE) -f docker-compose.$(ENV).yaml
 ENV_FILE = --env-file .env.$(ENV)
 
 # ======================================================
