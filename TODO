@@ -121,6 +121,47 @@ user:
 persiapan deploy go live kpgin.com:
   ✔ fitur impor master user @done(25-11-03 19:28)
   ☐ fitur impor master invoice
-  ☐ fitur impor master coa (tambahkan mekanisme update)
-  ☐ buat docker compose production
+  ✔ fitur impor master coa (tambahkan mekanisme update) @done(25-11-03 20:58)
+  ✔ buat docker compose production @done(25-11-03 21:01)
   ☐ deploy
+
+todo after deploy:
+  ☐ make-user admin
+  ☐ create company
+    ☐ kpg
+    ☐ kpp
+    ☐ kppe
+    ☐ jes
+  ☐ setting role (Administrator, User)
+  ☐ impor master user
+  ☐ setting project types
+  ☐ setting document default (template, prefix bill, invoice, quotation)
+    ☐ kpg
+    ☐ kpp
+    ☐ kppe
+    ☐ jes
+  ☐ setting company profile (code, dll)
+    ☐ kpg
+    ☐ kpp
+    ☐ kppe
+    ☐ jes
+  ☐ impor coa
+    ☐ kpg
+    ☐ kpp
+    ☐ kppe
+    ☐ jes
+  ☐ setting bank account (code, default bank)
+    ☐ kpg
+    ☐ kpp
+    ☐ kppe
+    ☐ jes
+  ☐ setting account default
+    ☐ kpg
+    ☐ kpp
+    ☐ kppe
+    ☐ jes
+  ☐ impor project & invoice
+    ☐ kpg
+    ☐ kpp
+    ☐ kppe
+    ☐ jes

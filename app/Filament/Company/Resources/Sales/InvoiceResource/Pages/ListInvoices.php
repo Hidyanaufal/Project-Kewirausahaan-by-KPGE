@@ -2,12 +2,15 @@
 
 namespace App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 
+use App\Actions\Addons\ExcelImportAction;
 use App\Concerns\HasTabSpecificColumnToggles;
 use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Filament\Company\Resources\Sales\InvoiceResource\Widgets;
 use App\Filament\Company\Resources\Sales\RecurringInvoiceResource\Pages\ViewRecurringInvoice;
 use App\Filament\Infolists\Components\BannerEntry;
+use App\Helpers\AuthHelper;
+use App\Imports\InvoiceImport;
 use App\Models\Accounting\RecurringInvoice;
 use Filament\Actions;
 use Filament\Infolists\Components\Actions\Action;
@@ -15,6 +18,7 @@ use Filament\Infolists\Infolist;
 use Filament\Pages\Concerns\ExposesTableToWidgets;
 use Filament\Resources\Components\Tab;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Blade;
@@ -65,7 +69,7 @@ class ListInvoices extends ListRecords
                             "You are currently viewing invoices created from {$link}"
                         );
                     })
-                    ->visible(fn () => ! empty($this->recurringInvoice))
+                    ->visible(fn() => ! empty($this->recurringInvoice))
                     ->actions([
                         Action::make('clearFilter')
                             ->label('Clear filter')
@@ -79,9 +83,24 @@ class ListInvoices extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('recordPayments')
+            Actions\ActionGroup::make([
+                Actions\Action::make('recordPayments')
+                    ->icon('heroicon-o-banknotes')
+                    ->color('info')
+                    ->url(RecordPayments::getUrl()),
+                ExcelImportAction::make(
+                    importClass: InvoiceImport::class,
+                    context: [
+                        'companyId' => AuthHelper::currentCompany(),
+                    ]
+                ),
+            ])
+                ->label('Actions')
+                ->button()
                 ->outlined()
-                ->url(RecordPayments::getUrl()),
+                ->dropdownPlacement('bottom-end')
+                ->icon('heroicon-m-chevron-down')
+                ->iconPosition(IconPosition::After),
             Actions\CreateAction::make(),
         ];
     }

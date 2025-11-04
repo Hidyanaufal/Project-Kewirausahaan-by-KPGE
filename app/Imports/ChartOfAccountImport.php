@@ -9,6 +9,7 @@ use App\Enums\Banking\BankAccountType;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\AccountSubtype;
 use App\Helpers\AccountTypeHelper;
+use App\Helpers\AuthHelper;
 use App\Models\Accounting\Adjustment;
 use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Transaction;
@@ -34,17 +35,40 @@ class ChartOfAccountImport implements ToModel, WithHeadingRow, WithChunkReading,
         $this->reset          = $reset;
         $this->importBalance  = $importBalance;
 
+        // 🔒 Import Lock Protection
         if ($reset) {
+            $lock = \App\Models\CoaImportLock::where('company_id', $companyId)
+                ->where('action', 'reset_delete')
+                ->first();
+
+            if ($lock && !$lock->allowed) {
+                Log::error("COA Import - Reset blocked for company_id={$companyId}");
+                throw new \Exception("This company has already performed a COA reset once. Further resets are not allowed.");
+            }
+
+            // 🧹 Perform delete (only allowed once)
             Log::warning("COA Import - Reset enabled, deleting all accounts for company_id={$companyId}");
             Account::where('company_id', $companyId)->delete();
             AccountSubtype::where('company_id', $companyId)->delete();
             BankAccount::where('company_id', $companyId)->delete();
             Adjustment::where('company_id', $companyId)->delete();
             Log::warning("COA Import - All accounts deleted for company_id={$companyId}");
+
+            // 🪵 Log this action in CoaImportLock
+            \App\Models\CoaImportLock::updateOrCreate(
+                ['company_id' => $companyId, 'action' => 'reset_delete'],
+                [
+                    'allowed'       => false,
+                    'performed_by'  => AuthHelper::currentUser() ?? null,
+                    'performed_at'  => now(),
+                    'note'          => 'COA data deleted via import reset'
+                ]
+            );
         } else {
             Log::info("COA Import - Reset disabled, preserving existing accounts for company_id={$companyId}");
         }
     }
+
 
     public function chunkSize(): int
     {

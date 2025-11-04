@@ -2,8 +2,8 @@
 
 namespace App\Imports;
 
-use App\Models\Sales\Invoice;
-use App\Models\Sales\Client;
+use App\Models\Accounting\Invoice;
+use App\Models\Common\Client;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
@@ -13,19 +13,10 @@ use Maatwebsite\Excel\Concerns\WithHeadingRow;
 class InvoiceImport implements ToModel, WithHeadingRow, WithChunkReading, ShouldQueue
 {
     protected int $companyId;
-    protected bool $reset;
 
-    public function __construct(int $companyId, bool $reset = false)
+    public function __construct(int $companyId)
     {
         $this->companyId = $companyId;
-        $this->reset = $reset;
-
-        if ($reset) {
-            Log::warning("Invoice Import - Reset enabled, deleting all invoices for company_id={$companyId}");
-            Invoice::where('company_id', $companyId)->delete();
-        } else {
-            Log::info("Invoice Import - Reset disabled, keeping existing invoices for company_id={$companyId}");
-        }
     }
 
     public function chunkSize(): int

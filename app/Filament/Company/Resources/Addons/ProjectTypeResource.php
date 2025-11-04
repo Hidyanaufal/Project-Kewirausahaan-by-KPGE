@@ -4,7 +4,6 @@ namespace App\Filament\Company\Resources\Addons;
 
 use App\Concerns\HasOptions;
 use App\Concerns\HasPermissionCheck;
-use App\Concerns\UnscopedResource;
 use App\Filament\Company\Resources\Addons\ProjectTypeResource\Pages;
 use App\Models\Addons\ProjectType;
 use Filament\Forms;
@@ -18,14 +17,12 @@ class ProjectTypeResource extends Resource
 {
     use HasOptions;
     use HasPermissionCheck;
-    use UnscopedResource;
 
     protected static ?string $model = ProjectType::class;
 
     public static function form(Form $form): Form
     {
         return $form
-            ->inlineLabel()
             ->columns(1)
             ->schema([
                 Forms\Components\TextInput::make('name'),
