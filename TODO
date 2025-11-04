@@ -135,16 +135,6 @@ todo after deploy:
   ☐ setting role (Administrator, User)
   ☐ impor master user
   ☐ setting project types
-  ☐ setting document default (template, prefix bill, invoice, quotation)
-    ☐ kpg
-    ☐ kpp
-    ☐ kppe
-    ☐ jes
-  ☐ setting company profile (code, dll)
-    ☐ kpg
-    ☐ kpp
-    ☐ kppe
-    ☐ jes
   ☐ impor coa
     ☐ kpg
     ☐ kpp
@@ -156,6 +146,16 @@ todo after deploy:
     ☐ kppe
     ☐ jes
   ☐ setting account default
+    ☐ kpg
+    ☐ kpp
+    ☐ kppe
+    ☐ jes
+  ☐ setting document default (template, prefix bill, invoice, quotation)
+    ☐ kpg
+    ☐ kpp
+    ☐ kppe
+    ☐ jes
+  ☐ setting company profile (code, dll)
     ☐ kpg
     ☐ kpp
     ☐ kppe
