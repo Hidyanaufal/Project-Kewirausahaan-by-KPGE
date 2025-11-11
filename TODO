@@ -126,40 +126,40 @@ persiapan deploy go live kpgin.com:
   ☐ deploy
 
 todo after deploy:
-  ☐ make-user admin
-  ☐ create company
-    ☐ kpg
-    ☐ kpp
-    ☐ kppe
-    ☐ jes
-  ☐ setting role (Administrator, User)
-  ☐ impor master user
-  ☐ setting project types
-  ☐ impor coa
-    ☐ kpg
-    ☐ kpp
-    ☐ kppe
-    ☐ jes
-  ☐ setting bank account (code, default bank)
-    ☐ kpg
-    ☐ kpp
-    ☐ kppe
-    ☐ jes
-  ☐ setting account default
-    ☐ kpg
-    ☐ kpp
-    ☐ kppe
-    ☐ jes
-  ☐ setting document default (template, prefix bill, invoice, quotation)
-    ☐ kpg
-    ☐ kpp
-    ☐ kppe
-    ☐ jes
-  ☐ setting company profile (code, dll)
-    ☐ kpg
-    ☐ kpp
-    ☐ kppe
-    ☐ jes
+  ✔ make-user admin @done(25-11-04 17:09)
+  ✔ create company @done(25-11-04 17:09)
+    ✔ kpg @done(25-11-04 17:09)
+    ✔ kpp @done(25-11-04 17:09)
+    ✔ kppe @done(25-11-04 17:09)
+    ✔ jes @done(25-11-04 17:09)
+  ✔ setting role (Administrator, User) @done(25-11-04 17:09)
+  ✔ impor master user @done(25-11-04 17:09)
+  ✔ setting project types @done(25-11-04 17:09)
+  ✔ impor coa @done(25-11-11 16:23)
+    ✔ kpg @done(25-11-04 17:09)
+    ✔ kpp @done(25-11-11 16:23)
+    ✔ kppe @done(25-11-11 16:23)
+    ✔ jes @done(25-11-11 16:23)
+  ✔ setting bank account (code, default bank) @done(25-11-11 16:23)
+    ✔ kpg @done(25-11-11 16:23)
+    ✔ kpp @done(25-11-11 16:23)
+    ✔ kppe @done(25-11-11 16:23)
+    ✔ jes @done(25-11-11 16:23)
+  ✔ setting account default @done(25-11-11 16:21)
+    ✔ kpg @done(25-11-11 16:21)
+    ✔ kpp @done(25-11-11 16:21)
+    ✔ kppe @done(25-11-11 16:21)
+    ✔ jes @done(25-11-11 16:21)
+  ✔ setting document default (template, prefix bill, invoice, quotation) @done(25-11-11 16:21)
+    ✔ kpg @done(25-11-11 16:21)
+    ✔ kpp @done(25-11-11 16:21)
+    ✔ kppe @done(25-11-11 16:21)
+    ✔ jes @done(25-11-11 16:21)
+  ✔ setting company profile (code, dll) @done(25-11-04 17:09)
+    ✔ kpg @done(25-11-04 17:09)
+    ✔ kpp @done(25-11-04 17:09)
+    ✔ kppe @done(25-11-04 17:09)
+    ✔ jes @done(25-11-04 17:09)
   ☐ impor project & invoice
     ☐ kpg
     ☐ kpp
