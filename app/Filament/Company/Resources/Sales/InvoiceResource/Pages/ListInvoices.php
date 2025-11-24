@@ -2,15 +2,12 @@
 
 namespace App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 
-use App\Actions\Addons\ExcelImportAction;
 use App\Concerns\HasTabSpecificColumnToggles;
 use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Filament\Company\Resources\Sales\InvoiceResource\Widgets;
 use App\Filament\Company\Resources\Sales\RecurringInvoiceResource\Pages\ViewRecurringInvoice;
 use App\Filament\Infolists\Components\BannerEntry;
-use App\Helpers\AuthHelper;
-use App\Imports\InvoiceImport;
 use App\Models\Accounting\RecurringInvoice;
 use Filament\Actions;
 use Filament\Infolists\Components\Actions\Action;
@@ -88,12 +85,6 @@ class ListInvoices extends ListRecords
                     ->icon('heroicon-o-banknotes')
                     ->color('info')
                     ->url(RecordPayments::getUrl()),
-                ExcelImportAction::make(
-                    importClass: InvoiceImport::class,
-                    context: [
-                        'companyId' => AuthHelper::currentCompany(),
-                    ]
-                ),
             ])
                 ->label('Actions')
                 ->button()
