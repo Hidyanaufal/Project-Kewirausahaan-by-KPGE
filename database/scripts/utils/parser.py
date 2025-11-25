@@ -18,7 +18,6 @@ def parse_project_sheet(df):
             "client_name": row["Client"],
             "pic_client": row["PIC Client"],
             "pic_internal": row["PIC Internal"],
-            "notes": row["Keterangan"],
         })
 
     return projects

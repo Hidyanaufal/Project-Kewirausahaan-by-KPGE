@@ -3,3 +3,4 @@ openpyxl
 SQLAlchemy
 pymysql
 python-dotenv
+colorama
