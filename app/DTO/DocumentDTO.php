@@ -85,7 +85,7 @@ readonly class DocumentDTO
             self::formatToMoney($document->amountDue(), $currencyCode) :
             null;
 
-        $projectName = $document->project->name;
+        $projectName = $document->project?->name ?? '';
         $contactName = $document->client?->primaryContact?->first_name . ' ' . $document->client?->primaryContact?->last_name;
         $isEmptyContactName = trim($contactName) === '';
 

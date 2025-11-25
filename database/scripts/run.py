@@ -12,9 +12,7 @@ init(autoreset=True)
 
 load_dotenv()
 
-COMPANY_ID = int(os.getenv("COMPANY_ID"))
 CREATED_BY = int(os.getenv("CREATED_BY"))
-
 EXCEL_DIR = "excel"
 
 # ============================================================
@@ -71,6 +69,39 @@ excel_path = os.path.join(EXCEL_DIR, selected_file)
 success(f"Selected file: {selected_file}\n")
 
 # ============================================================
+# 0. SELECT COMPANY FIRST (NEW FLOW)
+# ============================================================
+print(Fore.WHITE + "\nAvailable Companies:\n")
+
+with engine.connect() as conn:
+    companies = conn.execute(text("SELECT id, name FROM companies ORDER BY id")).fetchall()
+
+    if not companies:
+        print(Fore.RED + "✖ ERROR: No companies found in database.")
+        exit(1)
+
+    # Display companies with premium UI
+    for comp in companies:
+        print(Fore.LIGHTWHITE_EX + f"[{comp.id}] {comp.name}")
+
+# Ask user to select a company
+company_choice = input(
+    Fore.CYAN + "\nSelect company ID to use for this import: " + Style.RESET_ALL
+).strip()
+
+# Validate input
+valid_ids = [str(c.id) for c in companies]
+
+if company_choice not in valid_ids:
+    print(Fore.RED + "✖ Invalid company ID. Stopping." + Style.RESET_ALL)
+    exit()
+
+# Override COMPANY_ID from .env
+COMPANY_ID = int(company_choice)
+
+success(f"Using Company ID: {COMPANY_ID}\n")
+
+# ============================================================
 # 2. DETECT SHEETS
 # ============================================================
 xls = pd.ExcelFile(excel_path)
@@ -87,6 +118,32 @@ project_sheets = [s for s in available_sheets if s.lower().startswith("project")
 other_sheets   = [s for s in available_sheets if not s.lower().startswith("project")]
 
 ORDER = project_sheets + other_sheets
+
+# ============================================================
+# OFFERING DEFAULT
+# ============================================================
+section("Checking default offering")
+
+with engine.connect() as conn:
+    offering = conn.execute(
+        text("""
+            SELECT id 
+            FROM offerings 
+            WHERE name = :name AND company_id = :cid
+            LIMIT 1
+        """),
+        {"name": "Pekerjaan", "cid": COMPANY_ID}
+    ).fetchone()
+
+    if offering is None:
+        warn(f"Default offering 'Pekerjaan' does not exist for company ID {COMPANY_ID}")
+        raise SystemExit(
+            f"Default offering is missing for this company (company_id={COMPANY_ID})."
+        )
+
+    offering_id = offering[0]
+
+success(f"Default offering found: ID {offering_id}")
 
 # ============================================================
 # 4. EXECUTION LOOP
@@ -138,8 +195,6 @@ for sheet in ORDER:
 
             # PROCESS EACH PROJECT ROW
             for p in proj_data:
-                print(p)
-
                 # ----------------------------------------------------------
                 # CLIENT LOOKUP
                 # ----------------------------------------------------------
@@ -190,7 +245,7 @@ for sheet in ORDER:
                         "name": clean_value(p["name"]),
                         "basis": clean_value(p["work_basis"]),
                         "req": clean_value(p["request_number_date"]),
-                        "value": clean_value(p["project_value"]),
+                        "value": clean_value(p["project_value"]) * 100,
                         "start": clean_value(p["start_date"]),
                         "end": clean_value(p["end_date"])
                     }
@@ -209,7 +264,10 @@ for sheet in ORDER:
 
         with engine.connect() as conn:
             for inv in inv_data:
-
+                print(inv)
+                project_number = clean_value(inv["project_number"])
+                if project_number is None:
+                    continue
                 project = conn.execute(
                     text("""
                         SELECT id, client_id
@@ -217,7 +275,7 @@ for sheet in ORDER:
                         WHERE number = :num
                         LIMIT 1
                     """),
-                    {"num": inv["project_number"]}
+                    {"num": project_number}
                 ).fetchone()
 
                 if project is None:
@@ -232,8 +290,8 @@ for sheet in ORDER:
                     text("""
                         INSERT INTO invoices
                         (company_id, client_id, project_id, invoice_number,
-                         date, total, amount_paid, status)
-                        VALUES (:cid, :clid, :pid, :inv, :date, :total, :paid, :status)
+                         date, total, amount_paid, status, currency_code)
+                        VALUES (:cid, :clid, :pid, :inv, :date, :total, :paid, :status, :curency)
                     """),
                     {
                         "cid": COMPANY_ID,
@@ -243,7 +301,8 @@ for sheet in ORDER:
                         "date": clean_value(inv["date"]),
                         "total": clean_value(inv["total_after_ppn"]),
                         "paid": clean_value(inv["paid_value"]),
-                        "status": clean_value(inv["status"])
+                        "status": "paid",
+                        "curency": "IDR",
                     }
                 )
 
@@ -254,17 +313,17 @@ for sheet in ORDER:
                 conn.execute(
                     text("""
                         INSERT INTO document_line_items
-                        (company_id, documentable_type, documentable_id,
-                         description, unit_price, tax_total, total)
-                        VALUES (:cid, 'invoice', :iid, :desc, :price, :tax, :total)
+                        (company_id, offering_id, documentable_type, documentable_id,
+                         description, unit_price, tax_total)
+                        VALUES (:cid, :oid, 'App\\Models\\Accounting\\Invoice', :iid, :desc, :price, :tax)
                     """),
                     {
                         "cid": COMPANY_ID,
+                        "oid": offering_id,
                         "iid": invoice_id,
                         "desc": clean_value(inv["item_description"]),
                         "price": clean_value(inv["dpp"]),
                         "tax": clean_value(inv["ppn"]),
-                        "total": clean_value(inv["total_after_ppn"])
                     }
                 )
                 conn.commit()
