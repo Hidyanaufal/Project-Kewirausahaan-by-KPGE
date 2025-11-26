@@ -108,6 +108,15 @@ class ViewInvoice extends ViewRecord
     {
         return $infolist
             ->schema([
+                BannerEntry::make('legacy_flag')
+                    ->warning()
+                    ->icon('heroicon-o-exclamation-triangle')
+                    ->columnSpanFull()
+                    ->visible(fn(Invoice $record) => $record->is_imported)
+                    ->title('Legacy Data Notice')
+                    ->description(function () {
+                        return 'This data was imported from the previous system. It may contain inconsistencies or may not fully comply with the current data-handling standards.';
+                    }),
                 BannerEntry::make('inactiveAdjustments')
                     ->label('Inactive adjustments')
                     ->warning()

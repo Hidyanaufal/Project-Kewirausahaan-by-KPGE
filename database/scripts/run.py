@@ -194,48 +194,65 @@ for sheet in ORDER:
             section(f"Project Type: {project_type_name}")
 
             # PROCESS EACH PROJECT ROW
+            last_client_id = None
+            last_client_name = None
+
             for p in proj_data:
                 # ----------------------------------------------------------
-                # CLIENT LOOKUP
+                # CLIENT LOOKUP (WITH FALLBACK)
                 # ----------------------------------------------------------
                 client_name = clean_value(p["client_name"])
 
-                client = conn.execute(
-                    text("""
-                        SELECT id FROM clients
-                        WHERE name = :name AND company_id = :cid LIMIT 1
-                    """),
-                    {"name": client_name, "cid": COMPANY_ID}
-                ).fetchone()
-
-                # INSERT CLIENT IF NOT EXISTS
-                if client is None and client_name is not None:
-                    result = conn.execute(
-                        text("""
-                            INSERT INTO clients (company_id, name)
-                            VALUES (:cid, :name)
-                        """),
-                        {"cid": COMPANY_ID, "name": client_name}
-                    )
-                    conn.commit()
-                    client_id = result.lastrowid
-                    success(f"Created new client: {client_name}")
-                else:
-                    if client is not None:
-                        client_id = client[0]
-                    else:
+                # Jika client kosong → gunakan client sebelumnya
+                if not client_name:
+                    if last_client_id is None:
+                        warn(f"Client is empty for project '{p['name']}' and no previous client exists. Skipped.")
                         continue
+
+                    client_id = last_client_id
+                    info(f"Using previous client: {last_client_name} for project '{p['name']}'")
+
+                else:
+                    # Lookup client
+                    client = conn.execute(
+                        text("""
+                            SELECT id FROM clients
+                            WHERE name = :name AND company_id = :cid LIMIT 1
+                        """),
+                        {"name": client_name, "cid": COMPANY_ID}
+                    ).fetchone()
+
+                    # Insert jika belum ada
+                    if client is None:
+                        result = conn.execute(
+                            text("""
+                                INSERT INTO clients (company_id, name, currency_code)
+                                VALUES (:cid, :name, 'IDR')
+                            """),
+                            {"cid": COMPANY_ID, "name": client_name}
+                        )
+                        conn.commit()
+                        client_id = result.lastrowid
+                        success(f"Created new client: {client_name}")
+                    else:
+                        client_id = client[0]
+
+                    # Update last client
+                    last_client_id = client_id
+                    last_client_name = client_name
 
                 # ----------------------------------------------------------
                 # INSERT PROJECT
                 # ----------------------------------------------------------
+                if clean_value(p["name"]) is None:
+                    continue
                 result = conn.execute(
                     text("""
                         INSERT INTO projects
                         (company_id, project_type_id, client_id, pic_id, number, name, work_basis,
-                         request_number_date, project_value, start_date, end_date)
+                        request_number_date, project_value, start_date, end_date, is_imported)
                         VALUES (:cid, :ptid, :clid, 1, :num, :name, :basis,
-                                :req, :value, :start, :end)
+                                :req, :value, :start, :end, 1)
                     """),
                     {
                         "cid": COMPANY_ID,
@@ -255,6 +272,7 @@ for sheet in ORDER:
                 project_id = result.lastrowid
                 success(f"Inserted Project: {p['name']} (ID {project_id})")
 
+
     # ============================================================
     # INVOICE SHEET
     # ============================================================
@@ -264,7 +282,6 @@ for sheet in ORDER:
 
         with engine.connect() as conn:
             for inv in inv_data:
-                print(inv)
                 project_number = clean_value(inv["project_number"])
                 if project_number is None:
                     continue
@@ -290,8 +307,8 @@ for sheet in ORDER:
                     text("""
                         INSERT INTO invoices
                         (company_id, client_id, project_id, invoice_number,
-                         date, total, amount_paid, status, currency_code)
-                        VALUES (:cid, :clid, :pid, :inv, :date, :total, :paid, :status, :curency)
+                         date, total, amount_paid, status, currency_code, is_imported)
+                        VALUES (:cid, :clid, :pid, :inv, :date, :total, :paid, :status, :curency, 1)
                     """),
                     {
                         "cid": COMPANY_ID,
@@ -300,7 +317,7 @@ for sheet in ORDER:
                         "inv": clean_value(inv["invoice_number"]),
                         "date": clean_value(inv["date"]),
                         "total": clean_value(inv["total_after_ppn"]),
-                        "paid": clean_value(inv["paid_value"]),
+                        "paid": clean_value(inv["total_after_ppn"]),
                         "status": "paid",
                         "curency": "IDR",
                     }
@@ -315,7 +332,7 @@ for sheet in ORDER:
                         INSERT INTO document_line_items
                         (company_id, offering_id, documentable_type, documentable_id,
                          description, unit_price, tax_total)
-                        VALUES (:cid, :oid, 'App\\Models\\Accounting\\Invoice', :iid, :desc, :price, :tax)
+                        VALUES (:cid, :oid, 'App\\\\Models\\\\Accounting\\\\Invoice', :iid, :desc, :price, :tax)
                     """),
                     {
                         "cid": COMPANY_ID,

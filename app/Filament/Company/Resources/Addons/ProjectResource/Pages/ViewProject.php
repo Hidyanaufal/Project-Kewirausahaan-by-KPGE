@@ -13,6 +13,7 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\IconPosition;
 use Illuminate\Contracts\Support\Htmlable;
 use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers;
+use App\Filament\Infolists\Components\BannerEntry;
 use App\Helpers\AuthHelper;
 use App\Models\Addons\Project;
 use Filament\Notifications\Notification;
@@ -96,6 +97,15 @@ class ViewProject extends ViewRecord
     public function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
+            BannerEntry::make('legacy_flag')
+                ->warning()
+                ->icon('heroicon-o-exclamation-triangle')
+                ->columnSpanFull()
+                ->visible(fn(Project $record) => $record->is_imported)
+                ->title('Legacy Data Notice')
+                ->description(function () {
+                    return 'This data was imported from the previous system. It may contain inconsistencies or may not fully comply with the current data-handling standards.';
+                }),
             Section::make('General Information')
                 ->columns(2)
                 ->schema([

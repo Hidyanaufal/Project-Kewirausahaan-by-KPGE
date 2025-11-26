@@ -19,8 +19,8 @@ class CreateClientSelect extends Select
         $this
             ->searchable()
             ->preload()
-            ->createOptionForm(fn (Form $form) => $this->createClientForm($form))
-            ->createOptionAction(fn (Action $action) => $this->createClientAction($action));
+            ->createOptionForm(fn(Form $form) => $this->createClientForm($form))
+            ->createOptionAction(fn(Action $action) => $this->createClientAction($action));
 
         $this->relationship('client', 'name');
 

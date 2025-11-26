@@ -79,6 +79,7 @@ class InvoiceResource extends Resource
                             Forms\Components\Group::make([
                                 ProjectResource::options(),
                                 CreateClientSelect::make('client_id')
+                                    ->options(fn() => Client::where('company_id', AuthHelper::currentCompany())->pluck('name', 'id'))
                                     ->label('Client')
                                     ->required()
                                     ->live()
