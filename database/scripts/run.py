@@ -80,23 +80,19 @@ with engine.connect() as conn:
         print(Fore.RED + "✖ ERROR: No companies found in database.")
         exit(1)
 
-    # Display companies with premium UI
     for comp in companies:
         print(Fore.LIGHTWHITE_EX + f"[{comp.id}] {comp.name}")
 
-# Ask user to select a company
 company_choice = input(
     Fore.CYAN + "\nSelect company ID to use for this import: " + Style.RESET_ALL
 ).strip()
 
-# Validate input
 valid_ids = [str(c.id) for c in companies]
 
 if company_choice not in valid_ids:
     print(Fore.RED + "✖ Invalid company ID. Stopping." + Style.RESET_ALL)
     exit()
 
-# Override COMPANY_ID from .env
 COMPANY_ID = int(company_choice)
 
 success(f"Using Company ID: {COMPANY_ID}\n")
@@ -112,10 +108,10 @@ for s in available_sheets:
     print(Fore.LIGHTWHITE_EX + f" - {s}")
 
 # ============================================================
-# 3. SORT SHEETS (Project-* first, then others)
+# 3. SORT SHEETS
 # ============================================================
 project_sheets = [s for s in available_sheets if s.lower().startswith("project")]
-other_sheets   = [s for s in available_sheets if not s.lower().startswith("project")]
+other_sheets = [s for s in available_sheets if not s.lower().startswith("project")]
 
 ORDER = project_sheets + other_sheets
 
@@ -164,7 +160,7 @@ for sheet in ORDER:
     df = pd.read_excel(excel_path, sheet_name=sheet)
 
     # ============================================================
-    # PROJECT-* SHEETS
+    # PROJECT SHEETS
     # ============================================================
     if parser_type == "project":
 
@@ -172,7 +168,6 @@ for sheet in ORDER:
         project_type_name = sheet.split("Project-")[1].strip()
 
         with engine.connect() as conn:
-            # LOOKUP PROJECT TYPE
             project_type = conn.execute(
                 text("""
                     SELECT id FROM project_types
@@ -182,38 +177,29 @@ for sheet in ORDER:
                 {"name": project_type_name, "cid": COMPANY_ID}
             ).fetchone()
 
-            # STOP IF PROJECT TYPE IS MISSING
             if project_type is None:
-                print(Fore.RED + "✖ ERROR: Project type '" + project_type_name + "' does not exist in database.")
-                print(Fore.RED + "✖ Please create this project type first in the 'project_types' table.")
-                print(Fore.RED + "✖ Stopping execution..." + Style.RESET_ALL)
+                print(Fore.RED + f"✖ ERROR: Project type '{project_type_name}' not found.")
                 exit(1)
 
-            # Extract ID when exists
             project_type_id = project_type[0]
             section(f"Project Type: {project_type_name}")
 
-            # PROCESS EACH PROJECT ROW
             last_client_id = None
             last_client_name = None
 
             for p in proj_data:
-                # ----------------------------------------------------------
-                # CLIENT LOOKUP (WITH FALLBACK)
-                # ----------------------------------------------------------
+
                 client_name = clean_value(p["client_name"])
 
-                # Jika client kosong → gunakan client sebelumnya
                 if not client_name:
                     if last_client_id is None:
-                        warn(f"Client is empty for project '{p['name']}' and no previous client exists. Skipped.")
+                        warn(f"Client empty for project '{p['name']}'. Skipped.")
                         continue
 
                     client_id = last_client_id
-                    info(f"Using previous client: {last_client_name} for project '{p['name']}'")
+                    info(f"Using previous client: {last_client_name}")
 
                 else:
-                    # Lookup client
                     client = conn.execute(
                         text("""
                             SELECT id FROM clients
@@ -222,7 +208,6 @@ for sheet in ORDER:
                         {"name": client_name, "cid": COMPANY_ID}
                     ).fetchone()
 
-                    # Insert jika belum ada
                     if client is None:
                         result = conn.execute(
                             text("""
@@ -237,15 +222,12 @@ for sheet in ORDER:
                     else:
                         client_id = client[0]
 
-                    # Update last client
                     last_client_id = client_id
                     last_client_name = client_name
 
-                # ----------------------------------------------------------
-                # INSERT PROJECT
-                # ----------------------------------------------------------
                 if clean_value(p["name"]) is None:
                     continue
+
                 result = conn.execute(
                     text("""
                         INSERT INTO projects
@@ -272,7 +254,6 @@ for sheet in ORDER:
                 project_id = result.lastrowid
                 success(f"Inserted Project: {p['name']} (ID {project_id})")
 
-
     # ============================================================
     # INVOICE SHEET
     # ============================================================
@@ -282,11 +263,11 @@ for sheet in ORDER:
 
         with engine.connect() as conn:
             for inv in inv_data:
+
                 project_number = clean_value(inv["project_number"])
-                if project_number is None:
+                if not project_number or project_number in ["0", 0]:
                     continue
-                if project_number == 0 or project_number == "0":
-                    continue
+
                 project = conn.execute(
                     text("""
                         SELECT id, client_id
@@ -301,16 +282,31 @@ for sheet in ORDER:
                     warn(f"Project not found for invoice {inv['invoice_number']}")
                     continue
 
-                project_id = project[0]
-                client_id = project[1]
+                project_id, client_id = project
 
-                # INSERT INVOICE
+                dpp = clean_value(inv["dpp"])
+                profit = clean_value(inv.get("profit", 0)) or 0
+                ppn = clean_value(inv["ppn"])
+
+                if profit > 0:
+                    profit_percentage = (profit / dpp) * 100
+                    profit_rate = int(profit_percentage * 100)       # 12% -> 1200
+                else:
+                    profit_percentage = 0
+                    profit_rate = 0
+
+                profit_total = profit
+                total = dpp + profit_total + ppn
+
                 result = conn.execute(
                     text("""
                         INSERT INTO invoices
                         (company_id, client_id, project_id, invoice_number,
-                         date, total, amount_paid, status, currency_code, is_imported, tax_total, subtotal)
-                        VALUES (:cid, :clid, :pid, :inv, :date, :total, :paid, :status, :curency, 1, :tax_total, :subtotal)
+                        date, subtotal, profit_computation, profit_rate, profit_total,
+                        tax_total, total, actual_total, amount_paid, status, currency_code, is_imported)
+                        VALUES (:cid, :clid, :pid, :inv, :date,
+                                :subtotal, 'percentage', :profit_rate, :profit_total,
+                                :ppn, :total, :total, :paid, 'paid', :cur, 1)
                     """),
                     {
                         "cid": COMPANY_ID,
@@ -318,19 +314,19 @@ for sheet in ORDER:
                         "pid": project_id,
                         "inv": clean_value(inv["invoice_number"]),
                         "date": clean_value(inv["date"]),
-                        "tax_total": clean_value(inv["ppn"]) * 100,
-                        "subtotal": clean_value(inv["total_after_ppn"]) * 100,
-                        "total": clean_value(inv["total_after_ppn"]) * 100,
-                        "paid": clean_value(inv["total_after_ppn"]) * 100,
-                        "status": "paid",
-                        "curency": "IDR",
+                        "subtotal": dpp * 100,
+                        "profit_rate": profit_rate,
+                        "profit_total": profit_total * 100,
+                        "ppn": ppn * 100,
+                        "total": total * 100,
+                        "paid": total * 100,
+                        "cur": "IDR",
                     }
                 )
 
                 conn.commit()
                 invoice_id = result.lastrowid
 
-                # INSERT LINE ITEM
                 conn.execute(
                     text("""
                         INSERT INTO document_line_items
