@@ -263,7 +263,7 @@ for sheet in ORDER:
 
         with engine.connect() as conn:
             for inv in inv_data:
-
+                
                 project_number = clean_value(inv["project_number"])
                 if not project_number or project_number in ["0", 0]:
                     continue
@@ -284,15 +284,19 @@ for sheet in ORDER:
 
                 project_id, client_id = project
 
-                dpp = clean_value(inv["dpp"])
+                # Ambil nilai (pastikan clean_value mengembalikan numeric/float)
+                dpp = clean_value(inv["dpp"]) or 0
                 profit = clean_value(inv.get("profit", 0)) or 0
-                ppn = clean_value(inv["ppn"])
+                ppn = clean_value(inv["ppn"]) or 0
 
-                if profit > 0:
-                    profit_percentage = (profit / dpp) * 100
-                    profit_rate = int(profit_percentage * 100)       # 12% -> 1200
+                # Hitung profit percentage dan profit_rate dengan skala yang benar:
+                # profit_percentage = (profit / dpp) * 100  (contoh: 12.0)
+                # profit_rate (DB) = profit_percentage * 10_000  (contoh: 12% -> 120000)
+                if dpp > 0 and profit > 0:
+                    profit_percentage = (profit / dpp) * 100.0
+                    profit_rate = int(round(profit_percentage * 10000))   # 1% -> 10000 ; 12% -> 120000
                 else:
-                    profit_percentage = 0
+                    profit_percentage = 0.0
                     profit_rate = 0
 
                 profit_total = profit
@@ -306,7 +310,7 @@ for sheet in ORDER:
                         tax_total, total, actual_total, amount_paid, status, currency_code, is_imported)
                         VALUES (:cid, :clid, :pid, :inv, :date,
                                 :subtotal, 'percentage', :profit_rate, :profit_total,
-                                :ppn, :total, :total, :paid, 'paid', :cur, 1)
+                                :ppn, :total, :actual_total, :paid, 'paid', :cur, 1)
                     """),
                     {
                         "cid": COMPANY_ID,
@@ -314,12 +318,15 @@ for sheet in ORDER:
                         "pid": project_id,
                         "inv": clean_value(inv["invoice_number"]),
                         "date": clean_value(inv["date"]),
-                        "subtotal": dpp * 100,
-                        "profit_rate": profit_rate,
-                        "profit_total": profit_total * 100,
-                        "ppn": ppn * 100,
-                        "total": total * 100,
-                        "paid": total * 100,
+
+                        # simpan rupiah sebagai integer (×100)
+                        "subtotal": int(round(dpp * 100)),
+                        "profit_rate": profit_rate,                   # percent × 10_000
+                        "profit_total": int(round(profit_total * 100)),
+                        "ppn": int(round(ppn * 100)),
+                        "total": int(round(total * 100)),
+                        "actual_total": int(round(total * 100)),
+                        "paid": int(round(total * 100)),
                         "cur": "IDR",
                     }
                 )

@@ -510,7 +510,7 @@ class InvoiceResource extends Resource
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('client')
-                    ->relationship('client', 'name')
+                    ->options(fn() => Client::where('company_id', AuthHelper::currentCompany())->pluck('name', 'id'))
                     ->searchable()
                     ->preload()
                     ->hiddenOn(InvoicesRelationManager::class),
