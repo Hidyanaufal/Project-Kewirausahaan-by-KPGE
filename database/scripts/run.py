@@ -285,6 +285,8 @@ for sheet in ORDER:
                 project_number = clean_value(inv["project_number"])
                 if project_number is None:
                     continue
+                if project_number == 0 or project_number == "0":
+                    continue
                 project = conn.execute(
                     text("""
                         SELECT id, client_id
@@ -307,8 +309,8 @@ for sheet in ORDER:
                     text("""
                         INSERT INTO invoices
                         (company_id, client_id, project_id, invoice_number,
-                         date, total, amount_paid, status, currency_code, is_imported)
-                        VALUES (:cid, :clid, :pid, :inv, :date, :total, :paid, :status, :curency, 1)
+                         date, total, amount_paid, status, currency_code, is_imported, tax_total, subtotal)
+                        VALUES (:cid, :clid, :pid, :inv, :date, :total, :paid, :status, :curency, 1, :tax_total, :subtotal)
                     """),
                     {
                         "cid": COMPANY_ID,
@@ -316,8 +318,10 @@ for sheet in ORDER:
                         "pid": project_id,
                         "inv": clean_value(inv["invoice_number"]),
                         "date": clean_value(inv["date"]),
-                        "total": clean_value(inv["total_after_ppn"]),
-                        "paid": clean_value(inv["total_after_ppn"]),
+                        "tax_total": clean_value(inv["ppn"]) * 100,
+                        "subtotal": clean_value(inv["total_after_ppn"]) * 100,
+                        "total": clean_value(inv["total_after_ppn"]) * 100,
+                        "paid": clean_value(inv["total_after_ppn"]) * 100,
                         "status": "paid",
                         "curency": "IDR",
                     }
@@ -339,8 +343,8 @@ for sheet in ORDER:
                         "oid": offering_id,
                         "iid": invoice_id,
                         "desc": clean_value(inv["item_description"]),
-                        "price": clean_value(inv["dpp"]),
-                        "tax": clean_value(inv["ppn"]),
+                        "price": clean_value(inv["dpp"]) * 100,
+                        "tax": clean_value(inv["ppn"]) * 100,
                     }
                 )
                 conn.commit()

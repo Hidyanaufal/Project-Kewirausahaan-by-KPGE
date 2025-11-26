@@ -290,7 +290,7 @@ class InvoiceResource extends Resource
                                                 $set('salesDiscounts', $offeringRecord->salesDiscounts->pluck('id')->toArray());
                                             }
                                         }),
-                                    Forms\Components\TextInput::make('description')
+                                    Forms\Components\Textarea::make('description')
                                         ->placeholder('Enter item description')
                                         ->hiddenLabel(),
                                 ])->columnSpan(1),
