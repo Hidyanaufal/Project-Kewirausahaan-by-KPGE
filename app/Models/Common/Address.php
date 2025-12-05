@@ -72,16 +72,16 @@ class Address extends Model
     {
         return Attribute::get(function () {
             $street = array_filter([
-                $this->address_line_1,
-                $this->address_line_2,
+                $this?->address_line_1,
+                $this?->address_line_2,
             ]);
 
             return array_filter([
                 implode(', ', $street), // Street 1 & 2 on same line if both exist
                 implode(', ', array_filter([
-                    $this->city,
-                    $this->state->name,
-                    $this->postal_code,
+                    $this?->city,
+                    $this?->state?->name,
+                    $this?->postal_code,
                 ])),
             ]);
         });
