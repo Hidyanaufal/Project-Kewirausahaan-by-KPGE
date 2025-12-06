@@ -125,7 +125,7 @@
                 @if ($document->detail->hide_offering_items)
                     {{-- Mode: Hide Offering Items - Tampilkan langsung total sejajar dengan project --}}
                     <tr>
-                        <td class="px-2 py-1 text-center border border-black align-top" rowspan="2">
+                        <td class="px-2 py-1 text-center border border-black align-top">
                             {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
                         </td>
                         <td class="py-1 pl-2 font-semibold text-left border border-black">
@@ -144,22 +144,13 @@
                             {{ $document->subtotal }}
                         </td>
                     </tr>
-                    <tr>
-                        <td colspan="2" class="px-2 py-1 text-[11px] text-gray-800">
-                            @if ($document->dueDate)
-                                <div>
-                                    Tanggal: {{ \Carbon\Carbon::parse($document->dueDate)->format('d F Y') }}
-                                </div>
-                            @endif
-                        </td>
-                    </tr>
                 @else
                     {{-- Mode: Show Offering Items - Tampilkan semua offering items --}}
                     @foreach ($document->lineItems as $index => $item)
                         <tr>
                             @if ($index === 0)
                                 <td class="px-2 py-1 text-center border border-black align-top"
-                                    rowspan="{{ count($document->lineItems) + 2 }}">
+                                    rowspan="{{ count($document->lineItems) + 1 }}">
                                     {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
                                 </td>
                                 <td class="py-1 pl-2 font-semibold text-left border border-black" colspan="2">
@@ -188,18 +179,6 @@
                         {{ $item->subtotal }}
                     </td>
                     @endforeach
-
-                    <tr>
-                        <td colspan="2" class="px-2 py-1 text-[11px] text-gray-800">
-                            @if ($document->dueDate)
-                                <div>
-                                    @if ($document->dueDate)
-                                        Tanggal: {{ \Carbon\Carbon::parse($document->dueDate)->format('d F Y') }}
-                                    @endif
-                                </div>
-                            @endif
-                        </td>
-                    </tr>
                 @endif
 
                 <!-- Profit -->
