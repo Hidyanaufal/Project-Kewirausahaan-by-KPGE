@@ -421,6 +421,12 @@ class InvoiceResource extends Resource
                             ->label('SPK Date')
                             ->placeholder('Select SPK date')
                             ->native(true),
+
+                        Forms\Components\Toggle::make('hide_offering_items')
+                            ->label('Hide Offering Items')
+                            ->helperText('When enabled, individual offering items will be hidden and only totals will be shown aligned with the project')
+                            ->default(false)
+                            ->columnSpanFull(),
                     ]),
                 Forms\Components\Section::make('Tax Detail')
                     ->columns(3)

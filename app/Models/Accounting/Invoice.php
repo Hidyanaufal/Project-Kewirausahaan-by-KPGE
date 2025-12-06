@@ -97,6 +97,7 @@ class Invoice extends Document
         'spk_number',
         'spk_date',
         'pph23',
+        'hide_offering_items',
     ];
 
     protected $casts = [
@@ -112,6 +113,7 @@ class Invoice extends Document
         'discount_rate' => RateCast::class,
         'profit_computation' => AdjustmentComputation::class,
         'profit_rate' => RateCast::class,
+        'hide_offering_items' => 'boolean',
     ];
 
     protected $appends = [

@@ -115,51 +115,85 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach ($document->lineItems as $index => $item)
+                @if ($document->detail->hide_offering_items)
+                    {{-- Mode: Hide Offering Items - Tampilkan langsung total sejajar dengan project --}}
                     <tr>
-                        @if ($index === 0)
-                            <td class="px-2 py-1 text-center border border-black align-top"
-                                rowspan="{{ count($document->lineItems) + 2 }}">
-                                {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
-                            </td>
-                            <td class="py-1 pl-2 font-semibold text-left border border-black" colspan="2">
-                                @isset($document->project)
-                                    <div>
-                                        {{ $document->project }}
-                                        @if ($document?->detail?->project?->description)
-                                            <div class="mt-0.5 text-[10px] text-gray-600 leading-snug">
-                                                {{ $document?->detail?->project?->description }}
-                                            </div>
-                                        @endif
-                                    </div>
-                                @endisset
-                            </td>
+                        <td class="px-2 py-1 text-center border border-black align-top" rowspan="2">
+                            {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
+                        </td>
+                        <td class="py-1 pl-2 font-semibold text-left border border-black">
+                            @isset($document->project)
+                                <div>
+                                    {{ $document->project }}
+                                    @if ($document?->detail?->project?->description)
+                                        <div class="mt-0.5 text-[10px] text-gray-600 leading-snug">
+                                            {{ $document?->detail?->project?->description }}
+                                        </div>
+                                    @endif
+                                </div>
+                            @endisset
+                        </td>
+                        <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                            {{ $document->subtotal }}
+                        </td>
                     </tr>
-                @endif
-                <td class="py-1 pl-2 text-left border border-black">
-                    {{ $item->name }}
-                    @if ($item->description)
-                        <div class="text-[10px] text-gray-600 leading-snug">
-                            {{ $item->description }}
-                        </div>
-                    @endif
-                </td>
-                <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                    {{ $item->subtotal }}
-                </td>
-                @endforeach
-
-                <tr>
-                    <td colspan="2" class="px-2 py-1 text-[11px] text-gray-800">
-                        @if ($document->dueDate)
-                            <div>
-                                @if ($document->dueDate)
+                    <tr>
+                        <td colspan="2" class="px-2 py-1 text-[11px] text-gray-800">
+                            @if ($document->dueDate)
+                                <div>
                                     Tanggal: {{ \Carbon\Carbon::parse($document->dueDate)->format('d F Y') }}
-                                @endif
+                                </div>
+                            @endif
+                        </td>
+                    </tr>
+                @else
+                    {{-- Mode: Show Offering Items - Tampilkan semua offering items --}}
+                    @foreach ($document->lineItems as $index => $item)
+                        <tr>
+                            @if ($index === 0)
+                                <td class="px-2 py-1 text-center border border-black align-top"
+                                    rowspan="{{ count($document->lineItems) + 2 }}">
+                                    {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
+                                </td>
+                                <td class="py-1 pl-2 font-semibold text-left border border-black" colspan="2">
+                                    @isset($document->project)
+                                        <div>
+                                            {{ $document->project }}
+                                            @if ($document?->detail?->project?->description)
+                                                <div class="mt-0.5 text-[10px] text-gray-600 leading-snug">
+                                                    {{ $document?->detail?->project?->description }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    @endisset
+                                </td>
+                        </tr>
+                    @endif
+                    <td class="py-1 pl-2 text-left border border-black">
+                        {{ $item->name }}
+                        @if ($item->description)
+                            <div class="text-[10px] text-gray-600 leading-snug">
+                                {{ $item->description }}
                             </div>
                         @endif
                     </td>
-                </tr>
+                    <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                        {{ $item->subtotal }}
+                    </td>
+                    @endforeach
+
+                    <tr>
+                        <td colspan="2" class="px-2 py-1 text-[11px] text-gray-800">
+                            @if ($document->dueDate)
+                                <div>
+                                    @if ($document->dueDate)
+                                        Tanggal: {{ \Carbon\Carbon::parse($document->dueDate)->format('d F Y') }}
+                                    @endif
+                                </div>
+                            @endif
+                        </td>
+                    </tr>
+                @endif
 
                 <!-- Profit -->
                 <tr>
