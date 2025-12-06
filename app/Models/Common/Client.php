@@ -42,80 +42,92 @@ class Client extends Model
         /** @var Client $client */
         $client = self::create($data);
 
-        if (isset($data['primaryContact'], $data['primaryContact']['first_name'])) {
+        // Create primary contact
+        if (
+            isset($data['primaryContact']) &&
+            is_array($data['primaryContact']) &&
+            isset($data['primaryContact']['first_name'])
+        ) {
             $client->primaryContact()->create([
-                'is_primary' => true,
-                'title' => $data['primaryContact']['title'],
-                'position' => $data['primaryContact']['position'],
-                'first_name' => $data['primaryContact']['first_name'],
-                'last_name' => $data['primaryContact']['last_name'],
-                'email' => $data['primaryContact']['email'],
-                'phones' => $data['primaryContact']['phones'] ?? [],
+                'is_primary'  => true,
+                'title'       => $data['primaryContact']['title'] ?? null,
+                'position'    => $data['primaryContact']['position'] ?? null,
+                'first_name'  => $data['primaryContact']['first_name'] ?? null,
+                'last_name'   => $data['primaryContact']['last_name'] ?? null,
+                'email'       => $data['primaryContact']['email'] ?? null,
+                'phones'      => $data['primaryContact']['phones'] ?? [],
             ]);
         }
 
-        if (isset($data['secondaryContacts'])) {
+        // Create secondary contacts
+        if (isset($data['secondaryContacts']) && is_array($data['secondaryContacts'])) {
             foreach ($data['secondaryContacts'] as $contactData) {
-                if (isset($contactData['first_name'])) {
+                if (is_array($contactData) && isset($contactData['first_name'])) {
                     $client->secondaryContacts()->create([
                         'is_primary' => false,
-                        'title' => $data['title'],
-                        'position' => $data['position'],
-                        'first_name' => $contactData['first_name'],
-                        'last_name' => $contactData['last_name'],
-                        'email' => $contactData['email'],
+                        'title' => $contactData['title'] ?? null,
+                        'position' => $contactData['position'] ?? null,
+                        'first_name' => $contactData['first_name'] ?? null,
+                        'last_name' => $contactData['last_name'] ?? null,
+                        'email' => $contactData['email'] ?? null,
                         'phones' => $contactData['phones'] ?? [],
                     ]);
                 }
             }
         }
 
-        if (isset($data['billingAddress'], $data['billingAddress']['address_line_1'])) {
+        // Create billing address
+        if (
+            isset($data['billingAddress']) &&
+            is_array($data['billingAddress']) &&
+            isset($data['billingAddress']['address_line_1'])
+        ) {
+            $billingAddressData = $data['billingAddress'];
             $client->billingAddress()->create([
-                'type' => AddressType::Billing,
-                'address_line_1' => $data['billingAddress']['address_line_1'],
-                'address_line_2' => $data['billingAddress']['address_line_2'] ?? null,
-                'country_code' => $data['billingAddress']['country_code'] ?? null,
-                'state_id' => $data['billingAddress']['state_id'] ?? null,
-                'city' => $data['billingAddress']['city'] ?? null,
-                'postal_code' => $data['billingAddress']['postal_code'] ?? null,
+                'type'             => AddressType::Billing,
+                'address_line_1'   => $billingAddressData['address_line_1'] ?? null,
+                'address_line_2'   => $billingAddressData['address_line_2'] ?? null,
+                'country_code'     => $billingAddressData['country_code'] ?? null,
+                'state_id'         => $billingAddressData['state_id'] ?? null,
+                'city'             => $billingAddressData['city'] ?? null,
+                'postal_code'      => $billingAddressData['postal_code'] ?? null,
             ]);
         }
 
-        if (isset($data['shippingAddress'])) {
+        // Create shipping address
+        if (isset($data['shippingAddress']) && is_array($data['shippingAddress'])) {
             $shippingData = $data['shippingAddress'];
             $shippingAddress = [
-                'type' => AddressType::Shipping,
+                'type'      => AddressType::Shipping,
                 'recipient' => $shippingData['recipient'] ?? null,
-                'phone' => $shippingData['phone'] ?? null,
-                'notes' => $shippingData['notes'] ?? null,
+                'phone'     => $shippingData['phone'] ?? null,
+                'notes'     => $shippingData['notes'] ?? null,
             ];
 
-            if ($shippingData['same_as_billing'] ?? false) {
+            $sameAsBilling = isset($shippingData['same_as_billing']) ? (bool)$shippingData['same_as_billing'] : false;
+            if ($sameAsBilling) {
                 $billingAddress = $client->billingAddress;
                 if ($billingAddress) {
-                    $shippingAddress = [
-                        ...$shippingAddress,
+                    $shippingAddress = array_merge($shippingAddress, [
                         'parent_address_id' => $billingAddress->id,
-                        'address_line_1' => $billingAddress->address_line_1,
-                        'address_line_2' => $billingAddress->address_line_2,
-                        'country_code' => $billingAddress->country_code,
-                        'state_id' => $billingAddress->state_id,
-                        'city' => $billingAddress->city,
-                        'postal_code' => $billingAddress->postal_code,
-                    ];
+                        'address_line_1'    => $billingAddress->address_line_1,
+                        'address_line_2'    => $billingAddress->address_line_2,
+                        'country_code'      => $billingAddress->country_code,
+                        'state_id'          => $billingAddress->state_id,
+                        'city'              => $billingAddress->city,
+                        'postal_code'       => $billingAddress->postal_code,
+                    ]);
                     $client->shippingAddress()->create($shippingAddress);
                 }
             } elseif (isset($shippingData['address_line_1'])) {
-                $shippingAddress = [
-                    ...$shippingAddress,
-                    'address_line_1' => $shippingData['address_line_1'],
-                    'address_line_2' => $shippingData['address_line_2'] ?? null,
-                    'country_code' => $shippingData['country_code'] ?? null,
-                    'state_id' => $shippingData['state_id'] ?? null,
-                    'city' => $shippingData['city'] ?? null,
-                    'postal_code' => $shippingData['postal_code'] ?? null,
-                ];
+                $shippingAddress = array_merge($shippingAddress, [
+                    'address_line_1'   => $shippingData['address_line_1'] ?? null,
+                    'address_line_2'   => $shippingData['address_line_2'] ?? null,
+                    'country_code'     => $shippingData['country_code'] ?? null,
+                    'state_id'         => $shippingData['state_id'] ?? null,
+                    'city'             => $shippingData['city'] ?? null,
+                    'postal_code'      => $shippingData['postal_code'] ?? null,
+                ]);
 
                 $client->shippingAddress()->create($shippingAddress);
             }

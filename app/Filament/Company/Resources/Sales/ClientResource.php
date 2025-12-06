@@ -147,7 +147,6 @@ class ClientResource extends Resource
                             ->addActionLabel('Add Contact')
                             ->schema([
                                 Forms\Components\Select::make('title')
-                                    ->required()
                                     ->searchable()
                                     ->options(ContactTitle::class),
                                 Forms\Components\TextInput::make('position')
