@@ -60,6 +60,13 @@
         <div class="flex mb-2 gap-5">
             <div class="text-xs">Kepada :</div>
             <div class="text-xs">
+                @if ($document?->detail?->project?->pic_client)
+                    <p class="text-xs">
+                        @if ($document->detail->project->pic_client->position)
+                            {{ $document->detail->project->pic_client->position }}
+                        @endif
+                    </p>
+                @endif
                 <p class="font-semibold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
                 @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
                     {!! $formattedAddress !!}
