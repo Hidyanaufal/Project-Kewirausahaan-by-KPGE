@@ -67,8 +67,8 @@ class UserPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Green,
             ])
-            ->brandLogo('/image/system.logo.png')
-            ->darkModeBrandLogo('/image/system.logo.alt.png')
+            ->brandLogo('/image/logo.kpgin.png')
+            ->darkModeBrandLogo('/image/logo.kpgin.png')
             ->brandLogoHeight('100px')
             ->navigation(false)
             ->viteTheme('resources/css/filament/user/theme.css')
