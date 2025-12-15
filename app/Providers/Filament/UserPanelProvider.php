@@ -69,16 +69,13 @@ class UserPanelProvider extends PanelProvider
             ])
             ->brandLogo('/image/logo.kpgin.png')
             ->darkModeBrandLogo('/image/logo.kpgin.png')
-            ->brandLogoHeight('100px')
+            ->brandLogoHeight('60px')
             ->navigation(false)
             ->viteTheme('resources/css/filament/user/theme.css')
             ->discoverResources(in: app_path('Filament/User/Resources'), for: 'App\\Filament\\User\\Resources')
             ->discoverPages(in: app_path('Filament/User/Pages'), for: 'App\\Filament\\User\\Pages')
             ->discoverClusters(in: app_path('Filament/User/Clusters'), for: 'App\\Filament\\User\\Clusters')
             ->discoverWidgets(in: app_path('Filament/User/Widgets'), for: 'App\\Filament\\User\\Widgets')
-            ->pages([
-                Profile::class,
-            ])
             ->viteTheme('resources/css/filament/company/theme.css')
             ->middleware([
                 EncryptCookies::class,

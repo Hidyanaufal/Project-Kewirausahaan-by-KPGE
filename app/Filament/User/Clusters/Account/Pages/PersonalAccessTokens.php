@@ -10,6 +10,8 @@ class PersonalAccessTokens extends BasePersonalAccessTokens
 {
     protected static ?string $cluster = Account::class;
 
+    protected static string $view = 'filament-companies::filament.pages.user.personal-access-tokens';
+
     protected static bool $shouldRegisterNavigation = true;
 
     protected static ?int $navigationSort = 20;

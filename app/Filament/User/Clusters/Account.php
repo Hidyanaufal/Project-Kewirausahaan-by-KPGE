@@ -2,6 +2,7 @@
 
 namespace App\Filament\User\Clusters;
 
+use App\Filament\User\Clusters\Account\Pages\Profile;
 use Filament\Clusters\Cluster;
 use Filament\Navigation\NavigationItem;
 
@@ -15,7 +16,7 @@ class Account extends Cluster
 
     public static function getNavigationUrl(): string
     {
-        return static::getUrl(panel: 'user');
+        return Profile::getUrl(panel: 'user');
     }
 
     public static function canAccess(): bool

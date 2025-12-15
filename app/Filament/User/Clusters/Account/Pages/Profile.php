@@ -8,6 +8,8 @@ use Wallo\FilamentCompanies\Pages\User\Profile as BaseProfile;
 
 class Profile extends BaseProfile
 {
+    protected static string $view = 'filament-companies::filament.pages.user.profile';
+    
     protected static ?string $cluster = Account::class;
 
     protected static bool $shouldRegisterNavigation = false;
