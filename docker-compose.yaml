@@ -55,6 +55,8 @@ services:
     image: mysql
     container_name: mykpg_db
     restart: unless-stopped
+    ports:
+      - "7001:3306"
     environment:
       MYSQL_DATABASE: ${DB_DATABASE}
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
