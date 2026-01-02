@@ -119,7 +119,7 @@ class ViewProject extends ViewRecord
                         ->label('Client'),
                     TextEntry::make('pic.name')
                         ->label('PIC Internal'),
-                    TextEntry::make('pic_client.first_name')
+                    TextEntry::make('pic_client_name')
                         ->label('PIC Client'),
                 ]),
 

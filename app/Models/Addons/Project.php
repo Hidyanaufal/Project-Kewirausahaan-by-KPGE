@@ -40,6 +40,7 @@ class Project extends Model
         'work_basis',
         'status',
         'pic_client_id',
+        'pic_client_name',
     ];
 
     protected $casts = [

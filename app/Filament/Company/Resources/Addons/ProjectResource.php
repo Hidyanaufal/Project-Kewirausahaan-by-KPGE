@@ -102,22 +102,10 @@ class ProjectResource extends Resource
                         ->relationship('pic', 'name')
                         ->required(),
 
-                    Forms\Components\Select::make('pic_client_id')
+                    Forms\Components\TextInput::make('pic_client_name')
                         ->label('PIC Client')
-                        ->options(function (callable $get) {
-                            $clientId = $get('client_id');
-
-                            if (!$clientId) {
-                                return [];
-                            }
-
-                            return Contact::query()
-                                ->where('contactable_type', Client::class)
-                                ->where('contactable_id', $clientId)
-                                ->pluck('first_name', 'id');
-                        })
-                        ->searchable()
-                        ->preload(),
+                        ->maxLength(255)
+                        ->nullable(),
 
                     Forms\Components\TextInput::make('name')
                         ->label('Project Name')
