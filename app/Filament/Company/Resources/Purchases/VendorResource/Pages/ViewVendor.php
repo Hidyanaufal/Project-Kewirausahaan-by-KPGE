@@ -89,6 +89,7 @@ class ViewVendor extends ViewRecord
                             ->label('Billing address')
                             ->listWithLineBreaks(),
                         TextEntry::make('notes'),
+                        TextEntry::make('account_number'),
                     ]),
             ]);
     }
