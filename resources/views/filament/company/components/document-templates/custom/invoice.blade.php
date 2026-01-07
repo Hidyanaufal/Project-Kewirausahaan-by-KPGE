@@ -122,7 +122,7 @@
                 </tr>
             </thead>
             <tbody>
-                @if ($document->detail->hide_offering_items)
+                @if ($document?->detail?->hide_offering_items)
                     {{-- Mode: Hide Offering Items - Tampilkan langsung total sejajar dengan project --}}
                     <tr>
                         <td class="px-2 py-1 text-center border border-black align-top">

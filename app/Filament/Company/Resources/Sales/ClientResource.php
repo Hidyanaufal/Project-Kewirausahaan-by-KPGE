@@ -277,11 +277,6 @@ class ClientResource extends Resource
                     ->label('Phone')
                     ->toggleable()
                     ->state(static fn(Client $client) => $client->primaryContact?->first_available_phone),
-                Tables\Columns\TextColumn::make('billingAddress.address_string')
-                    ->label('Billing address')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->listWithLineBreaks(),
                 Tables\Columns\TextColumn::make('balance')
                     ->label('Balance')
                     ->getStateUsing(function (Client $client) {
