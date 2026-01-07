@@ -47,7 +47,7 @@
             {!! $formattedAddress !!}
         @endif
         <p class="mt-6"><strong>UP:</strong></p>
-        <p class="font-bold">{{ $document?->detail?->project?->pic_client?->full_name ?? '-' }}</p>
+        <p class="font-bold">{{ $document?->detail?->project?->pic_client_name ?? '-' }}</p>
     </div>
 
     <div class="text-xs">
