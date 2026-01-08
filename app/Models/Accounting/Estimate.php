@@ -280,7 +280,8 @@ class Estimate extends Document
 
         // Extract sequence numbers from matching documents
         $sequences = $documents->map(function ($doc) use ($prefixWithYear) {
-            if (preg_match('/' . preg_quote($prefixWithYear) . '-(\d{4})/', $doc->estimate_number, $matches)) {
+            // Match both 3 and 4 digit sequences for backward compatibility
+            if (preg_match('/' . preg_quote($prefixWithYear) . '-(\d{3,4})/', $doc->estimate_number, $matches)) {
                 return (int) $matches[1];
             }
             return 0;
@@ -288,9 +289,9 @@ class Estimate extends Document
 
         // Find maximum sequence number (handle edge cases where older documents might have higher sequences)
         $maxSequence = $sequences->isNotEmpty() ? $sequences->max() : 0;
-        $nextSequence = str_pad($maxSequence + 1, 4, '0', STR_PAD_LEFT);
+        $nextSequence = str_pad($maxSequence + 1, 3, '0', STR_PAD_LEFT);
 
-        // Format: PG26-0392/KPG-I/2026
+        // Format: PG26-392/KPG-I/2026
         $documentNumber = sprintf(
             '%s-%s/%s-%s/%d',
             $prefixWithYear,
