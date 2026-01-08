@@ -3,6 +3,7 @@
 namespace App\Filament\Company\Resources\Purchases\BillResource\Pages;
 
 use App\Enums\Accounting\BillStatus;
+use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers\AttachmentsRelationManager;
 use App\Filament\Company\Resources\Purchases\BillResource;
 use App\Filament\Company\Resources\Purchases\VendorResource;
@@ -78,6 +79,10 @@ class ViewBill extends ViewRecord
                         TextEntry::make('vendor.name')
                             ->label('Vendor')
                             ->url(static fn(Bill $record) => $record->vendor_id ? VendorResource::getUrl('view', ['record' => $record->vendor_id]) : null)
+                            ->link(),
+                        TextEntry::make('project.name')
+                            ->label('Project')
+                            ->url(static fn(Bill $record) => $record->project_id ? ProjectResource::getUrl('view', ['record' => $record->project_id]) : null)
                             ->link(),
                         TextEntry::make('total')
                             ->label('Total')
