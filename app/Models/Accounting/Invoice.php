@@ -597,23 +597,34 @@ class Invoice extends Document
         $companyCode = $company->company_code;
         $romanMonth = getRomanMonth(now()->month);
         $year = now()->year;
+        $year2digit = now()->format('y');
 
-        $latestDocument = static::query()
-            ->orderBy('id', 'desc')
-            ->first();
+        // Build prefix with year: e.g., "PG26"
+        $prefixWithYear = $numberPrefix . $year2digit;
+        $pattern = $prefixWithYear . '-%';
 
-        if ($latestDocument) {
-            $lastNumberNumericPart = $latestDocument->id;
-        } else {
-            $lastNumberNumericPart = 0;
-        }
+        // Query all documents from current year matching the pattern
+        $documents = static::query()
+            ->where('invoice_number', 'like', $pattern)
+            ->get();
 
-        $nextNumber = $lastNumberNumericPart + 1;
+        // Extract sequence numbers from matching documents
+        $sequences = $documents->map(function ($doc) use ($prefixWithYear) {
+            if (preg_match('/' . preg_quote($prefixWithYear) . '-(\d{4})/', $doc->invoice_number, $matches)) {
+                return (int) $matches[1];
+            }
+            return 0;
+        })->filter()->values();
 
+        // Find maximum sequence number (handle edge cases where older documents might have higher sequences)
+        $maxSequence = $sequences->isNotEmpty() ? $sequences->max() : 0;
+        $nextSequence = str_pad($maxSequence + 1, 4, '0', STR_PAD_LEFT);
+
+        // Format: PG26-0392/KPG-I/2026
         $documentNumber = sprintf(
-            '%s%04d/%s-%s/%d',
-            $numberPrefix,
-            $nextNumber,
+            '%s-%s/%s-%s/%d',
+            $prefixWithYear,
+            $nextSequence,
             $companyCode,
             $romanMonth,
             $year,

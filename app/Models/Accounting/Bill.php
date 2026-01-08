@@ -209,24 +209,46 @@ class Bill extends Document
         }
 
         $defaultBillSettings = $company->defaultBill;
-
         $numberPrefix = $defaultBillSettings->number_prefix ?? '';
 
-        $latestDocument = static::query()
+        $companyCode = $company->company_code;
+        $romanMonth = getRomanMonth(now()->month);
+        $year = now()->year;
+        $year2digit = now()->format('y');
+
+        // Build prefix with year: e.g., "PG26"
+        $prefixWithYear = $numberPrefix . $year2digit;
+        $pattern = $prefixWithYear . '-%';
+
+        // Query all documents from current year matching the pattern
+        $documents = static::query()
             ->whereNotNull('bill_number')
-            ->latest('bill_number')
-            ->first();
+            ->where('bill_number', 'like', $pattern)
+            ->get();
 
-        $lastNumberNumericPart = $latestDocument
-            ? (int) substr($latestDocument->bill_number, strlen($numberPrefix))
-            : DocumentDefault::getBaseNumber();
+        // Extract sequence numbers from matching documents
+        $sequences = $documents->map(function ($doc) use ($prefixWithYear) {
+            if (preg_match('/' . preg_quote($prefixWithYear) . '-(\d{4})/', $doc->bill_number, $matches)) {
+                return (int) $matches[1];
+            }
+            return 0;
+        })->filter()->values();
 
-        $numberNext = $lastNumberNumericPart + 1;
+        // Find maximum sequence number (handle edge cases where older documents might have higher sequences)
+        $maxSequence = $sequences->isNotEmpty() ? $sequences->max() : 0;
+        $nextSequence = str_pad($maxSequence + 1, 4, '0', STR_PAD_LEFT);
 
-        return $defaultBillSettings->getNumberNext(
-            prefix: $numberPrefix,
-            next: $numberNext
+        // Format: PG26-0392/KPG-I/2026
+        $documentNumber = sprintf(
+            '%s-%s/%s-%s/%d',
+            $prefixWithYear,
+            $nextSequence,
+            $companyCode,
+            $romanMonth,
+            $year,
         );
+
+        return $documentNumber;
     }
 
     public function hasInitialTransaction(): bool
