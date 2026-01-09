@@ -399,6 +399,9 @@ class BillResource extends Resource
                     ->label('Number')
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('vendor.notes')
+                    ->label('Notes')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('vendor.name')
                     ->sortable()
                     ->searchable()
