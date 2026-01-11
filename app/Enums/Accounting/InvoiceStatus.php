@@ -16,6 +16,7 @@ enum InvoiceStatus: string implements HasColor, HasLabel
     case Overdue = 'overdue';
     case Overpaid = 'overpaid';
     case Void = 'void';
+    case Cancelled = 'cancelled';
 
     public function getLabel(): ?string
     {
@@ -29,7 +30,7 @@ enum InvoiceStatus: string implements HasColor, HasLabel
             self::Sent, self::Viewed => 'primary',
             self::Partial => 'warning',
             self::Paid, self::Overpaid => 'success',
-            self::Overdue => 'danger',
+            self::Overdue, self::Cancelled => 'danger',
         };
     }
 

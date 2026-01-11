@@ -23,7 +23,6 @@ use App\Filament\Forms\Components\CustomTableRepeater;
 use App\Filament\Forms\Components\DocumentFooterSection;
 use App\Filament\Forms\Components\DocumentHeaderSection;
 use App\Filament\Forms\Components\DocumentTotals;
-use App\Filament\Tables\Actions\ReplicateBulkAction;
 use App\Filament\Tables\Columns;
 use App\Filament\Tables\Filters\DateRangeFilter;
 use App\Helpers\AuthHelper;
@@ -663,7 +662,7 @@ class InvoiceResource extends Resource
                             ->url(static fn(Invoice $record) => Pages\EditInvoice::getUrl(['record' => $record])),
                         Tables\Actions\ViewAction::make()
                             ->url(static fn(Invoice $record) => Pages\ViewInvoice::getUrl(['record' => $record])),
-                        Invoice::getReplicateAction(Tables\Actions\ReplicateAction::class),
+                        Invoice::getCancelInvoiceAction(Tables\Actions\Action::class),
                         Invoice::getApproveDraftAction(Tables\Actions\Action::class),
                         Invoice::getMarkAsSentAction(Tables\Actions\Action::class),
                         Tables\Actions\Action::make('recordPayment')
@@ -687,44 +686,6 @@ class InvoiceResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
-                    ReplicateBulkAction::make()
-                        ->label('Replicate')
-                        ->modalWidth(MaxWidth::Large)
-                        ->modalDescription('Replicating invoices will also replicate their line items. Are you sure you want to proceed?')
-                        ->successNotificationTitle('Invoices replicated successfully')
-                        ->failureNotificationTitle('Failed to replicate invoices')
-                        ->databaseTransaction()
-                        ->excludeAttributes([
-                            'status',
-                            'amount_paid',
-                            'amount_due',
-                            'created_by',
-                            'updated_by',
-                            'created_at',
-                            'updated_at',
-                            'invoice_number',
-                            'date',
-                            'due_date',
-                            'approved_at',
-                            'paid_at',
-                            'last_sent_at',
-                            'last_viewed_at',
-                        ])
-                        ->beforeReplicaSaved(function (Invoice $replica) {
-                            $replica->status = InvoiceStatus::Draft;
-                            $replica->invoice_number = Invoice::getNextDocumentNumber();
-                            $replica->date = company_today();
-                            $replica->due_date = company_today()->addDays($replica->company->defaultInvoice->payment_terms->getDays());
-                        })
-                        ->withReplicatedRelationships(['lineItems'])
-                        ->withExcludedRelationshipAttributes('lineItems', [
-                            'subtotal',
-                            'total',
-                            'created_by',
-                            'updated_by',
-                            'created_at',
-                            'updated_at',
-                        ]),
                     Tables\Actions\BulkAction::make('approveDrafts')
                         ->label('Approve')
                         ->icon('heroicon-o-check-circle')

@@ -63,7 +63,7 @@ class ViewInvoice extends ViewRecord
                     Invoice::getApproveDraftAction(),
                     Invoice::getMarkAsSentAction(),
                     Invoice::getPrintDocumentAction(),
-                    Invoice::getReplicateAction(),
+                    Invoice::getCancelInvoiceAction(Actions\Action::class),
                 ])->dropdown(false),
                 Actions\ActionGroup::make([
                     Actions\Action::make('journal_summary')
