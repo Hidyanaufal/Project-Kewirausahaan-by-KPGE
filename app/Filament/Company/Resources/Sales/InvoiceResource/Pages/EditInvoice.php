@@ -5,9 +5,11 @@ namespace App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 use App\Concerns\HandlePageRedirect;
 use App\Concerns\HideFromSpotlight;
 use App\Concerns\ManagesLineItems;
+use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Models\Accounting\Invoice;
 use Filament\Actions;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\MaxWidth;
 use Illuminate\Database\Eloquent\Model;
@@ -22,10 +24,31 @@ class EditInvoice extends EditRecord
 
     protected static string $resource = InvoiceResource::class;
 
+    public function mount(int | string $record): void
+    {
+        parent::mount($record);
+
+        /** @var Invoice $invoice */
+        $invoice = $this->record;
+
+        if ($invoice->status === InvoiceStatus::Cancelled) {
+            Notification::make()
+                ->title('Cannot Edit Invoice')
+                ->body('This invoice has been cancelled and cannot be edited.')
+                ->danger()
+                ->send();
+
+            $this->redirect(ViewInvoice::getUrl(['record' => $invoice]));
+        }
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
+            Actions\DeleteAction::make()
+                ->visible(function (Invoice $record) {
+                    return $record->status !== InvoiceStatus::Cancelled;
+                }),
         ];
     }
 
@@ -37,6 +60,16 @@ class EditInvoice extends EditRecord
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
         /** @var Invoice $record */
+        if ($record->status === InvoiceStatus::Cancelled) {
+            Notification::make()
+                ->title('Cannot Update Invoice')
+                ->body('This invoice has been cancelled and cannot be updated.')
+                ->danger()
+                ->send();
+
+            $this->redirect(ViewInvoice::getUrl(['record' => $record]));
+        }
+
         $lineItems = collect($data['lineItems'] ?? []);
 
         $this->deleteRemovedLineItems($record, $lineItems);

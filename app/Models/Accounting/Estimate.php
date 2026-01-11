@@ -224,7 +224,7 @@ class Estimate extends Document
 
     public function canBeMarkedAsDeclined(): bool
     {
-        return $this->hasBeenSent()
+        return ($this->hasBeenSent() || $this->status === EstimateStatus::Nego)
             && ! $this->wasDeclined()
             && ! $this->wasConverted()
             && ! $this->wasAccepted();
@@ -237,10 +237,15 @@ class Estimate extends Document
 
     public function canBeMarkedAsAccepted(): bool
     {
-        return $this->hasBeenSent()
+        return ($this->hasBeenSent() || $this->status === EstimateStatus::Nego)
             && ! $this->wasAccepted()
             && ! $this->wasDeclined()
             && ! $this->wasConverted();
+    }
+
+    public function canBeNegotiated(): bool
+    {
+        return true; // Can be negotiated at any status per requirement
     }
 
     #[Scope]
@@ -251,6 +256,7 @@ class Estimate extends Document
             EstimateStatus::Sent,
             EstimateStatus::Viewed,
             EstimateStatus::Accepted,
+            EstimateStatus::Nego,
         ]);
     }
 
@@ -423,6 +429,61 @@ class Estimate extends Document
             ->successRedirectUrl(static function (self $replica) {
                 return EstimateResource::getUrl('edit', ['record' => $replica]);
             });
+    }
+
+    public static function getNegotiateAction(string $action = ReplicateAction::class): MountableAction
+    {
+        return $action::make()
+            ->label('Negotiate')
+            ->icon('heroicon-m-currency-dollar')
+            ->visible(function (self $record) {
+                return $record->canBeNegotiated();
+            })
+            ->excludeAttributes([
+                'estimate_number',
+                'date',
+                'expiration_date',
+                'approved_at',
+                'accepted_at',
+                'converted_at',
+                'declined_at',
+                'last_sent_at',
+                'last_viewed_at',
+                'status',
+                'created_by',
+                'updated_by',
+                'created_at',
+                'updated_at',
+            ])
+            ->modal(false)
+            ->beforeReplicaSaved(function (self $original, self $replica) {
+                // Keep the same estimate_number
+                $replica->estimate_number = $original->estimate_number;
+                // Set status to Nego
+                $replica->status = EstimateStatus::Nego;
+                // Keep the same date and expiration_date
+                $replica->date = $original->date;
+                $replica->expiration_date = $original->expiration_date;
+                // Reset all timestamps
+                $replica->approved_at = null;
+                $replica->accepted_at = null;
+                $replica->converted_at = null;
+                $replica->declined_at = null;
+                $replica->last_sent_at = null;
+                $replica->last_viewed_at = null;
+                // This is the negotiation version, not the result
+                $replica->is_negotiation_result = true;
+                // Link to original estimate
+                $replica->negotiated_from_id = $original->id;
+            })
+            ->databaseTransaction()
+            ->after(function (self $original, self $replica) {
+                $original->replicateLineItems($replica);
+            })
+            ->successRedirectUrl(static function (self $replica) {
+                return EstimateResource::getUrl('edit', ['record' => $replica]);
+            })
+            ->successNotificationTitle('Quotation duplicated for negotiation');
     }
 
     public static function getMarkAsAcceptedAction(string $action = Action::class): MountableAction

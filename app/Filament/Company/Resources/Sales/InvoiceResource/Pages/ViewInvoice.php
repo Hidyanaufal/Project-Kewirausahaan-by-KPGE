@@ -49,6 +49,9 @@ class ViewInvoice extends ViewRecord
                 ->label('Edit Invoice')
                 ->outlined()
                 ->requiresConfirmation()
+                ->visible(function (Invoice $record) {
+                    return $record->status !== InvoiceStatus::Cancelled;
+                })
                 ->action(function (Model $record) {
                     $isAdmin = AuthHelper::isAdmin();
                     if (!$isAdmin) {
@@ -60,9 +63,18 @@ class ViewInvoice extends ViewRecord
                 }),
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
-                    Invoice::getApproveDraftAction(),
-                    Invoice::getMarkAsSentAction(),
-                    Invoice::getPrintDocumentAction(),
+                    Invoice::getApproveDraftAction()
+                        ->visible(function (Invoice $record) {
+                            return $record->status !== InvoiceStatus::Cancelled;
+                        }),
+                    Invoice::getMarkAsSentAction()
+                        ->visible(function (Invoice $record) {
+                            return $record->status !== InvoiceStatus::Cancelled;
+                        }),
+                    Invoice::getPrintDocumentAction()
+                        ->visible(function (Invoice $record) {
+                            return $record->status !== InvoiceStatus::Cancelled;
+                        }),
                     Invoice::getCancelInvoiceAction(Actions\Action::class),
                 ])->dropdown(false),
                 Actions\ActionGroup::make([
@@ -93,7 +105,10 @@ class ViewInvoice extends ViewRecord
                                 ]),
                         ]),
                 ])->dropdown(false),
-                Actions\DeleteAction::make(),
+                Actions\DeleteAction::make()
+                    ->visible(function (Invoice $record) {
+                        return $record->status !== InvoiceStatus::Cancelled;
+                    }),
             ])
                 ->label('Actions')
                 ->button()

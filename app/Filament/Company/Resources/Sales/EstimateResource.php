@@ -444,7 +444,7 @@ class EstimateResource extends Resource
                             ->url(static fn(Estimate $record) => Pages\EditEstimate::getUrl(['record' => $record])),
                         Tables\Actions\ViewAction::make()
                             ->url(static fn(Estimate $record) => Pages\ViewEstimate::getUrl(['record' => $record])),
-                        Estimate::getReplicateAction(Tables\Actions\ReplicateAction::class),
+                        Estimate::getNegotiateAction(Tables\Actions\ReplicateAction::class),
                         Estimate::getApproveDraftAction(Tables\Actions\Action::class),
                         Estimate::getMarkAsSentAction(Tables\Actions\Action::class),
                         Estimate::getMarkAsAcceptedAction(Tables\Actions\Action::class),

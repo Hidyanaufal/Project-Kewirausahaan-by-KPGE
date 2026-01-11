@@ -542,6 +542,7 @@ class Invoice extends Document
             InvoiceStatus::Draft,
             InvoiceStatus::Paid,
             InvoiceStatus::Void,
+            InvoiceStatus::Cancelled,
         ]);
     }
 
@@ -570,12 +571,18 @@ class Invoice extends Document
 
     public function canBeApproved(): bool
     {
-        return $this->isDraft() && ! $this->wasApproved() && AuthHelper::isAdmin();
+        return $this->status !== InvoiceStatus::Cancelled
+            && $this->isDraft()
+            && ! $this->wasApproved()
+            && AuthHelper::isAdmin();
     }
 
     public function canBeMarkedAsSent(): bool
     {
-        return ! $this->hasBeenSent() && $this->wasApproved() && !$this->isPaid();
+        return $this->status !== InvoiceStatus::Cancelled
+            && ! $this->hasBeenSent()
+            && $this->wasApproved()
+            && !$this->isPaid();
     }
 
     public function hasPayments(): bool

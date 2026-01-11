@@ -659,12 +659,21 @@ class InvoiceResource extends Resource
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ActionGroup::make([
                         Tables\Actions\EditAction::make()
-                            ->url(static fn(Invoice $record) => Pages\EditInvoice::getUrl(['record' => $record])),
+                            ->url(static fn(Invoice $record) => Pages\EditInvoice::getUrl(['record' => $record]))
+                            ->visible(function (Invoice $record) {
+                                return $record->status !== InvoiceStatus::Cancelled;
+                            }),
                         Tables\Actions\ViewAction::make()
                             ->url(static fn(Invoice $record) => Pages\ViewInvoice::getUrl(['record' => $record])),
                         Invoice::getCancelInvoiceAction(Tables\Actions\Action::class),
-                        Invoice::getApproveDraftAction(Tables\Actions\Action::class),
-                        Invoice::getMarkAsSentAction(Tables\Actions\Action::class),
+                        Invoice::getApproveDraftAction(Tables\Actions\Action::class)
+                            ->visible(function (Invoice $record) {
+                                return $record->status !== InvoiceStatus::Cancelled;
+                            }),
+                        Invoice::getMarkAsSentAction(Tables\Actions\Action::class)
+                            ->visible(function (Invoice $record) {
+                                return $record->status !== InvoiceStatus::Cancelled;
+                            }),
                         Tables\Actions\Action::make('recordPayment')
                             ->label('Record Payment')
                             ->icon('heroicon-m-credit-card')
@@ -680,7 +689,10 @@ class InvoiceResource extends Resource
                             ]))
                             ->openUrlInNewTab(false),
                     ])->dropdown(false),
-                    Tables\Actions\DeleteAction::make(),
+                    Tables\Actions\DeleteAction::make()
+                        ->visible(function (Invoice $record) {
+                            return $record->status !== InvoiceStatus::Cancelled;
+                        }),
                 ]),
             ])
             ->bulkActions([
