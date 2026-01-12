@@ -50,7 +50,7 @@ class ViewInvoice extends ViewRecord
                 ->outlined()
                 ->requiresConfirmation()
                 ->visible(function (Invoice $record) {
-                    return $record->status !== InvoiceStatus::Cancelled;
+                    return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                 })
                 ->action(function (Model $record) {
                     $isAdmin = AuthHelper::isAdmin();
@@ -63,19 +63,22 @@ class ViewInvoice extends ViewRecord
                 }),
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
-                    Invoice::getApproveDraftAction()
+                    Invoice::getUnifiedApproveAction()
                         ->visible(function (Invoice $record) {
-                            return $record->status !== InvoiceStatus::Cancelled;
+                            return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                         }),
                     Invoice::getMarkAsSentAction()
                         ->visible(function (Invoice $record) {
-                            return $record->status !== InvoiceStatus::Cancelled;
+                            return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                         }),
                     Invoice::getPrintDocumentAction()
                         ->visible(function (Invoice $record) {
-                            return $record->status !== InvoiceStatus::Cancelled;
+                            return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                         }),
-                    Invoice::getCancelInvoiceAction(Actions\Action::class),
+                    Invoice::getCancelInvoiceAction(Actions\Action::class)
+                        ->visible(function (Invoice $record) {
+                            return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
+                        }),
                 ])->dropdown(false),
                 Actions\ActionGroup::make([
                     Actions\Action::make('journal_summary')
@@ -85,6 +88,9 @@ class ViewInvoice extends ViewRecord
                         ->modalHeading('Journal Summary for ' . $this->record->invoice_number)
                         ->slideOver()
                         ->modalFooterActions(fn() => [])
+                        ->visible(function () {
+                            return AuthHelper::isAdmin();
+                        })
                         ->form([
                             Placeholder::make('journal_entries')
                                 ->view('filament.company.resources.sales.invoice-resource.pages.journal-summary', [
@@ -98,6 +104,9 @@ class ViewInvoice extends ViewRecord
                         ->modalHeading('Journal Detail for ' . $this->record->invoice_number)
                         ->slideOver()
                         ->modalFooterActions(fn() => [])
+                        ->visible(function () {
+                            return AuthHelper::isAdmin();
+                        })
                         ->form([
                             Placeholder::make('journal_entries')
                                 ->view('filament.company.resources.sales.invoice-resource.pages.journal-detail', [
@@ -107,7 +116,7 @@ class ViewInvoice extends ViewRecord
                 ])->dropdown(false),
                 Actions\DeleteAction::make()
                     ->visible(function (Invoice $record) {
-                        return $record->status !== InvoiceStatus::Cancelled;
+                        return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                     }),
             ])
                 ->label('Actions')

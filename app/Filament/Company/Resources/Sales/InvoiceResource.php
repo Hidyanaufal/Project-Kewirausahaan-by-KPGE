@@ -442,11 +442,17 @@ class InvoiceResource extends Resource
                                             $taxCode->id => "{$taxCode->code} - {$taxCode->description}",
                                         ];
                                     });
-                            }),
+                            })
+                            ->required(fn(?Invoice $record) => $record?->isFinalized())
+                            ->helperText(fn(?Invoice $record) => $record?->isFinalized() ? 'Tax code is required after invoice is finalized.' : null),
                         Forms\Components\TextInput::make('tax_number')
-                            ->label('Tax Number'),
+                            ->label('Tax Number')
+                            ->required(fn(?Invoice $record) => $record?->isFinalized())
+                            ->helperText(fn(?Invoice $record) => $record?->isFinalized() ? 'Tax number is required after invoice is finalized.' : null),
                         Forms\Components\DatePicker::make('tax_date')
-                            ->label('Tax Date'),
+                            ->label('Tax Date')
+                            ->required(fn(?Invoice $record) => $record?->isFinalized())
+                            ->helperText(fn(?Invoice $record) => $record?->isFinalized() ? 'Tax date is required after invoice is finalized.' : null),
                     ]),
                 DocumentFooterSection::make('Invoice Footer')
                     ->defaultFooter($settings->footer)
@@ -661,18 +667,21 @@ class InvoiceResource extends Resource
                         Tables\Actions\EditAction::make()
                             ->url(static fn(Invoice $record) => Pages\EditInvoice::getUrl(['record' => $record]))
                             ->visible(function (Invoice $record) {
-                                return $record->status !== InvoiceStatus::Cancelled;
+                                return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                             }),
                         Tables\Actions\ViewAction::make()
                             ->url(static fn(Invoice $record) => Pages\ViewInvoice::getUrl(['record' => $record])),
-                        Invoice::getCancelInvoiceAction(Tables\Actions\Action::class),
-                        Invoice::getApproveDraftAction(Tables\Actions\Action::class)
+                        Invoice::getCancelInvoiceAction(Tables\Actions\Action::class)
                             ->visible(function (Invoice $record) {
-                                return $record->status !== InvoiceStatus::Cancelled;
+                                return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
+                            }),
+                        Invoice::getUnifiedApproveAction(Tables\Actions\Action::class)
+                            ->visible(function (Invoice $record) {
+                                return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                             }),
                         Invoice::getMarkAsSentAction(Tables\Actions\Action::class)
                             ->visible(function (Invoice $record) {
-                                return $record->status !== InvoiceStatus::Cancelled;
+                                return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                             }),
                         Tables\Actions\Action::make('recordPayment')
                             ->label('Record Payment')
@@ -691,7 +700,7 @@ class InvoiceResource extends Resource
                     ])->dropdown(false),
                     Tables\Actions\DeleteAction::make()
                         ->visible(function (Invoice $record) {
-                            return $record->status !== InvoiceStatus::Cancelled;
+                            return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                         }),
                 ]),
             ])

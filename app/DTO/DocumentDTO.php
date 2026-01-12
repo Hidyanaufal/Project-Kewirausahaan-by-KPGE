@@ -91,8 +91,18 @@ readonly class DocumentDTO
 
         // Handle Case Invoice
         if ($document::documentType() == DocumentType::Invoice) {
+            // Draft: PROFORMA INVOICE
             if ($document->status == InvoiceStatus::Draft) {
                 $settings->header = 'Proforma Invoice';
+            }
+            // Unsent (belum finalized): PROFORMA INVOICE
+            elseif ($document->status == InvoiceStatus::Unsent && !$document->finalized_at) {
+                $settings->header = 'Proforma Invoice';
+            }
+            // Unsent (sudah finalized) atau status setelahnya: INVOICE
+            else {
+                // Use default header from settings (which is "Invoice")
+                // No need to change it
             }
         }
 

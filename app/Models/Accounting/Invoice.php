@@ -98,6 +98,7 @@ class Invoice extends Document
         'spk_date',
         'pph23',
         'hide_offering_items',
+        'finalized_at',
     ];
 
     protected $casts = [
@@ -114,6 +115,7 @@ class Invoice extends Document
         'profit_computation' => AdjustmentComputation::class,
         'profit_rate' => RateCast::class,
         'hide_offering_items' => 'boolean',
+        'finalized_at' => 'datetime',
     ];
 
     protected $appends = [
@@ -512,6 +514,11 @@ class Invoice extends Document
         return $this->approved_at !== null;
     }
 
+    public function isFinalized(): bool
+    {
+        return $this->finalized_at !== null;
+    }
+
     public function isPaid(): bool
     {
         return $this->paid_at !== null;
@@ -574,6 +581,15 @@ class Invoice extends Document
         return $this->status !== InvoiceStatus::Cancelled
             && $this->isDraft()
             && ! $this->wasApproved()
+            && AuthHelper::isAdmin();
+    }
+
+    public function canBeFinalized(): bool
+    {
+        return $this->status !== InvoiceStatus::Cancelled
+            && $this->status === InvoiceStatus::Unsent
+            && $this->wasApproved()
+            && ! $this->isFinalized()
             && AuthHelper::isAdmin();
     }
 
@@ -706,6 +722,23 @@ class Invoice extends Document
         $this->update([
             'approved_at' => $approvedAt,
             'status' => InvoiceStatus::Unsent,
+        ]);
+    }
+
+    public function finalizeInvoice(?Carbon $finalizedAt = null): void
+    {
+        if (! $this->canBeFinalized()) {
+            throw new \RuntimeException('Invoice cannot be finalized.');
+        }
+
+        if (!$this->tax_code_id || !$this->tax_number || !$this->tax_date) {
+            throw new \RuntimeException('Tax data (tax_code_id, tax_number, tax_date) must be filled before finalizing.');
+        }
+
+        $finalizedAt ??= company_now();
+
+        $this->update([
+            'finalized_at' => $finalizedAt,
         ]);
     }
 
@@ -928,14 +961,6 @@ class Invoice extends Document
             ->databaseTransaction()
             ->successNotificationTitle('Invoice approved')
             ->action(function (self $record, MountableAction $action, Component $livewire) {
-                if (!$record->tax_code_id || !$record->tax_number || !$record->tax_date) {
-                    Notification::make()
-                        ->title('Tax data is missing. Please fill it out first.')
-                        ->danger()
-                        ->send();
-                    $action->halt();
-                }
-
                 if ($record->hasInactiveAdjustments()) {
                     $isViewPage = $livewire instanceof InvoiceResource\Pages\ViewInvoice;
 
@@ -963,6 +988,124 @@ class Invoice extends Document
 
                     $action->success();
                 }
+            });
+    }
+
+    public static function getUnifiedApproveAction(string $action = Action::class): MountableAction
+    {
+        return $action::make('unifiedApprove')
+            ->label(function (self $record) {
+                return 'Approve';
+            })
+            ->icon('heroicon-m-check-circle')
+            ->visible(function (self $record) {
+                // Visible if can be approved (level 1) or finalized (level 2)
+                return $record->canBeApproved() || $record->canBeFinalized();
+            })
+            ->requiresConfirmation()
+            ->databaseTransaction()
+            ->successNotificationTitle(function (self $record) {
+                if ($record->canBeApproved()) {
+                    return 'Invoice approved successfully! You can now print the document.';
+                } elseif ($record->canBeFinalized()) {
+                    return 'Invoice finalized successfully! The document is now ready.';
+                }
+                return 'Invoice approved successfully';
+            })
+            ->action(function (self $record, MountableAction $action, Component $livewire) {
+                // Approval Level 1: Draft → Unsent
+                if ($record->canBeApproved()) {
+                    if ($record->hasInactiveAdjustments()) {
+                        $isViewPage = $livewire instanceof InvoiceResource\Pages\ViewInvoice;
+
+                        if (! $isViewPage) {
+                            redirect(InvoiceResource\Pages\ViewInvoice::getUrl(['record' => $record->id]));
+                        } else {
+                            Notification::make()
+                                ->warning()
+                                ->title('Cannot approve invoice')
+                                ->body('This invoice has inactive adjustments that must be addressed first.')
+                                ->persistent()
+                                ->send();
+                        }
+                    } else {
+                        try {
+                            $record->approveDraft();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Something went wrong')
+                                ->body($e->getMessage())
+                                ->send();
+                            $action->halt();
+                            return;
+                        }
+
+                        $action->success();
+                    }
+                }
+                // Approval Level 2: Finalize
+                elseif ($record->canBeFinalized()) {
+                    if (!$record->tax_code_id || !$record->tax_number || !$record->tax_date) {
+                        Notification::make()
+                            ->title('Tax data is missing. Please fill it out first.')
+                            ->danger()
+                            ->send();
+                        $action->halt();
+                        return;
+                    }
+
+                    try {
+                        $record->finalizeInvoice();
+                    } catch (\Throwable $e) {
+                        Notification::make()
+                            ->danger()
+                            ->title('Something went wrong')
+                            ->body($e->getMessage())
+                            ->send();
+                        $action->halt();
+                        return;
+                    }
+
+                    $action->success();
+                }
+            });
+    }
+
+    public static function getFinalizeInvoiceAction(string $action = Action::class): MountableAction
+    {
+        return $action::make('finalizeInvoice')
+            ->label('Finalize Invoice')
+            ->icon('heroicon-m-check-circle')
+            ->visible(function (self $record) {
+                return $record->canBeFinalized();
+            })
+            ->requiresConfirmation()
+            ->databaseTransaction()
+            ->successNotificationTitle('Invoice finalized')
+            ->action(function (self $record, MountableAction $action, Component $livewire) {
+                if (!$record->tax_code_id || !$record->tax_number || !$record->tax_date) {
+                    Notification::make()
+                        ->title('Tax data is missing. Please fill it out first.')
+                        ->danger()
+                        ->send();
+                    $action->halt();
+                    return;
+                }
+
+                try {
+                    $record->finalizeInvoice();
+                } catch (\Throwable $e) {
+                    Notification::make()
+                        ->danger()
+                        ->title('Something went wrong')
+                        ->body($e->getMessage())
+                        ->send();
+                    $action->halt();
+                    return;
+                }
+
+                $action->success();
             });
     }
 
@@ -1000,6 +1143,15 @@ class Invoice extends Document
             'status' => InvoiceStatus::Viewed,
             'last_viewed_at' => $viewedAt,
         ]);
+    }
+
+    public static function getPrintDocumentAction(string $action = Action::class): MountableAction
+    {
+        return parent::getPrintDocumentAction($action)
+            ->visible(function (self $record) {
+                // Cannot print if status is Draft
+                return $record->status !== InvoiceStatus::Draft;
+            });
     }
 
     public static function getReplicateAction(string $action = ReplicateAction::class): MountableAction
