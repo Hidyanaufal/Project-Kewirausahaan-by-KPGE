@@ -73,13 +73,24 @@ class ViewInvoice extends ViewRecord
                         }),
                     Invoice::getPrintDocumentAction()
                         ->visible(function (Invoice $record) {
-                            return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
+                            // Print can be done by anyone after first approval (status is not Draft)
+                            return $record->status !== InvoiceStatus::Cancelled;
                         }),
                     Invoice::getCancelInvoiceAction(Actions\Action::class)
                         ->visible(function (Invoice $record) {
                             return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                         }),
-                ])->dropdown(false),
+                ])
+                    ->dropdown(false)
+                    ->visible(function (Invoice $record) {
+                        // Hide action group if all child actions are not visible
+                        $hasVisibleAction = 
+                            (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && ($record->canBeApproved() || $record->canBeFinalized())) || // Unified Approve
+                            (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && $record->canBeMarkedAsSent()) || // Mark as Sent
+                            ($record->status !== InvoiceStatus::Cancelled && $record->status !== InvoiceStatus::Draft) || // Print (after first approval)
+                            (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled); // Cancel
+                        return $hasVisibleAction;
+                    }),
                 Actions\ActionGroup::make([
                     Actions\Action::make('journal_summary')
                         ->icon('heroicon-s-book-open')
@@ -113,12 +124,31 @@ class ViewInvoice extends ViewRecord
                                     'journalEntries' => $this->record?->transactions?->flatMap(fn($transaction) => $transaction->journalEntries) ?? [],
                                 ]),
                         ]),
-                ])->dropdown(false),
+                ])
+                    ->dropdown(false)
+                    ->visible(function () {
+                        // Hide journal action group if user is not admin
+                        return AuthHelper::isAdmin();
+                    }),
                 Actions\DeleteAction::make()
                     ->visible(function (Invoice $record) {
                         return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                     }),
             ])
+                ->visible(function (Invoice $record) {
+                    // Hide main action group if all child groups and actions are not visible
+                    $hasVisibleAction = 
+                        // First action group (approve, mark as sent, print, cancel)
+                        ((AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && ($record->canBeApproved() || $record->canBeFinalized())) ||
+                         (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && $record->canBeMarkedAsSent()) ||
+                         ($record->status !== InvoiceStatus::Cancelled && $record->status !== InvoiceStatus::Draft) ||
+                         (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled)) ||
+                        // Journal action group
+                        (AuthHelper::isAdmin()) ||
+                        // Delete action
+                        (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled);
+                    return $hasVisibleAction;
+                })
                 ->label('Actions')
                 ->button()
                 ->outlined()
