@@ -24,7 +24,6 @@ use App\Utilities\Currency\CurrencyAccessor;
 use App\Utilities\Currency\CurrencyConverter;
 use Filament\Actions\Action;
 use Filament\Actions\MountableAction;
-use Filament\Actions\ReplicateAction;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -486,59 +485,6 @@ class Bill extends Document
             });
     }
 
-    public static function getReplicateAction(string $action = ReplicateAction::class): MountableAction
-    {
-        return $action::make()
-            ->excludeAttributes([
-                'status',
-                'amount_paid',
-                'amount_due',
-                'created_by',
-                'updated_by',
-                'created_at',
-                'updated_at',
-                'bill_number',
-                'date',
-                'due_date',
-                'paid_at',
-            ])
-            ->modal(false)
-            ->beforeReplicaSaved(function (self $original, self $replica) {
-                $replica->status = BillStatus::Open;
-                $replica->bill_number = self::getNextDocumentNumber();
-                $replica->date = company_today();
-                $replica->due_date = company_today()->addDays($original->company->defaultBill->payment_terms->getDays());
-            })
-            ->databaseTransaction()
-            ->after(function (self $original, self $replica) {
-                $original->replicateLineItems($replica);
-            })
-            ->successRedirectUrl(static function (self $replica) {
-                return BillResource::getUrl('edit', ['record' => $replica]);
-            });
-    }
-
-    public function replicateLineItems(Model $target): void
-    {
-        $this->lineItems->each(function (DocumentLineItem $lineItem) use ($target) {
-            $replica = $lineItem->replicate([
-                'documentable_id',
-                'documentable_type',
-                'subtotal',
-                'total',
-                'created_by',
-                'updated_by',
-                'created_at',
-                'updated_at',
-            ]);
-
-            $replica->documentable_id = $target->id;
-            $replica->documentable_type = $target->getMorphClass();
-            $replica->save();
-
-            $replica->adjustments()->sync($lineItem->adjustments->pluck('id'));
-        });
-    }
 
     public function project(): BelongsTo
     {

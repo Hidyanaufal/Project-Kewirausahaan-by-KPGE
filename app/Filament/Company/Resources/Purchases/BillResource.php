@@ -20,7 +20,6 @@ use App\Filament\Forms\Components\CreateOfferingSelect;
 use App\Filament\Forms\Components\CreateVendorSelect;
 use App\Filament\Forms\Components\CustomTableRepeater;
 use App\Filament\Forms\Components\DocumentTotals;
-use App\Filament\Tables\Actions\ReplicateBulkAction;
 use App\Filament\Tables\Columns;
 use App\Filament\Tables\Filters\DateRangeFilter;
 use App\Models\Accounting\Adjustment;
@@ -455,7 +454,6 @@ class BillResource extends Resource
                     Tables\Actions\ActionGroup::make([
                         Tables\Actions\ViewAction::make()
                             ->url(static fn(Bill $record) => Pages\ViewBill::getUrl(['record' => $record])),
-                        Bill::getReplicateAction(Tables\Actions\ReplicateAction::class),
                         Tables\Actions\Action::make('recordPayment')
                             ->label('Record payment')
                             ->slideOver()
@@ -606,42 +604,6 @@ class BillResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
-                    ReplicateBulkAction::make()
-                        ->label('Replicate')
-                        ->modalWidth(MaxWidth::Large)
-                        ->modalDescription('Replicating bills will also replicate their line items. Are you sure you want to proceed?')
-                        ->successNotificationTitle('Bills replicated successfully')
-                        ->failureNotificationTitle('Failed to replicate bills')
-                        ->databaseTransaction()
-                        ->deselectRecordsAfterCompletion()
-                        ->excludeAttributes([
-                            'status',
-                            'amount_paid',
-                            'amount_due',
-                            'created_by',
-                            'updated_by',
-                            'created_at',
-                            'updated_at',
-                            'bill_number',
-                            'date',
-                            'due_date',
-                            'paid_at',
-                        ])
-                        ->beforeReplicaSaved(function (Bill $replica) {
-                            $replica->status = BillStatus::Open;
-                            $replica->bill_number = Bill::getNextDocumentNumber();
-                            $replica->date = company_today();
-                            $replica->due_date = company_today()->addDays($replica->company->defaultBill->payment_terms->getDays());
-                        })
-                        ->withReplicatedRelationships(['lineItems'])
-                        ->withExcludedRelationshipAttributes('lineItems', [
-                            'subtotal',
-                            'total',
-                            'created_by',
-                            'updated_by',
-                            'created_at',
-                            'updated_at',
-                        ]),
                 ]),
             ]);
     }

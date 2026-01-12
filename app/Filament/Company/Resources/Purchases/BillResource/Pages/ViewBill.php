@@ -52,7 +52,6 @@ class ViewBill extends ViewRecord
                 }),
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
-                    Bill::getReplicateAction(),
                     Bill::getApproveDraftAction(),
                 ])->dropdown(false),
                 Actions\DeleteAction::make(),
@@ -73,23 +72,21 @@ class ViewBill extends ViewRecord
                 Section::make('Bill Details')
                     ->columns(4)
                     ->schema([
-                        Group::make([
-                            TextEntry::make('bill_number')
-                                ->label('Invoice #'),
-                            TextEntry::make('status')
-                                ->badge(),
-                            TextEntry::make('vendor.name')
-                                ->label('Vendor')
-                                ->url(static fn(Bill $record) => $record->vendor_id ? VendorResource::getUrl('view', ['record' => $record->vendor_id]) : null)
-                                ->link(),
-                            TextEntry::make('vendor.notes')
-                                ->label('Vendor Notes')
-                                ->hidden(static fn(Bill $record) => empty($record->vendor?->notes)),
-                            TextEntry::make('project.name')
-                                ->label('Project')
-                                ->url(static fn(Bill $record) => $record->project_id ? ProjectResource::getUrl('view', ['record' => $record->project_id]) : null)
-                                ->link(),
-                        ])->columns(2)->columnSpanFull(),
+                        TextEntry::make('bill_number')
+                            ->label('Invoice #'),
+                        TextEntry::make('status')
+                            ->badge(),
+                        TextEntry::make('vendor.name')
+                            ->label('Vendor')
+                            ->url(static fn(Bill $record) => $record->vendor_id ? VendorResource::getUrl('view', ['record' => $record->vendor_id]) : null)
+                            ->link(),
+                        TextEntry::make('vendor.notes')
+                            ->label('Vendor Notes')
+                            ->hidden(static fn(Bill $record) => empty($record->vendor?->notes)),
+                        TextEntry::make('project.name')
+                            ->label('Project')
+                            ->url(static fn(Bill $record) => $record->project_id ? ProjectResource::getUrl('view', ['record' => $record->project_id]) : null)
+                            ->link(),
                         TextEntry::make('total')
                             ->label('Total')
                             ->currency(static fn(Bill $record) => $record->currency_code),
