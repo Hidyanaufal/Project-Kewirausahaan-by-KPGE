@@ -287,4 +287,55 @@
     .footer {
         margin-top: 20px;
     }
+
+    /* Custom CSS for RichEditor HTML content */
+    .prose ul {
+        list-style-type: disc;
+        margin-left: 20px;
+        margin-top: 8px;
+        margin-bottom: 8px;
+    }
+
+    .prose ol {
+        list-style-type: decimal;
+        margin-left: 20px;
+        margin-top: 8px;
+        margin-bottom: 8px;
+    }
+
+    .prose li {
+        margin-bottom: 4px;
+        line-height: 1.5;
+    }
+
+    .prose p {
+        margin-top: 8px;
+        margin-bottom: 8px;
+    }
+
+    .prose strong {
+        font-weight: bold;
+    }
+
+    .prose em {
+        font-style: italic;
+    }
+
+    .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+        font-weight: bold;
+        margin-top: 12px;
+        margin-bottom: 8px;
+    }
+
+    .prose h1 {
+        font-size: 1.5em;
+    }
+
+    .prose h2 {
+        font-size: 1.3em;
+    }
+
+    .prose h3 {
+        font-size: 1.1em;
+    }
 </style>
