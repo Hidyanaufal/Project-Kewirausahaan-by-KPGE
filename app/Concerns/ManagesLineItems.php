@@ -130,10 +130,12 @@ trait ManagesLineItems
         string $currencyCode
     ): int {
         $result = 0;
+        $profitRate = floatval($record->profit_rate ?? 0);
+        
         if ($record->profit_computation == AdjustmentComputation::Percentage) {
-            $result = $subtotalCents * ($record->profit_rate / 10000);
+            $result = $subtotalCents * ($profitRate / 10000);
         } else {
-            $result = $record->profit_rate;
+            $result = $profitRate;
         }
         return CurrencyConverter::convertToCents($result ?? 0, $currencyCode);
     }
