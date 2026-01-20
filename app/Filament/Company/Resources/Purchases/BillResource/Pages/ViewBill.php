@@ -83,7 +83,7 @@ class ViewBill extends ViewRecord
                         TextEntry::make('vendor.notes')
                             ->label('Vendor Notes')
                             ->hidden(static fn(Bill $record) => empty($record->vendor?->notes)),
-                        TextEntry::make('project.name')
+                        TextEntry::make('project.number')
                             ->label('Project')
                             ->url(static fn(Bill $record) => $record->project_id ? ProjectResource::getUrl('view', ['record' => $record->project_id]) : null)
                             ->link(),
@@ -104,6 +104,8 @@ class ViewBill extends ViewRecord
                             ->date(),
                         TextEntry::make('createdBy.name')
                             ->label('Created By'),
+                        TextEntry::make('terms')
+                            ->label('Terms'),
                     ]),
             ]);
     }

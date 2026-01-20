@@ -371,9 +371,7 @@ class BillResource extends Resource
                             ]),
                         DocumentTotals::make()
                             ->type(DocumentType::Bill),
-                        Forms\Components\RichEditor::make('terms')
-                            ->default($settings->terms)
-                            ->columnSpanFull(),
+                        Forms\Components\Textarea::make('terms')
                     ]),
             ]);
     }
