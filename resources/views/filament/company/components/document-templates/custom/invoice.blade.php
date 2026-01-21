@@ -71,10 +71,10 @@
     </div>
 
     {{-- Metadata --}}
-    <div class="flex justify-between text-xs mb-6">
-        <div class="flex mb-2 gap-5">
-            <div class="text-xs">Kepada :</div>
-            <div class="text-xs">
+    <div class="flex justify-between items-start text-xs mb-6">
+        <div class="flex mb-2 gap-5 w-[60%]">
+            <div class="text-xs min-w-[60px] whitespace-nowrap">Kepada :</div>
+            <div class="text-xs max-w-[50ch] break-words">
                 @if ($document->recipientDetails)
                     <p class="font-semibold">{!! nl2br(e($document->recipientDetails)) !!},</p>
                 @endif
@@ -91,41 +91,50 @@
                 @endif
             </div>
         </div>
-        <div class="space-y-1 text-xs">
-            @if ($document?->detail?->contract_number)
-                <div class="flex gap-5">
-                    <div class="w-32">Nomor Kontrak</div>
-                    <div>: {{ $document->detail->contract_number }}</div>
-                </div>
-            @endif
+        <div class="text-xs w-[40%]">
+            <table class="w-full">
+                <tbody>
+                    @if ($document?->detail?->contract_number)
+                        <tr>
+                            <td class="text-right whitespace-nowrap pr-2 w-32">Nomor Kontrak</td>
+                            <td class="text-left w-2">:</td>
+                            <td class="text-left">{{ $document->detail->contract_number }}</td>
+                        </tr>
+                    @endif
 
-            @if ($document?->detail?->po_reference_number)
-                <div class="flex gap-5">
-                    <div class="w-32">Ref. Nomor PO</div>
-                    <div>: {{ $document->detail->po_reference_number }}</div>
-                </div>
-            @endif
+                    @if ($document?->detail?->po_reference_number)
+                        <tr>
+                            <td class="text-right whitespace-nowrap pr-2">Ref. Nomor PO</td>
+                            <td class="text-left w-2">:</td>
+                            <td class="text-left">{{ $document->detail->po_reference_number }}</td>
+                        </tr>
+                    @endif
 
-            @if ($document?->detail?->po_date)
-                <div class="flex gap-5">
-                    <div class="w-32">Tanggal PO</div>
-                    <div>: {{ \Carbon\Carbon::parse($document->detail->po_date)->format('d F Y') }}</div>
-                </div>
-            @endif
+                    @if ($document?->detail?->po_date)
+                        <tr>
+                            <td class="text-right whitespace-nowrap pr-2">Tanggal PO</td>
+                            <td class="text-left w-2">:</td>
+                            <td class="text-left whitespace-nowrap">{{ \Carbon\Carbon::parse($document->detail->po_date)->format('d F Y') }}</td>
+                        </tr>
+                    @endif
 
-            @if ($document?->detail?->spk_number)
-                <div class="flex gap-5">
-                    <div class="w-32">SPK No.</div>
-                    <div>: {{ $document->detail->spk_number }}</div>
-                </div>
-            @endif
+                    @if ($document?->detail?->spk_number)
+                        <tr>
+                            <td class="text-right whitespace-nowrap pr-2">SPK No.</td>
+                            <td class="text-left w-2">:</td>
+                            <td class="text-left">{{ $document->detail->spk_number }}</td>
+                        </tr>
+                    @endif
 
-            @if ($document?->detail?->spk_date)
-                <div class="flex gap-5">
-                    <div class="w-32">Tanggal SPK</div>
-                    <div>: {{ \Carbon\Carbon::parse($document->detail->spk_date)->format('d F Y') }}</div>
-                </div>
-            @endif
+                    @if ($document?->detail?->spk_date)
+                        <tr>
+                            <td class="text-right whitespace-nowrap pr-2">Tanggal SPK</td>
+                            <td class="text-left w-2">:</td>
+                            <td class="text-left whitespace-nowrap">{{ \Carbon\Carbon::parse($document->detail->spk_date)->format('d F Y') }}</td>
+                        </tr>
+                    @endif
+                </tbody>
+            </table>
         </div>
     </div>
 

@@ -46,19 +46,25 @@
             <p>{{ $document->company?->addressLine2}}</p>
             <p>{{ $document->company?->city}}</p>
         </div>
-        <div class="space-y-1 text-xs">
-            <div class="flex gap-2">
-                <div class="w-10">No. </div>
-                <div>: {{ $document->number ?? '-' }}</div>
-            </div>
-            <div class="flex gap-2">
-                <div class="w-10">Date </div>
-                <div>: {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}</div>
-            </div>
+        <div class="text-xs">
+            <table class="w-full">
+                <tbody>
+                    <tr>
+                        <td class="text-right whitespace-nowrap pr-2">No.</td>
+                        <td class="text-left w-2">:</td>
+                        <td class="text-left">{{ $document->number ?? '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-right whitespace-nowrap pr-2">Date</td>
+                        <td class="text-left w-2">:</td>
+                        <td class="text-left whitespace-nowrap">{{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
-    <div class="text-xs mb-6">
+    <div class="text-xs mb-6 max-w-[50ch] break-words">
         <p><strong>To: </strong></p>
         @if ($document->recipientDetails)
             <p class="font-bold">{!! nl2br(e($document->recipientDetails)) !!},</p>

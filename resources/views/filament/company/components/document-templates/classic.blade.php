@@ -33,7 +33,7 @@
 
         <div class="flex items-end justify-between">
             <!-- Billing Details -->
-            <div class="text-sm">
+            <div class="text-sm max-w-[50ch] break-words">
                 <h3 class="mb-1 font-medium text-gray-600">BILL TO</h3>
                 @if($document->recipientDetails)
                     <p class="text-sm font-bold">{!! nl2br(e($document->recipientDetails)) !!},</p>

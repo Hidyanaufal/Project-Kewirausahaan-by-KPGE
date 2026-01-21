@@ -28,8 +28,8 @@
     {{-- Metadata --}}
     <div class="space-y-1 metadata">
         <div class="flex mb-2 gap-5">
-            <div class="text-sm">Kepada :</div>
-            <div class="text-sm">
+            <div class="text-sm whitespace-nowrap min-w-fit">Kepada :</div>
+            <div class="text-sm max-w-[50ch] break-words">
                 @if($document->recipientDetails)
                     <p class="font-semibold">{!! nl2br(e($document->recipientDetails)) !!},</p>
                 @endif
