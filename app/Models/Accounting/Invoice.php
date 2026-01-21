@@ -57,6 +57,7 @@ class Invoice extends Document
     protected $fillable = [
         'company_id',
         'client_id',
+        'recipient_details',
         'estimate_id',
         'recurring_invoice_id',
         'logo',

@@ -75,6 +75,9 @@
         <div class="flex mb-2 gap-5">
             <div class="text-xs">Kepada :</div>
             <div class="text-xs">
+                @if ($document->recipientDetails)
+                    <p class="font-semibold">{!! nl2br(e($document->recipientDetails)) !!},</p>
+                @endif
                 @if ($document?->detail?->project?->pic_client)
                     <p class="text-xs">
                         @if ($document->detail->project->pic_client->position)

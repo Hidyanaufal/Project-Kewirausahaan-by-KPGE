@@ -60,6 +60,9 @@
 
     <div class="text-xs mb-6">
         <p><strong>To: </strong></p>
+        @if ($document->recipientDetails)
+            <p class="font-bold">{!! nl2br(e($document->recipientDetails)) !!},</p>
+        @endif
         <p class="font-bold">{{ $document->client?->name }}</p>
         @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
             {!! $formattedAddress !!}

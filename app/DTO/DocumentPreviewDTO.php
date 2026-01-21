@@ -57,6 +57,7 @@ readonly class DocumentPreviewDTO extends DocumentDTO
             profit: self::formatToMoney(50000, null),
             profitPercentage: 10,
             contactName: 'John Doe',
+            recipientDetails: 'Manager (Preview)',
         );
     }
 

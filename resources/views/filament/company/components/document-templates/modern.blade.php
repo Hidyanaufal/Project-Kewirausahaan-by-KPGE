@@ -30,6 +30,9 @@
             <!-- Billing Details -->
             <div class="text-sm">
                 <h3 class="mb-1 font-medium text-gray-600">BILL TO</h3>
+                @if($document->recipientDetails)
+                    <p class="text-sm font-bold" style="color: {{ $document->accentColor }}">{!! nl2br(e($document->recipientDetails)) !!},</p>
+                @endif
                 <p class="text-sm font-bold"
                    style="color: {{ $document->accentColor }}">{{ $document->client?->name ?? 'Client Not Found' }}</p>
 

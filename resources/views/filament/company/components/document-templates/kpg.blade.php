@@ -30,6 +30,9 @@
         <div class="flex mb-2 gap-5">
             <div class="text-sm">Kepada :</div>
             <div class="text-sm">
+                @if($document->recipientDetails)
+                    <p class="font-semibold">{!! nl2br(e($document->recipientDetails)) !!},</p>
+                @endif
                 <p class="font-semibold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
                 @if($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
                     {!! $formattedAddress !!}

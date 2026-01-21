@@ -44,6 +44,7 @@ class Estimate extends Document
     protected $fillable = [
         'company_id',
         'client_id',
+        'recipient_details',
         'logo',
         'header',
         'subheader',

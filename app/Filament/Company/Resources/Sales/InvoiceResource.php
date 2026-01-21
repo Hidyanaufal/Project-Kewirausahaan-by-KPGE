@@ -97,6 +97,11 @@ class InvoiceResource extends Resource
                                     ->disabled(function (?Invoice $record) {
                                         return $record?->hasPayments();
                                     }),
+                                Forms\Components\Textarea::make('recipient_details')
+                                    ->label('Recipient Details')
+                                    ->placeholder('Enter recipient details (e.g. Manager, PT Solusi)')
+                                    ->rows(3)
+                                    ->columnSpanFull(),
                             ]),
                             Forms\Components\Group::make([
                                 Forms\Components\TextInput::make('invoice_number')

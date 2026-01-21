@@ -54,6 +54,7 @@ readonly class DocumentDTO
         public ?string $beneficiaryName,
         public ?string $beneficiaryTitle,
         public ?string $contactName,
+        public ?string $recipientDetails,
     ) {}
 
     public static function fromModel(Document $document): self
@@ -155,6 +156,7 @@ readonly class DocumentDTO
             beneficiaryName: $settings->beneficiary_name,
             beneficiaryTitle: $settings->beneficiary_title,
             contactName: $isEmptyContactName ? '-' : $contactName,
+            recipientDetails: $document->recipient_details ?? null,
         );
     }
 

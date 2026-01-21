@@ -87,6 +87,11 @@ class EstimateResource extends Resource
                                         }
                                     }),
                                 CreateCurrencySelect::make('currency_code'),
+                                Forms\Components\Textarea::make('recipient_details')
+                                    ->label('Recipient Details')
+                                    ->placeholder('Enter recipient details (e.g. Manager, PT Solusi)')
+                                    ->rows(3)
+                                    ->columnSpanFull(),
                             ]),
                             Forms\Components\Group::make([
                                 Forms\Components\TextInput::make('estimate_number')
