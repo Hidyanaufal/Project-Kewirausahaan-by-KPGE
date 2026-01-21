@@ -66,6 +66,7 @@
         </div>
     </x-company.document-template.metadata>
 
+    <div class="flex flex-col justify-center flex-grow">
     <!-- Line Items Table -->
     <x-company.document-template.line-items class="default-template-line-items">
         <table class="w-full text-left table-fixed">
@@ -133,6 +134,7 @@
             </tfoot>
         </table>
     </x-company.document-template.line-items>
+    </div>
 
     <!-- Footer Notes -->
     <x-company.document-template.footer class="flex flex-col p-6 text-sm default-template-footer">
@@ -147,4 +149,22 @@
             </div>
         @endif
     </x-company.document-template.footer>
+
+    <style>
+        .default-template-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 297mm;
+            padding-bottom: 3cm !important;
+        }
+        @media print {
+            .default-template-container {
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                padding-bottom: 3cm !important;
+            }
+        }
+    </style>
 </x-company.document-template.container>

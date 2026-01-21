@@ -43,6 +43,7 @@
         </div>
     </div>
 
+    <div class="flex flex-col justify-center flex-grow">
     {{-- Line Items --}}
     <div class="mb-6 line-items">
         <table class="w-full text-sm border-4 border-black border-double border-spacing-0">
@@ -61,13 +62,16 @@
                         {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
                     </td>
                     @endif
-                    <td class="py-3 pl-6 font-semibold text-left border border-black">
+                    <td class="py-3 pl-4 font-semibold text-left border border-black">
                         {{ $item->name }}
                         @if($item->description)
-                        <div class="mt-1 font-normal text-gray-600">{{ $item->description }}</div>
+                        <div class="mt-1 text-sm font-normal text-gray-600">{{ $item->description }}</div>
                         @endif
+                        @isset($document->project)
+                            <div class="mt-2 text-xs text-gray-500">Project: {{ $document->project }}</div>
+                        @endisset
                     </td>
-                    <td class="py-3 pr-6 text-right border border-black">
+                    <td class="py-3 pr-4 text-right border border-black">
                         {{ $item->subtotal }}
                     </td>
                 </tr>
@@ -78,11 +82,10 @@
                         @if($document->referenceNumber || $document->dueDate)
                             <div class="text-sm leading-relaxed text-gray-800">
                                 @if($document->referenceNumber)
-                                    <strong>Ref PO</strong><br>
-                                    No. PO: {{ $document->referenceNumber }}<br>
+                                    <strong>Ref PO</strong> : No. PO: {{ $document->referenceNumber }}<br>
                                 @endif
                                 @if($document->dueDate)
-                                    Tanggal: {{ \Carbon\Carbon::parse($document->dueDate)->format('d F Y') }}
+                                    <strong>Tanggal</strong> : {{ \Carbon\Carbon::parse($document->dueDate)->format('d F Y') }}
                                 @endif
                             </div>
                         @endif
@@ -91,39 +94,31 @@
         
                 <!-- Jumlah -->
                 <tr>
-                    <td colspan="2" class="px-3 py-2 text-right border border-black">Jumlah</td>
-                    <td class="px-3 py-2 text-right border border-black">
+                    <td colspan="2" class="px-2 py-2 text-right border-t border-black">Jumlah</td>
+                    <td class="px-2 py-2 text-right border-t border-black">
                         {{ $document->subtotal }}
-                    </td>
-                </tr>
-
-                <!-- DPP -->
-                <tr>
-                    <td colspan="2" class="px-3 py-2 text-right border border-black">DPP Lain-Lain</td>
-                    <td class="px-3 py-2 text-right border border-black">
-                        {{ $document->dpp }}
                     </td>
                 </tr>
         
                 <!-- PPN -->
                 <tr>
-                    <td colspan="2" class="px-3 py-2 text-right border border-black">PPN 11%</td>
-                    <td class="px-3 py-2 text-right border border-black">
+                    <td colspan="2" class="px-2 py-2 text-right ">PPN 11%</td>
+                    <td class="px-2 py-2 text-right ">
                         {{ $document->tax }}
                     </td>
                 </tr>
         
                 <!-- Total -->
                 <tr>
-                    <td colspan="2" class="px-3 py-2 font-bold text-right border border-black">Total setelah PPN</td>
-                    <td class="px-3 py-2 font-bold text-right border border-black">
+                    <td colspan="2" class="px-2 py-2 font-semibold text-right ">Total setelah PPN</td>
+                    <td class="px-2 py-2 font-semibold text-right ">
                         {{ $document->amountDue }}
                     </td>
                 </tr>
         
                 <!-- Terbilang -->
                 <tr>
-                    <td colspan="3" class="px-3 py-2 border border-black">
+                    <td colspan="3" class="px-2 py-3 text-sm border border-black">
                         <strong>Terbilang:</strong>
                         <em>{{ $document->terbilang }}</em>
                     </td>
@@ -154,6 +149,34 @@
 <style>
     .invoice-container {
         font-family: Arial, sans-serif;
+        width: 210mm;
+        min-height: 297mm;
+        background: white;
+        margin: 0 auto;
+        padding: 1cm 1cm 3cm 1cm;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+    }
+    @media print {
+        @page {
+            size: A4;
+            margin: 0;
+        }
+        body {
+            margin: 0;
+            background: white;
+            -webkit-print-color-adjust: exact;
+        }
+        .invoice-container {
+            width: 100%;
+            height: 100vh;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1cm 1cm 3cm 1cm !important;
+            box-shadow: none;
+            border: none;
+        }
     }
     .header {
         padding-bottom: 8px;

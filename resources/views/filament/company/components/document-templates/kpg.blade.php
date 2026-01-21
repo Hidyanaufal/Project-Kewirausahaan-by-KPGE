@@ -41,6 +41,7 @@
         </div>
     </div>
 
+    <div class="flex flex-col justify-center flex-grow">
     {{-- Line Items --}}
     <div class="mb-4 line-items">
         <table class="w-full text-sm border-4 border-black border-double">
@@ -68,8 +69,8 @@
                         </div>
                         @endisset
                     </td>
-                </tr>
-                <tr>
+                    </tr>
+                    <tr>
                     @endif
                     <td class="py-3 pl-4 text-left border border-black">
                         {{ $item->name }}
@@ -135,6 +136,7 @@
             </tbody>
         </table>
     </div>
+    </div>
 
     {{-- Footer Notes --}}
     <div class="mt-2 text-sm footer">
@@ -163,6 +165,34 @@
 <style>
     .invoice-container {
         font-family: Arial, sans-serif;
+        width: 210mm;
+        min-height: 297mm;
+        background: white;
+        margin: 0 auto;
+        padding: 1cm 1cm 3cm 1cm;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+    }
+    @media print {
+        @page {
+            size: A4;
+            margin: 0;
+        }
+        body {
+            margin: 0;
+            background: white;
+            -webkit-print-color-adjust: exact;
+        }
+        .invoice-container {
+            width: 100%;
+            height: 100vh;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1cm 1cm 3cm 1cm !important;
+            box-shadow: none;
+            border: none;
+        }
     }
     .header {
         padding-bottom: 8px;

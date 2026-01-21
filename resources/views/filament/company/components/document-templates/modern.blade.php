@@ -68,6 +68,7 @@
         </div>
     </x-company.document-template.metadata>
 
+    <div class="flex flex-col justify-center flex-grow">
     <!-- Line Items Table -->
     <x-company.document-template.line-items class="modern-template-line-items">
         <table class="w-full text-left table-fixed">
@@ -135,6 +136,7 @@
             </tfoot>
         </table>
     </x-company.document-template.line-items>
+    </div>
 
     <!-- Footer Notes -->
     <x-company.document-template.footer class="modern-template-footer">
@@ -147,4 +149,19 @@
             <p class="w-1/2 break-words line-clamp-4">{{ $document->footer }}</p>
         </div>
     </x-company.document-template.footer>
+
+    <style>
+        .modern-template-container {
+            padding-bottom: 3cm !important;
+        }
+        @media print {
+            .modern-template-container {
+                min-height: 0; 
+                display: flex; 
+                flex-direction: column;
+                height: 100vh; /* Force full height on print to enable flex distribution */
+                padding-bottom: 3cm !important;
+            }
+        }
+    </style>
 </x-company.document-template.container>

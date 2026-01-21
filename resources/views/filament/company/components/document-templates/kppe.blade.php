@@ -43,6 +43,7 @@
         </div>
     </div>
 
+    <div class="flex flex-col justify-center flex-grow">
     {{-- Line Items --}}
     <div class="mb-6 line-items">
         <table class="w-full text-sm border-4 border-black border-double">
@@ -58,20 +59,20 @@
                 @foreach($document->lineItems as $index => $item)
                 <tr>
                     @if($index === 0)
-                    <td class="px-4 py-2 text-center border border-black" rowspan="{{ count($document->lineItems) + 3 }}">
+                    <td class="px-4 py-2 text-center border border-black" rowspan="{{ count($document->lineItems) + 4 }}">
                         {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
                     </td>
                     <td class="py-3 pl-6 font-semibold text-left border border-black">
-                        @isset($document->project)
                         <div class="mb-6">
                             {{ $document->project }}
                             @if($item->description)
                             <div class="mt-1 font-normal text-gray-600">{{ $item->description }}</div>
                             @endif
                         </div>
-                        @endisset
                     </td>
-                    <td class="py-3 pl-6 font-semibold text-left border border-black">
+                    <td class="py-3 pr-6 text-right border border-black">
+                    </td>
+                    <td class="py-3 pr-6 text-right border border-black">
                     </td>
                 </tr>
                 <tr>
@@ -80,13 +81,24 @@
                         {{ $item->name }} unit {{ $item->quantity}}
                     </td>
                     <td class="py-3 pr-6 text-right border border-black">
-                        {{ $item->subtotal }}
+                        {{ $item->unitPrice }}
                     </td>
                     <td class="py-3 pr-6 text-right border border-black">
                         {{ $item->subtotal }}
                     </td>
                 </tr>
                 @endforeach
+        
+                <!-- Jasa -->
+                 <tr>
+                    <td class="py-3 pl-6 font-semibold text-left border border-black">
+                        Jasa Manajemen
+                    </td>
+                    <td class="py-3 pl-6 font-semibold text-left border border-black">
+                    </td>
+                    <td class="py-3 pl-6 font-semibold text-left border border-black">
+                    </td>
+                </tr>
         
                 <tr>
                     <td class="px-2 py-6 border-b-2 border-black">
@@ -105,7 +117,7 @@
                     <td class="py-3 pl-6 font-semibold text-left border border-black">
                     </td>
                     <tr>
-                        <td colspan="2" class="px-3 py-2 text-right border-b-2 border-black">Profit 8,5%</td>
+                        <td colspan="3" class="px-3 py-2 text-right border-b-2 border-black">Profit 8,5%</td>
                         <td class="px-3 py-2 text-right border-b-2 border-black">{{ $document->discount ?? 'Rp0' }}</td>
                     </tr>
                 </tr>
@@ -114,7 +126,7 @@
         
                 <!-- Jumlah -->
                 <tr>
-                    <td colspan="3" class="px-3 py-2 text-right border border-black">Jumlah</td>
+                    <td colspan="4" class="px-3 py-2 text-right border border-black">Jumlah</td>
                     <td class="px-3 py-2 text-right border border-black">
                         {{ $document->subtotal }}
                     </td>
@@ -146,6 +158,7 @@
             </tbody>
         </table>
     </div>
+    </div>
 
     {{-- Footer Notes --}}
     <div class="mt-2 text-sm footer">
@@ -169,6 +182,34 @@
 <style>
     .invoice-container {
         font-family: Arial, sans-serif;
+        width: 210mm;
+        min-height: 297mm;
+        background: white;
+        margin: 0 auto;
+        padding: 1cm 1cm 3cm 1cm;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+    }
+    @media print {
+        @page {
+            size: A4;
+            margin: 0;
+        }
+        body {
+            margin: 0;
+            background: white;
+            -webkit-print-color-adjust: exact;
+        }
+        .invoice-container {
+            width: 100%;
+            height: 100vh;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1cm 1cm 3cm 1cm !important;
+            box-shadow: none;
+            border: none;
+        }
     }
     .header {
         padding-bottom: 8px;

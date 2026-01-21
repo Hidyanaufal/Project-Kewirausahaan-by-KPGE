@@ -71,6 +71,7 @@
         </div>
     </x-company.document-template.metadata>
 
+    <div class="flex flex-col justify-center flex-grow">
     <!-- Line Items -->
     <x-company.document-template.line-items class="px-6 classic-template-line-items">
         <table class="w-full text-left table-fixed">
@@ -147,10 +148,29 @@
             </div>
         </div>
     </x-company.document-template.line-items>
+    </div>
 
     <!-- Footer -->
     <x-company.document-template.footer class="p-6 text-sm classic-template-footer">
         <h4 class="mb-2 font-semibold">Terms & Conditions</h4>
         <p class="break-words line-clamp-4">{{ $document->terms }}</p>
     </x-company.document-template.footer>
+
+    <style>
+        .classic-template-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 297mm;
+            padding-bottom: 3cm !important;
+        }
+        @media print {
+            .classic-template-container {
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                padding-bottom: 3cm !important;
+            }
+        }
+    </style>
 </x-company.document-template.container>
