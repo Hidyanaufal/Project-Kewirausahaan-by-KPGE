@@ -71,7 +71,7 @@
     </div>
 
     {{-- Metadata --}}
-    <div class="flex justify-between items-start text-xs mb-6">
+    <div class="flex justify-between items-start text-xs mb-6 mt-20">
         <div class="flex mb-2 gap-5 w-[60%]">
             <div class="text-xs min-w-[60px] whitespace-nowrap">Kepada :</div>
             <div class="text-xs max-w-[50ch] break-words">
@@ -131,7 +131,7 @@
         </div>
     </div>
 
-    <div class="flex flex-col justify-center flex-grow">
+    <div class="flex flex-col">
     {{-- Line Items --}}
     <div class="mb-2 line-items">
         <table class="w-full text-xs leading-tight border-1 border-black border-collapse">

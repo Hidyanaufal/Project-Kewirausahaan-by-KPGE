@@ -17,7 +17,7 @@
         </div>
     </x-company.document-template.header>
 
-    <x-company.document-template.metadata class="space-y-4 classic-template-metadata">
+    <x-company.document-template.metadata class="space-y-4 classic-template-metadata mt-20">
         <div class="flex items-center">
             <hr class="grow-[2] py-0.5 border-solid border-y-2" style="border-color: {{ $document->accentColor }};">
             <x-icons.document-header-decoration
@@ -33,7 +33,7 @@
 
         <div class="flex items-end justify-between">
             <!-- Billing Details -->
-            <div class="text-sm max-w-[50ch] break-words">
+            <div class="text-xs w-[60%] max-w-[50ch] break-words">
                 <h3 class="mb-1 font-medium text-gray-600">BILL TO</h3>
                 @if($document->recipientDetails)
                     <p class="text-sm font-bold">{!! nl2br(e($document->recipientDetails)) !!},</p>
@@ -71,7 +71,7 @@
         </div>
     </x-company.document-template.metadata>
 
-    <div class="flex flex-col justify-center flex-grow">
+    <div class="flex flex-col">
     <!-- Line Items -->
     <x-company.document-template.line-items class="px-6 classic-template-line-items">
         <table class="w-full text-left table-fixed">

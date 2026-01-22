@@ -28,10 +28,10 @@
     </div>
 
     {{-- Metadata --}}
-    <div class="space-y-4 metadata">
-        <div class="flex mb-4 leading-relaxed">
-            <div class="w-20 text-sm whitespace-nowrap">Kepada :</div>
-            <div class="text-sm max-w-[50ch] break-words">
+    <div class="space-y-4 metadata mt-20">
+        <div class="flex mb-4 leading-relaxed w-[60%]">
+            <div class="w-20 text-xs whitespace-nowrap">Kepada :</div>
+            <div class="text-xs max-w-[50ch] break-words">
                 @if($document->recipientDetails)
                     <p class="font-semibold">{!! nl2br(e($document->recipientDetails)) !!},</p>
                 @endif
@@ -43,7 +43,7 @@
         </div>
     </div>
 
-    <div class="flex flex-col justify-center flex-grow">
+    <div class="flex flex-col">
     {{-- Line Items --}}
     <div class="mb-6 line-items">
         <table class="w-full text-sm border-4 border-black border-double">

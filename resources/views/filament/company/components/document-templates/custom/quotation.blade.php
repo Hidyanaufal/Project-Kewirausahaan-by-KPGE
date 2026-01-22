@@ -38,7 +38,7 @@
     </div>
 
     {{-- Metadata --}}
-    <div class="flex justify-between text-xs mb-6 mt-10">
+    <div class="flex justify-between text-xs mb-6 mt-20">
         <div>
             <p><strong>From: </strong></p>
             <p class="font-bold">{{ $document->company?->name }}</p>
@@ -64,7 +64,7 @@
         </div>
     </div>
 
-    <div class="text-xs mb-6 max-w-[50ch] break-words">
+    <div class="text-xs mb-6 mt-12 w-[60%] max-w-[50ch] break-words">
         <p><strong>To: </strong></p>
         @if ($document->recipientDetails)
             <p class="font-bold">{!! nl2br(e($document->recipientDetails)) !!},</p>
@@ -81,7 +81,7 @@
         Dengan ini kami sampaikan penawaran spesifikasi barang/pekerjaan jasa dan harga yang bapak/ibu butuhkan :
     </div>
 
-    <div class="flex flex-col justify-center flex-grow">
+    <div class="flex flex-col">
     {{-- Line Items --}}
     <div class="mb-2 line-items">
         <table class="w-full text-xs leading-tight border-1 border-black border-collapse">
@@ -194,7 +194,7 @@
         @endif
 
         {{-- Signature --}}
-        <div class="flex justify-between text-xs" style="margin-top: 50px">
+        <div class="flex justify-between text-xs" style="margin-top: 40px">
             {{-- Left side (Pihak Penerima) --}}
             <div class="text-center w-1/2">
                 <p>{{ $document->client?->name }}</p>
