@@ -150,7 +150,7 @@
     </div>
 
     {{-- Footer Notes --}}
-    <div class="mt-auto text-sm footer">
+    <div class="mt-6 text-sm footer">
         <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>
         <div class="mb-2 text-sm font-semibold">
             PT. BANK MANDIRI (PERSERO) KCP JKT SARINAH<br>

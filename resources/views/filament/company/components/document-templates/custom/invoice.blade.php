@@ -263,7 +263,7 @@
     </div>
 
         {{-- Section Bank Info & Signature sejajar kanan kiri --}}
-        <div class="flex justify-between mt-auto text-xs pt-8">
+        <div class="flex justify-between mt-6 text-xs">
             {{-- Bank Info --}}
             <div class="w-1/2">
                 <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>

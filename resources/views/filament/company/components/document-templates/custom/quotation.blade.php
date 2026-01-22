@@ -198,7 +198,7 @@
     </div>
 
         {{-- Signature --}}
-        <div class="flex justify-between text-xs mt-auto pt-8">
+        <div class="flex justify-between text-xs mt-6">
             {{-- Left side (Pihak Penerima) --}}
             <div class="text-center w-1/2">
                 <p>{{ $document->client?->name }}</p>
