@@ -66,7 +66,7 @@
                         <div class="mb-6">
                             {{ $document->project }}
                             @if($item->description)
-                            <div class="mt-1 font-normal text-gray-600">{{ $item->description }}</div>
+                            <div class="mt-1 font-normal text-gray-600 break-words whitespace-pre-wrap">{{ $item->description }}</div>
                             @endif
                         </div>
                     </td>

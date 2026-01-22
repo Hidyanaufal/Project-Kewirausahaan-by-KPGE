@@ -65,7 +65,7 @@
                     <td class="py-3 pl-4 font-semibold text-left border border-black">
                         {{ $item->name }}
                         @if($item->description)
-                        <div class="mt-1 text-sm font-normal text-gray-600">{{ $item->description }}</div>
+                        <div class="mt-1 text-sm font-normal text-gray-600 break-words whitespace-pre-wrap">{{ $item->description }}</div>
                         @endif
                         @isset($document->project)
                             <div class="mt-2 text-xs text-gray-500">Project: {{ $document->project }}</div>

@@ -117,7 +117,7 @@
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
                             {{ $index + 1 }}.
                         </td>
-                        <td class="py-1 pl-2 text-left border border-black whitespace-nowrap">
+                        <td class="py-1 pl-2 text-left border border-black break-words whitespace-pre-wrap">
                             {{ $item->name }}
                         </td>
                         <td class="py-1 text-center border border-black whitespace-nowrap">

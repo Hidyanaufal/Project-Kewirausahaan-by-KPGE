@@ -64,7 +64,7 @@
                         <div class="mb-2">
                             {{ $document->project }}
                             @if($item->description)
-                            <div class="mt-1 text-sm text-gray-600">{{ $item->description }}</div>
+                            <div class="mt-1 text-sm text-gray-600 break-words whitespace-pre-wrap">{{ $item->description }}</div>
                             @endif
                         </div>
                         @endisset
@@ -75,7 +75,7 @@
                     <td class="py-3 pl-4 text-left border border-black">
                         {{ $item->name }}
                         <br>
-                        <small>
+                        <small class="break-words whitespace-pre-wrap">
                             {{ $item->description }}
                         </small>
 

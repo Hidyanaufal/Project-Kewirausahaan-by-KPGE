@@ -191,7 +191,7 @@
                     <td class="py-1 pl-2 text-left border border-black">
                         {{ $item->name }}
                         @if ($item->description)
-                            <div class="text-[10px] text-gray-600 leading-snug">
+                            <div class="text-[10px] text-gray-600 leading-snug break-words whitespace-pre-wrap">
                                 {{ $item->description }}
                             </div>
                         @endif

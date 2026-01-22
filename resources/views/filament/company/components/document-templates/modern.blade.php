@@ -86,7 +86,7 @@
                     <td class="py-3 pl-6 font-semibold text-left">
                         {{ $item->name }}
                         @if($item->description)
-                            <div class="mt-1 font-normal text-gray-600 line-clamp-2">{{ $item->description }}</div>
+                            <div class="mt-1 font-normal text-gray-600 break-words whitespace-pre-wrap">{{ $item->description }}</div>
                         @endif
                     </td>
                     <td class="py-3 text-center">{{ $item->quantity }}</td>
