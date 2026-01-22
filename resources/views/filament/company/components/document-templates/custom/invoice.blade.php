@@ -260,9 +260,10 @@
                 {{ $document->footer }}
             </div>
         @endif
+    </div>
 
         {{-- Section Bank Info & Signature sejajar kanan kiri --}}
-        <div class="flex justify-between mt-12 text-xs">
+        <div class="flex justify-between mt-auto text-xs pt-8">
             {{-- Bank Info --}}
             <div class="w-1/2">
                 <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>
@@ -280,7 +281,6 @@
                 <div class="mt-20 font-semibold">{{ $document->beneficiaryName }}</div>
             </div>
         </div>
-    </div>
 
 </div>
 

@@ -144,6 +144,9 @@
         <div class="mb-4 text-sm font-semibold">
             {{$document->terms ?? '-'}}
         </div>
+    </div>
+
+    <div class="mt-auto text-sm footer">
 
         <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>
         <div class="mb-2 text-sm font-semibold">

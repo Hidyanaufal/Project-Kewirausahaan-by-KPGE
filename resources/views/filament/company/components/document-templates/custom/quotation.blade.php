@@ -193,8 +193,12 @@
             </div>
         @endif
 
+
+
+    </div>
+
         {{-- Signature --}}
-        <div class="flex justify-between text-xs" style="margin-top: 40px">
+        <div class="flex justify-between text-xs mt-auto pt-8">
             {{-- Left side (Pihak Penerima) --}}
             <div class="text-center w-1/2">
                 <p>{{ $document->client?->name }}</p>
@@ -213,7 +217,7 @@
             </div>
         </div>
 
-    </div>
+
 </div>
 
 <style>
