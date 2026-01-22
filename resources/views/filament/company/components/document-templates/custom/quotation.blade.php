@@ -38,7 +38,7 @@
     </div>
 
     {{-- Metadata --}}
-    <div class="flex justify-between text-xs mb-6">
+    <div class="flex justify-between text-xs mb-6 mt-10">
         <div>
             <p><strong>From: </strong></p>
             <p class="font-bold">{{ $document->company?->name }}</p>
@@ -73,8 +73,8 @@
         @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
             {!! $formattedAddress !!}
         @endif
-        <p class="mt-6"><strong>UP:</strong></p>
-        <p class="font-bold">{{ $document?->detail?->project?->pic_client_name ?? '-' }}</p>
+        {{-- <p class="mt-6"><strong>UP:</strong></p>
+        <p class="font-bold">{{ $document?->detail?->project?->pic_client_name ?? '-' }}</p> --}}
     </div>
 
     <div class="text-xs">

@@ -78,13 +78,6 @@
                 @if ($document->recipientDetails)
                     <p class="font-semibold">{!! nl2br(e($document->recipientDetails)) !!},</p>
                 @endif
-                @if ($document?->detail?->project?->pic_client)
-                    <p class="text-xs">
-                        @if ($document->detail->project->pic_client->position)
-                            {{ $document->detail->project->pic_client->position }}
-                        @endif
-                    </p>
-                @endif
                 <p class="font-semibold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
                 @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
                     {!! $formattedAddress !!}
@@ -254,7 +247,7 @@
     </div>
 
     {{-- Footer Notes --}}
-    <div class="mt-2 text-xs footer">
+    <div class="mt-1 text-xs">
         @if ($document->terms)
             <div class="leading-relaxed">Terms and Condition:</div>
             <div class="prose prose-sm max-w-none text-xs">
