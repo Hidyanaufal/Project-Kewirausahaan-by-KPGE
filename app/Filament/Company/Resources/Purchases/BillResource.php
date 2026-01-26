@@ -62,7 +62,7 @@ class BillResource extends Resource
                     ->schema([
                         Forms\Components\Split::make([
                             Forms\Components\Group::make([
-                                ProjectResource::options(),
+                                ProjectResource::options()->required(false),
                                 CreateVendorSelect::make('vendor_id')
                                     ->label('Vendor')
                                     ->required()
