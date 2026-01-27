@@ -139,6 +139,16 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             $padding = $level * 15;
 
             foreach ($accounts as $account) {
+                // Skip account jika balance = 0
+                $balance = $account->ending_balance->getValue();
+                if ($balance == 0) {
+                    // Tetap process children jika ada (mungkin ada child dengan balance != 0)
+                    if ($account->children->isNotEmpty()) {
+                        $appendAccountRows($account->children, $level + 1);
+                    }
+                    continue;
+                }
+
                 $rows->push([
                     'data' => [
                         $account->code . ' ' . $account->name,
