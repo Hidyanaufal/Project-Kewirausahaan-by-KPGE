@@ -5,6 +5,7 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
+use App\Enums\Accounting\AccountType;
 use App\Filament\Forms\Components\DateRangeSelect;
 use App\Helpers\AuthHelper;
 use App\Models\Accounting\Account;
@@ -135,6 +136,27 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         return new TrialBalanceReportTransformer($reportDTO);
     }
 
+    /**
+     * Get ordered AccountTypes for Trial Balance
+     * Order: CurrentAsset → NonCurrentAsset → ContraAsset → CurrentLiability → NonCurrentLiability → ContraLiability → Equity → OperatingRevenue → OperatingExpense → NonOperatingRevenue → NonOperatingExpense
+     */
+    private function getOrderedAccountTypes(): array
+    {
+        return [
+            AccountType::CurrentAsset,
+            AccountType::NonCurrentAsset,
+            AccountType::ContraAsset,
+            AccountType::CurrentLiability,
+            AccountType::NonCurrentLiability,
+            AccountType::ContraLiability,
+            AccountType::Equity,
+            AccountType::OperatingRevenue,
+            AccountType::OperatingExpense,
+            AccountType::NonOperatingRevenue,
+            AccountType::NonOperatingExpense,
+        ];
+    }
+
     public function buildReportEnhanced(
         ?string $template = null,
         string $format = 'pdf',
@@ -170,8 +192,14 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         // Ambil semua akun aktif
         $accounts = Account::where('archived', false)
             ->where('company_id', $company->id)
-            ->orderBy('code')
-            ->get(['id', 'code', 'name']);
+            ->get(['id', 'code', 'name', 'type']);
+
+        // Urutkan berdasarkan AccountType yang diinginkan
+        $typeOrder = array_flip(array_map(fn($type) => $type->value, $this->getOrderedAccountTypes()));
+        $accounts = $accounts->sortBy(function ($account) use ($typeOrder) {
+            $typeValue = $account->type?->value ?? '';
+            return $typeOrder[$typeValue] ?? 999; // Type yang tidak ada di urutan akan di akhir
+        })->values();
 
         $accountIds = $accounts->pluck('id')->toArray();
         $scale = 100; // ubah ke 1 jika amount sudah dalam rupiah
@@ -334,7 +362,76 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
 
         $rows = collect();
 
-        foreach ($report->getCategories() as $cat) {
+        // Urutkan categories berdasarkan urutan AccountType yang diinginkan
+        $categoryOrder = [
+            'Assets' => 1,      // Asset (CurrentAsset, NonCurrentAsset, ContraAsset)
+            'Liabilities' => 2, // Liability (CurrentLiability, NonCurrentLiability, ContraLiability)
+            'Equity' => 3,
+            'Revenue' => 4,     // Revenue (OperatingRevenue, NonOperatingRevenue)
+            'Expenses' => 5,    // Expense (OperatingExpense, NonOperatingExpense)
+        ];
+
+        $categories = $report->getCategories();
+        
+        // Sort categories berdasarkan urutan
+        usort($categories, function ($a, $b) use ($categoryOrder) {
+            $aName = strtoupper($a->header['account_name'] ?? '');
+            $bName = strtoupper($b->header['account_name'] ?? '');
+            
+            // Normalize category names
+            $aKey = match (true) {
+                str_contains($aName, 'ASSET') => 'Assets',
+                str_contains($aName, 'LIABILIT') => 'Liabilities',
+                str_contains($aName, 'EQUITY') => 'Equity',
+                str_contains($aName, 'REVENUE') => 'Revenue',
+                str_contains($aName, 'EXPENSE') => 'Expenses',
+                default => $aName,
+            };
+            
+            $bKey = match (true) {
+                str_contains($bName, 'ASSET') => 'Assets',
+                str_contains($bName, 'LIABILIT') => 'Liabilities',
+                str_contains($bName, 'EQUITY') => 'Equity',
+                str_contains($bName, 'REVENUE') => 'Revenue',
+                str_contains($bName, 'EXPENSE') => 'Expenses',
+                default => $bName,
+            };
+            
+            $aOrder = $categoryOrder[$aKey] ?? 999;
+            $bOrder = $categoryOrder[$bKey] ?? 999;
+            
+            if ($aOrder !== $bOrder) {
+                return $aOrder <=> $bOrder;
+            }
+            
+            return $aName <=> $bName;
+        });
+
+        // Urutkan accounts dalam setiap category berdasarkan type
+        $typeOrder = array_flip(array_map(fn($type) => $type->value, $this->getOrderedAccountTypes()));
+        
+        // Get account types untuk sorting
+        $accountIds = [];
+        foreach ($categories as $cat) {
+            foreach ($cat->data as $item) {
+                $accountId = is_array($item['account_name']) 
+                    ? ($item['account_name']['id'] ?? null)
+                    : null;
+                if ($accountId) {
+                    $accountIds[] = $accountId;
+                }
+            }
+        }
+        
+        $accountTypes = [];
+        if (!empty($accountIds)) {
+            $accounts = Account::whereIn('id', $accountIds)->get(['id', 'type']);
+            foreach ($accounts as $acc) {
+                $accountTypes[$acc->id] = $acc->type?->value ?? '';
+            }
+        }
+
+        foreach ($categories as $cat) {
             $headerName = strtoupper($cat->header['account_name'] ?? 'UNKNOWN');
             $rows->push([
                 'data' => [
@@ -348,7 +445,16 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
                 ],
             ]);
 
-            foreach ($cat->data as $item) {
+            // Sort accounts dalam category berdasarkan type
+            $sortedData = collect($cat->data)->sortBy(function ($item) use ($accountTypes, $typeOrder) {
+                $accountId = is_array($item['account_name']) 
+                    ? ($item['account_name']['id'] ?? null)
+                    : null;
+                $typeValue = $accountId ? ($accountTypes[$accountId] ?? '') : '';
+                return $typeOrder[$typeValue] ?? 999;
+            })->values();
+
+            foreach ($sortedData as $item) {
                 $accountCode = $item['account_code'] ?? '';
                 $accountName = is_array($item['account_name'])
                     ? ($item['account_name']['name'] ?? '')
