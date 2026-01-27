@@ -6,6 +6,7 @@ use App\Concerns\HasOptions;
 use App\Concerns\HasPermissionCheck;
 use App\Enums\Addons\ProjectStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource\Pages;
+use App\Filament\Exports\Addons\ProjectExporter;
 use App\Models\Addons\Project;
 use App\Models\Addons\ProjectType;
 use App\Models\Common\Client;
@@ -213,6 +214,11 @@ class ProjectResource extends Resource
                     ->label('Project Type')
                     ->options(fn() => ProjectType::get()->pluck('name', 'id'))
                     ->searchable()
+            ])
+            ->headerActions([
+                Tables\Actions\ExportAction::make()
+                    ->label('Export Excel')
+                    ->exporter(ProjectExporter::class),
             ])
             ->actions([
                 Tables\Actions\ActionGroup::make([
