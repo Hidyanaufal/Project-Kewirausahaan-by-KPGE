@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     fontconfig \
+    fonts-roboto \
     && rm -rf /var/lib/apt/lists/*
 
 # Install wkhtmltopdf (fix for libssl1.1 dependency)
