@@ -27,8 +27,13 @@ RUN apt-get update && apt-get install -y curl gnupg \
     && apt-get install -y /tmp/wkhtmltox.deb \
     && rm -rf /var/lib/apt/lists/* /tmp/wkhtmltox.deb
 
-# Verify wkhtmltopdf
-RUN wkhtmltopdf --version
+# Create symlinks to expected paths for Laravel Snappy configuration
+RUN mkdir -p /usr/local/bin \
+    && ln -sf /usr/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf \
+    && ln -sf /usr/bin/wkhtmltoimage /usr/local/bin/wkhtmltoimage
+
+# Verify wkhtmltopdf and wkhtmltoimage are accessible at expected paths
+RUN /usr/local/bin/wkhtmltopdf --version && /usr/local/bin/wkhtmltoimage --version
 
 # Install PHP extensions
 RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd intl zip
