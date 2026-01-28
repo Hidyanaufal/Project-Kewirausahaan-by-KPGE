@@ -84,34 +84,33 @@
     <div class="flex flex-col">
     {{-- Line Items --}}
     <div class="mb-2 line-items">
+        {{-- AWAL --}}
         <table class="w-full text-xs leading-tight border-1 border-black border-collapse">
-            <thead>
-                <tr>
-                    <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-left">No.</th>
-                    <th style="background: {{ $document->accentColor }}" class="w-2/6 px-2 py-1 text-left">Description
-                    </th>
-                    <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-center">Qty</th>
-                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Satuan
-                    </th>
-                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Unit Price
-                    </th>
-                    <th style="background: {{ $document->accentColor }}" class="w-3/6 px-2 py-1 text-center">Amount
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td colspan="6">
-                        @isset($document->project)
-                            <div class="py-1 pl-2 font-semibold text-left">
-                                {{ $document->project }}
-                            </div>
-                            <div class="py-1 pl-2 text-xs text-left">
-                                {{ $document?->detail?->project?->description }}
-                            </div>
-                        @endisset
-                    </td>
-                </tr>
+    <tbody>
+        <!-- HEADER TABEL (HANYA SEKALI) -->
+        <tr>
+            <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-left">No.</th>
+            <th style="background: {{ $document->accentColor }}" class="w-2/6 px-2 py-1 text-left">Description</th>
+            <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-center">Qty</th>
+            <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Satuan</th>
+            <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Unit Price</th>
+            <th style="background: {{ $document->accentColor }}" class="w-3/6 px-2 py-1 text-center">Amount</th>
+        </tr>
+
+        <!-- ROW PROJECT -->
+        <tr>
+            <td colspan="6">
+                @isset($document->project)
+                    <div class="py-1 pl-2 font-semibold text-left">
+                        {{ $document->project }}
+                    </div>
+                    <div class="py-1 pl-2 text-xs text-left">
+                        {{ $document?->detail?->project?->description }}
+                    </div>
+                @endisset
+            </td>
+        </tr>
+        {{-- akhir --}}
                 @foreach ($document->lineItems as $index => $item)
                     <tr>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
@@ -151,7 +150,35 @@
                         <td colspan="5" class="px-2 text-right border-t border-black">Jumlah</td>
                         <td class="px-2 text-right border-t border-black">
                             {{ formatMoneyCeiling($document->subtotal) }}
-                        </td>
+                        </td><table class="w-full text-xs leading-tight border-1 border-black border-collapse">
+            <thead>
+                <tr>
+                    <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-left">No.</th>
+                    <th style="background: {{ $document->accentColor }}" class="w-2/6 px-2 py-1 text-left">Description
+                    </th>
+                    <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-center">Qty</th>
+                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Satuan
+                    </th>
+                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Unit Price
+                    </th>
+                    <th style="background: {{ $document->accentColor }}" class="w-3/6 px-2 py-1 text-center">Amount
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td colspan="6">
+                        @isset($document->project)
+                            <div align="left" class="py-1 pl-2 font-semibold text-left">
+                                {{ $document->project }}
+                            </div>
+                            <div align="left" class="py-1 pl-2 text-xs text-left">
+                                {{ $document?->detail?->project?->description }}
+                            </div>
+
+                        @endisset
+                    </td>
+                </tr>
                     </tr>
                 @endif
 
@@ -231,11 +258,14 @@
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         display: flex;
         flex-direction: column;
+        
     }
     @media print {
         @page {
             size: A4;
             margin: 0;
+            /* text-align:left  
+             INI TAMBAHAN  */
         }
         body {
             margin: 0;
@@ -263,6 +293,7 @@
     .line-items td {
         padding: 8px;
         border: 1px solid #000;
+        
     }
 
     .line-items th {
