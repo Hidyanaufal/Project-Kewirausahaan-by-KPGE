@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     fontconfig \
+    fonts-roboto \
     && rm -rf /var/lib/apt/lists/*
 
 # Install wkhtmltopdf (fix for libssl1.1 dependency)
@@ -27,8 +28,18 @@ RUN apt-get update && apt-get install -y curl gnupg \
     && apt-get install -y /tmp/wkhtmltox.deb \
     && rm -rf /var/lib/apt/lists/* /tmp/wkhtmltox.deb
 
-# Verify wkhtmltopdf
-RUN wkhtmltopdf --version
+# Find actual binary locations and create symlinks to expected paths for Laravel Snappy configuration
+RUN mkdir -p /usr/local/bin \
+    && WKHTMLTOPDF_PATH=$(which wkhtmltopdf 2>/dev/null || dpkg -L wkhtmltox 2>/dev/null | grep -E '/bin/wkhtmltopdf$' | head -1 || echo '/usr/bin/wkhtmltopdf') \
+    && WKHTMLTOIMAGE_PATH=$(which wkhtmltoimage 2>/dev/null || dpkg -L wkhtmltox 2>/dev/null | grep -E '/bin/wkhtmltoimage$' | head -1 || echo '/usr/bin/wkhtmltoimage') \
+    && test -f "$WKHTMLTOPDF_PATH" || (echo "Error: wkhtmltopdf not found. Package files:" && dpkg -L wkhtmltox | grep -E 'bin/' && exit 1) \
+    && test -f "$WKHTMLTOIMAGE_PATH" || (echo "Error: wkhtmltoimage not found. Package files:" && dpkg -L wkhtmltox | grep -E 'bin/' && exit 1) \
+    && ([ "$WKHTMLTOPDF_PATH" != "/usr/local/bin/wkhtmltopdf" ] && ln -sf "$WKHTMLTOPDF_PATH" /usr/local/bin/wkhtmltopdf || true) \
+    && ([ "$WKHTMLTOIMAGE_PATH" != "/usr/local/bin/wkhtmltoimage" ] && ln -sf "$WKHTMLTOIMAGE_PATH" /usr/local/bin/wkhtmltoimage || true)
+
+# Verify wkhtmltopdf and wkhtmltoimage are accessible at both original and symlinked paths
+RUN test -f /usr/local/bin/wkhtmltopdf && /usr/local/bin/wkhtmltopdf --version \
+    && test -f /usr/local/bin/wkhtmltoimage && /usr/local/bin/wkhtmltoimage --version
 
 # Install PHP extensions
 RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd intl zip

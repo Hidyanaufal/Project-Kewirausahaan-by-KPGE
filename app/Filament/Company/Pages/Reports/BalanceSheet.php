@@ -5,6 +5,8 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
+use App\Enums\Accounting\AccountCategory;
+use App\Enums\Accounting\AccountType;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
 use App\Filament\Forms\Components\DateRangeSelect;
 use App\Helpers\AuthHelper;
@@ -77,6 +79,23 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
         return new BalanceSheetReportTransformer($reportDTO);
     }
 
+    /**
+     * Get ordered AccountTypes for Balance Sheet
+     * Order: CurrentAsset → NonCurrentAsset → ContraAsset → CurrentLiability → NonCurrentLiability → ContraLiability → Equity
+     */
+    private function getOrderedAccountTypes(): array
+    {
+        return [
+            AccountType::CurrentAsset,
+            AccountType::NonCurrentAsset,
+            AccountType::ContraAsset,
+            AccountType::CurrentLiability,
+            AccountType::NonCurrentLiability,
+            AccountType::ContraLiability,
+            AccountType::Equity,
+        ];
+    }
+
     public function buildReportEnhanced(
         ?string $template = null,
         string $format = 'pdf',
@@ -103,6 +122,11 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
         $rows = collect();
 
         $accounts = \App\Models\Accounting\Account::where('company_id', $company->id)
+            ->whereIn('category', [
+                AccountCategory::Asset,
+                AccountCategory::Liability,
+                AccountCategory::Equity,
+            ])
             ->with(['children'])
             ->orderBy('category')
             ->orderBy('type')
@@ -115,6 +139,16 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             $padding = $level * 15;
 
             foreach ($accounts as $account) {
+                // Skip account jika balance = 0
+                $balance = $account->ending_balance->getValue();
+                if ($balance == 0) {
+                    // Tetap process children jika ada (mungkin ada child dengan balance != 0)
+                    if ($account->children->isNotEmpty()) {
+                        $appendAccountRows($account->children, $level + 1);
+                    }
+                    continue;
+                }
+
                 $rows->push([
                     'data' => [
                         $account->code . ' ' . $account->name,
@@ -131,14 +165,36 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             }
         };
 
-        // Loop kategori (ASSETS, LIABILITIES, EQUITY, dll)
-        foreach ($accounts as $category => $types) {
+        // Loop kategori dengan urutan eksplisit: ASSET → LIABILITY → EQUITY
+        $orderedCategories = [
+            AccountCategory::Asset,
+            AccountCategory::Liability,
+            AccountCategory::Equity,
+        ];
+
+        // Mapping urutan AccountType untuk sorting
+        $typeOrder = array_flip(array_map(fn($type) => $type->value, $this->getOrderedAccountTypes()));
+
+        foreach ($orderedCategories as $category) {
+            $categoryValue = $category->value;
+            
+            if (!isset($accounts[$categoryValue])) {
+                continue; // Skip jika kategori tidak ada
+            }
+
+            $types = $accounts[$categoryValue];
+
             $rows->push([
-                'data' => [strtoupper($category)],
+                'data' => [strtoupper($categoryValue)],
                 'style' => ['font-weight' => 'bold'],
             ]);
 
-            foreach ($types as $type => $accountsByType) {
+            // Sort types berdasarkan urutan yang diinginkan
+            $sortedTypes = $types->sortBy(function ($accountsByType, $typeKey) use ($typeOrder) {
+                return $typeOrder[$typeKey] ?? 999; // Type yang tidak ada di urutan akan di akhir
+            });
+
+            foreach ($sortedTypes as $type => $accountsByType) {
                 $rows->push([
                     'data' => [str_replace('_', ' ', ucwords(strtolower($type)))],
                     'style' => [
@@ -172,7 +228,7 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
 
             $rows->push([
                 'data' => [
-                    "Total " . strtoupper($category),
+                    "Total " . strtoupper($categoryValue),
                     $toNumber($categoryTotal),
                 ],
                 'style' => [

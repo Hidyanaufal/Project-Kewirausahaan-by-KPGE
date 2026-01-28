@@ -7,6 +7,7 @@ use App\DTO\ReportCategoryDTO;
 use App\DTO\ReportDTO;
 use App\DTO\ReportTypeDTO;
 use App\Utilities\Currency\CurrencyAccessor;
+use App\Utilities\Currency\CurrencyConverter;
 
 class BalanceSheetReportTransformer extends SummaryReportTransformer
 {
@@ -62,37 +63,8 @@ class BalanceSheetReportTransformer extends SummaryReportTransformer
             }
 
             // Accounts directly under the main category
-            $data = array_map(function (AccountDTO $account) {
-                $row = [];
-
-                foreach ($this->getColumns() as $column) {
-                    $row[$column->getName()] = match ($column->getName()) {
-                        'account_code' => $account->accountCode,
-                        'account_name' => [
-                            'name' => $account->accountName,
-                            'id' => $account->accountId ?? null,
-                            'start_date' => $account->startDate,
-                            'end_date' => $account->endDate,
-                        ],
-                        'ending_balance' => $account->balance->endingBalance ?? '',
-                        default => '',
-                    };
-                }
-
-                return $row;
-            }, $accountCategory->accounts ?? []);
-
-            // Subcategories (types) under the main category
-            $types = [];
-            foreach ($accountCategory->types as $typeName => $type) {
-                // Header for subcategory (type)
-                $typeHeader = [];
-                foreach ($this->getColumns() as $column) {
-                    $typeHeader[$column->getName()] = $column->getName() === 'account_name' ? $typeName : '';
-                }
-
-                // Account data for the subcategory
-                $typeData = array_map(function (AccountDTO $account) {
+            $data = array_filter(
+                array_map(function (AccountDTO $account) {
                     $row = [];
 
                     foreach ($this->getColumns() as $column) {
@@ -110,7 +82,58 @@ class BalanceSheetReportTransformer extends SummaryReportTransformer
                     }
 
                     return $row;
-                }, $type->accounts);
+                }, $accountCategory->accounts ?? []),
+                function ($row) {
+                    $balanceStr = $row['ending_balance'] ?? '';
+                    if (blank($balanceStr)) {
+                        return false; // Filter out empty balances
+                    }
+                    // Parse formatted money string to float
+                    $balance = CurrencyConverter::convertToFloat($balanceStr);
+                    return $balance != 0; // Keep only non-zero balances
+                }
+            );
+
+            // Subcategories (types) under the main category
+            $types = [];
+            foreach ($accountCategory->types as $typeName => $type) {
+                // Header for subcategory (type)
+                $typeHeader = [];
+                foreach ($this->getColumns() as $column) {
+                    $typeHeader[$column->getName()] = $column->getName() === 'account_name' ? $typeName : '';
+                }
+
+                // Account data for the subcategory
+                $typeData = array_filter(
+                    array_map(function (AccountDTO $account) {
+                        $row = [];
+
+                        foreach ($this->getColumns() as $column) {
+                            $row[$column->getName()] = match ($column->getName()) {
+                                'account_code' => $account->accountCode,
+                                'account_name' => [
+                                    'name' => $account->accountName,
+                                    'id' => $account->accountId ?? null,
+                                    'start_date' => $account->startDate,
+                                    'end_date' => $account->endDate,
+                                ],
+                                'ending_balance' => $account->balance->endingBalance ?? '',
+                                default => '',
+                            };
+                        }
+
+                        return $row;
+                    }, $type->accounts),
+                    function ($row) {
+                        $balanceStr = $row['ending_balance'] ?? '';
+                        if (blank($balanceStr)) {
+                            return false; // Filter out empty balances
+                        }
+                        // Parse formatted money string to float
+                        $balance = CurrencyConverter::convertToFloat($balanceStr);
+                        return $balance != 0; // Keep only non-zero balances
+                    }
+                );
 
                 // Subcategory (type) summary
                 $typeSummary = [];

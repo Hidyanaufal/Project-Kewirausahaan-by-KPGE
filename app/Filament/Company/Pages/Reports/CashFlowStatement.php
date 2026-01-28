@@ -580,11 +580,17 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
         ]);
 
         foreach ($addedAccounts as $account) {
+            // Skip account jika balance = 0
+            $balance = $account->ending_balance->getValue();
+            if ($balance == 0) {
+                continue;
+            }
+
             $rows->push([
                 'data' => [
                     '__str' . $account->code,
                     $account->name,
-                    $account->ending_balance->getValue(),
+                    $balance,
                 ],
                 'style' => $pad(1),
             ]);
@@ -596,11 +602,17 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
         ]);
 
         foreach ($deductAccounts as $account) {
+            // Skip account jika balance = 0
+            $balance = $account->ending_balance->getValue();
+            if ($balance == 0) {
+                continue;
+            }
+
             $rows->push([
                 'data' => [
                     '__str' . $account->code,
                     $account->name,
-                    $account->ending_balance->getValue(),
+                    $balance,
                 ],
                 'style' => $pad(1),
             ]);

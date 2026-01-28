@@ -6,24 +6,27 @@
     <style>
           @font-face {
             font-family: 'Roboto';
-            src: url('file:///usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Regular.ttf') format('truetype');
+            src: url('file:///usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Regular.ttf') format('truetype'),
+                 url('file:///usr/share/fonts/truetype/roboto/Roboto-Regular.ttf') format('truetype');
             font-weight: normal;
             font-style: normal;
         }
         @font-face {
             font-family: 'Roboto';
-            src: url('file:///usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Bold.ttf') format('truetype');
+            src: url('file:///usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Bold.ttf') format('truetype'),
+                 url('file:///usr/share/fonts/truetype/roboto/Roboto-Bold.ttf') format('truetype');
             font-weight: bold;
             font-style: normal;
         }
         @font-face {
             font-family: 'Roboto';
-            src: url('file:///usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Italic.ttf') format('truetype');
+            src: url('file:///usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Italic.ttf') format('truetype'),
+                 url('file:///usr/share/fonts/truetype/roboto/Roboto-Italic.ttf') format('truetype');
             font-weight: normal;
             font-style: italic;
         }
         body {
-            font-family: 'Roboto', sans-serif;
+            font-family: 'Roboto', Arial, Helvetica, sans-serif;
             text-align: center;
             font-size: 9px;
         }
