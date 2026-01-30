@@ -135,13 +135,13 @@
     {{-- Line Items --}}
     <div class="mb-2 line-items">
         <table class="w-full text-xs leading-tight border-1 border-black border-collapse">
-            <thead>
+            {{-- <thead> --}}
                 <tr>
                     <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Tanggal</th>
                     <th style="background: {{ $document->accentColor }}" class="w-4/6 px-2 py-1 text-left">Keterangan</th>
                     <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Jumlah (Rp.)</th>
                 </tr>
-            </thead>
+            {{-- </thead> --}}
             <tbody>
                 @if ($document?->detail?->hide_offering_items)
                     {{-- Mode: Hide Offering Items - Tampilkan langsung total sejajar dengan project --}}
