@@ -159,7 +159,7 @@
                             <td class="px-2 text-right border-t border-black">
                                 {{ formatMoneyCeiling($document->subtotal) }}
                             </td>
-                            <table class="w-full text-xs leading-tight border-1 border-black border-collapse">
+                            {{-- <table class="w-full text-xs leading-tight border-1 border-black border-collapse">
                                 <thead>
                                     <tr>
                                         <th style="background: {{ $document->accentColor }}"
@@ -192,7 +192,7 @@
                                                 </div>
                                             @endisset
                                         </td>
-                                    </tr>
+                                    </tr> --}}
                         </tr>
                     @endif
 
