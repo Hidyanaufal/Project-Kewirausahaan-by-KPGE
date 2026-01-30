@@ -279,6 +279,7 @@
                 {{ $document->accountName }}<br>
                 Jakarta, {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}<br><br><br>
                 <div class="mt-20 font-semibold">{{ $document->beneficiaryName }}</div>
+                <div>{{ $document->beneficiaryTitle }}</div>
             </div>
         </div>
 
