@@ -255,6 +255,7 @@
                 <div class="h-16"></div>
             </div>
             <p class="mt-2 font-bold">{{ $document->beneficiaryName }}</p>
+            <p>{{ $document->beneficiaryTitle }}</p>
         </div>
     </div>
 
