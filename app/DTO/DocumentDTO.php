@@ -80,7 +80,7 @@ readonly class DocumentDTO
 
         $subtotal = ($discount || $tax)
             ? self::formatToMoney($document->subtotal, $currencyCode)
-            : null;
+            : self::formatToMoney($document->subtotal, $currencyCode);
 
         $amountDue = $document::documentType() !== DocumentType::Estimate ?
             self::formatToMoney($document->amountDue(), $currencyCode) :
