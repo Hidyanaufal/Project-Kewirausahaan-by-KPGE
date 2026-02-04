@@ -151,40 +151,6 @@
                             <td class="px-2 text-right border-t border-black">
                                 {{ formatMoneyCeiling($document->subtotal) }}
                             </td>
-                            {{-- <table class="w-full text-xs leading-tight border-1 border-black border-collapse">
-                                <thead>
-                                    <tr>
-                                        <th style="background: {{ $document->accentColor }}"
-                                            class="px-2 py-1 text-left">No.</th>
-                                        <th style="background: {{ $document->accentColor }}"
-                                            class="w-2/6 px-2 py-1 text-left">Description
-                                        </th>
-                                        <th style="background: {{ $document->accentColor }}"
-                                            class="px-2 py-1 text-center">Qty</th>
-                                        <th style="background: {{ $document->accentColor }}"
-                                            class="w-1/6 px-2 py-1 text-center">Satuan
-                                        </th>
-                                        <th style="background: {{ $document->accentColor }}"
-                                            class="w-1/6 px-2 py-1 text-center">Unit Price
-                                        </th>
-                                        <th style="background: {{ $document->accentColor }}"
-                                            class="w-3/6 px-2 py-1 text-center">Amount
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td colspan="6">
-                                            @isset($document->project)
-                                                <div align="left" class="py-1 pl-2 font-semibold text-left">
-                                                    {{ $document->project }}
-                                                </div>
-                                                <div align="left" class="py-1 pl-2 text-xs text-left">
-                                                    {{ $document?->detail?->project?->description }}
-                                                </div>
-                                            @endisset
-                                        </td>
-                                    </tr> --}}
                         </tr>
                     @endif
 
