@@ -210,6 +210,19 @@ for sheet in ORDER:
 
                 if existing_project:
                     print(f"⚠ Project {project_name} (Number {project_number}) sudah ada (ID {existing_project[0]}), skip insert")
+                    # Cek apakah nama project di database sama dengan nama project di excel
+                    project_name_db = conn.execute(
+                        text("SELECT name FROM projects WHERE id = :id"),
+                        {"id": existing_project[0]}
+                    ).fetchone()
+                    # Jika nama project di database berbeda maka samakan dengan nama project di excel
+                    if project_name_db[0] != project_name:
+                        result = conn.execute(
+                            text("UPDATE projects SET name = :name WHERE id = :id"),
+                            {"name": project_name, "id": existing_project[0]}
+                        )
+                        conn.commit()
+                        success(f"Updated project name: {project_name}")
                     continue  # skip jika sudah ada
 
                 # -----------------------
@@ -282,7 +295,7 @@ for sheet in ORDER:
     # ============================================================
     # INVOICE SHEET
     # ============================================================
-    if parser_type == "invoice":  # Ganti dari elif jadi if
+    if parser_type == "invoice":
 
         inv_data = parse_invoice_sheet(df)
 
