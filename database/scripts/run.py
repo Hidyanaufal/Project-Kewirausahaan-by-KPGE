@@ -156,11 +156,10 @@ for sheet in ORDER:
         continue
 
     section(sheet)
-
     df = pd.read_excel(excel_path, sheet_name=sheet)
 
     # ============================================================
-    # PROJECT SHEETS
+    # PROJECT SHEET
     # ============================================================
     if parser_type == "project":
 
@@ -189,16 +188,52 @@ for sheet in ORDER:
 
             for p in proj_data:
 
+                project_number = clean_value(p["number"])
+                project_name = clean_value(p["name"])
                 client_name = clean_value(p["client_name"])
 
+                # -----------------------
+                # CEK DUPLIKAT PROJECT
+                # -----------------------
+                if not project_number:
+                    warn(f"Project number empty for project '{project_name}'. Skipped.")
+                    continue
+
+                existing_project = conn.execute(
+                    text("""
+                        SELECT id FROM projects
+                        WHERE number = :num AND company_id = :cid
+                        LIMIT 1
+                    """),
+                    {"num": project_number, "cid": COMPANY_ID}
+                ).fetchone()
+
+                if existing_project:
+                    print(f"⚠ Project {project_name} (Number {project_number}) sudah ada (ID {existing_project[0]}), skip insert")
+                    # Cek apakah nama project di database sama dengan nama project di excel
+                    project_name_db = conn.execute(
+                        text("SELECT name FROM projects WHERE id = :id"),
+                        {"id": existing_project[0]}
+                    ).fetchone()
+                    # Jika nama project di database berbeda maka samakan dengan nama project di excel
+                    if project_name_db[0] != project_name:
+                        result = conn.execute(
+                            text("UPDATE projects SET name = :name WHERE id = :id"),
+                            {"name": project_name, "id": existing_project[0]}
+                        )
+                        conn.commit()
+                        success(f"Updated project name: {project_name}")
+                    continue  # skip jika sudah ada
+
+                # -----------------------
+                # CEK / INSERT CLIENT
+                # -----------------------
                 if not client_name:
                     if last_client_id is None:
-                        warn(f"Client empty for project '{p['name']}'. Skipped.")
+                        warn(f"Client empty for project '{project_name}'. Skipped.")
                         continue
-
                     client_id = last_client_id
                     info(f"Using previous client: {last_client_name}")
-
                 else:
                     client = conn.execute(
                         text("""
@@ -225,9 +260,12 @@ for sheet in ORDER:
                     last_client_id = client_id
                     last_client_name = client_name
 
-                if clean_value(p["name"]) is None:
+                if not project_name:
                     continue
 
+                # -----------------------
+                # INSERT PROJECT
+                # -----------------------
                 result = conn.execute(
                     text("""
                         INSERT INTO projects
@@ -240,8 +278,8 @@ for sheet in ORDER:
                         "cid": COMPANY_ID,
                         "ptid": project_type_id,
                         "clid": client_id,
-                        "num": clean_value(p["number"]),
-                        "name": clean_value(p["name"]),
+                        "num": project_number,
+                        "name": project_name,
                         "basis": clean_value(p["work_basis"]),
                         "req": clean_value(p["request_number_date"]),
                         "value": clean_value(p["project_value"]) * 100,
@@ -252,12 +290,12 @@ for sheet in ORDER:
 
                 conn.commit()
                 project_id = result.lastrowid
-                success(f"Inserted Project: {p['name']} (ID {project_id})")
+                success(f"Inserted Project: {project_name} (ID {project_id})")
 
     # ============================================================
     # INVOICE SHEET
     # ============================================================
-    elif parser_type == "invoice":
+    if parser_type == "invoice":
 
         inv_data = parse_invoice_sheet(df)
 
@@ -283,15 +321,25 @@ for sheet in ORDER:
                     continue
 
                 project_id, client_id = project
+                invoice_number = clean_value(inv["invoice_number"])
 
-                # Ambil nilai (pastikan clean_value mengembalikan numeric/float)
+                # -----------------------
+                # CEK DUPLIKAT INVOICE
+                # -----------------------
+                existing = conn.execute(
+                    text("SELECT id FROM invoices WHERE invoice_number = :inv AND company_id = :cid"),
+                    {"inv": invoice_number, "cid": COMPANY_ID}
+                ).fetchone()
+
+                if existing:
+                    print(f"⚠ Invoice {invoice_number} sudah ada (ID {existing[0]}), skip insert")
+                    continue  # skip jika sudah ada
+
+                # Ambil nilai
                 dpp = clean_value(inv["dpp"]) or 0
                 profit = clean_value(inv.get("profit", 0)) or 0
                 ppn = clean_value(inv["ppn"]) or 0
 
-                # Hitung profit percentage dan profit_rate dengan skala yang benar:
-                # profit_percentage = (profit / dpp) * 100  (contoh: 12.0)
-                # profit_rate (DB) = profit_percentage * 10_000  (contoh: 12% -> 120000)
                 if dpp > 0 and profit > 0:
                     profit_percentage = (profit / dpp) * 100.0
                     profit_rate = int(round(profit_percentage * 10000))   # 1% -> 10000 ; 12% -> 120000
@@ -302,6 +350,9 @@ for sheet in ORDER:
                 profit_total = profit
                 total = dpp + profit_total + ppn
 
+                # -----------------------
+                # INSERT KE DATABASE
+                # -----------------------
                 result = conn.execute(
                     text("""
                         INSERT INTO invoices
@@ -316,12 +367,10 @@ for sheet in ORDER:
                         "cid": COMPANY_ID,
                         "clid": client_id,
                         "pid": project_id,
-                        "inv": clean_value(inv["invoice_number"]),
+                        "inv": invoice_number,
                         "date": clean_value(inv["date"]),
-
-                        # simpan rupiah sebagai integer (×100)
                         "subtotal": int(round(dpp * 100)),
-                        "profit_rate": profit_rate,                   # percent × 10_000
+                        "profit_rate": profit_rate,
                         "profit_total": int(round(profit_total * 100)),
                         "ppn": int(round(ppn * 100)),
                         "total": int(round(total * 100)),
@@ -330,15 +379,15 @@ for sheet in ORDER:
                         "cur": "IDR",
                     }
                 )
-
                 conn.commit()
                 invoice_id = result.lastrowid
 
+                # INSERT LINE ITEMS
                 conn.execute(
                     text("""
                         INSERT INTO document_line_items
                         (company_id, offering_id, documentable_type, documentable_id,
-                         description, unit_price, tax_total)
+                        description, unit_price, tax_total)
                         VALUES (:cid, :oid, 'App\\\\Models\\\\Accounting\\\\Invoice', :iid, :desc, :price, :tax)
                     """),
                     {
@@ -346,12 +395,9 @@ for sheet in ORDER:
                         "oid": offering_id,
                         "iid": invoice_id,
                         "desc": clean_value(inv["item_description"]),
-                        "price": clean_value(inv["dpp"]) * 100,
-                        "tax": clean_value(inv["ppn"]) * 100,
+                        "price": int(clean_value(inv["dpp"]) * 100),
+                        "tax": int(clean_value(inv["ppn"]) * 100),
                     }
                 )
                 conn.commit()
-
-                success(f"Inserted Invoice: {inv['invoice_number']} (ID {invoice_id})")
-
-print(Fore.GREEN + "\n✔ Migration completed successfully!" + Style.RESET_ALL)
+                success(f"Inserted Invoice: {invoice_number} (ID {invoice_id})")

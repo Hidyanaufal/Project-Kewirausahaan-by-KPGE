@@ -162,6 +162,14 @@
                         </tr>
                     @endif
 
+                    <!-- Total -->
+                    <tr>
+                        <td colspan="5" class="px-2 font-semibold text-right">Total</td>
+                        <td class="px-2 font-semibold text-right">
+                            {{ formatMoneyCeiling($document->total) }}
+                        </td>
+                    </tr>
+
                     <!-- Profit -->
                     @if ($document->profit)
                         <tr>
@@ -171,14 +179,6 @@
                             </td>
                         </tr>
                     @endif
-
-                    <!-- Total -->
-                    <tr>
-                        <td colspan="5" class="px-2 font-semibold text-right">Total</td>
-                        <td class="px-2 font-semibold text-right">
-                            {{ formatMoneyCeiling($document->total) }}
-                        </td>
-                    </tr>
                 </tbody>
             </table>
         </div>
