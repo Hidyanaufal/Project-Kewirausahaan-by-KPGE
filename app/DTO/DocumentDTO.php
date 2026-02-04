@@ -78,6 +78,7 @@ readonly class DocumentDTO
             ? self::formatToMoney($document->profit_total, $currencyCode)
             : null;
 
+        
         $subtotal = ($discount || $tax)
             ? self::formatToMoney($document->subtotal, $currencyCode)
             : self::formatToMoney($document->subtotal, $currencyCode);
@@ -118,7 +119,7 @@ readonly class DocumentDTO
         if ($document?->profit_rate) {
             $profitRate = $document?->profit_rate;
         }
-
+        
         return new self(
             detail: $document,
             header: $settings->header,

@@ -142,15 +142,7 @@
                         </tr>
                     @endforeach
 
-                    <!-- Pajak -->
-                    @if ($document->tax)
-                        <tr>
-                            <td colspan="5" class="px-2 text-right">PPN 11%</td>
-                            <td class="px-2 text-right">
-                                {{ formatMoneyCeiling($document->tax) }}
-                            </td>
-                        </tr>
-                    @endif
+                    
 
                     <!-- Jumlah -->
                     @if ($document->subtotal)

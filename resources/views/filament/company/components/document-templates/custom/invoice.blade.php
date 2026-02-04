@@ -202,19 +202,20 @@
                     @endforeach
                 @endif
 
-                <!-- Profit -->
-                <tr>
-                    <td colspan="2" class="px-2 text-right border-t border-black">Profit {{ $document->profitPercentage }}%</td>
-                    <td class="px-2 text-right border-t border-black">
-                        {{ formatMoneyCeiling($document->profit) }}
-                    </td>
-                </tr>
 
                 <!-- Jumlah -->
                 <tr>
                     <td colspan="2" class="px-2 text-right border-t border-black">Jumlah</td>
                     <td class="px-2 text-right border-t border-black">
-                        {{ formatMoneyCeiling(numberToRupiah(rupiahToNumber($document->subtotal) + rupiahToNumber($document->profit))) }}
+                        {{ formatMoneyCeiling(numberToRupiah(rupiahToNumber($document->subtotal))) }}
+                    </td>
+                </tr>
+
+                <!-- Profit -->
+                <tr>
+                    <td colspan="2" class="px-2 text-right border-t border-black">Profit {{ $document->profitPercentage }}%</td>
+                    <td class="px-2 text-right border-t border-black">
+                        {{ formatMoneyCeiling($document->profit) }}
                     </td>
                 </tr>
 
