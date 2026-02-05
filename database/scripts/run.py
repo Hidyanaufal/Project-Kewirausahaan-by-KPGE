@@ -144,6 +144,11 @@ success(f"Default offering found: ID {offering_id}")
 # ============================================================
 # 4. EXECUTION LOOP
 # ============================================================
+projects_inserted = 0
+projects_updated = 0
+invoices_inserted = 0
+invoices_updated = 0
+
 for sheet in ORDER:
 
     # Determine parser
@@ -188,12 +193,24 @@ for sheet in ORDER:
 
             for p in proj_data:
 
-                project_number = clean_value(p["number"])
+                prefix = str(clean_value(p.get("number_prefix")) or "").strip()
+                number_part = str(clean_value(p.get("number")) or "").strip()
+                # Avoid duplicate prefix: if "Nomor Projek" already contains full number (e.g. "EO25-359"),
+                # do not prepend prefix again (would become "EO25-EO25-359")
+                if prefix and number_part.startswith(prefix):
+                    project_number = number_part or None
+                else:
+                    project_number = f"{prefix}{number_part}".strip() or None
+                # Normalize: zero-pad numeric suffix to 3 digits (e.g. KG25-1 → KG25-001)
+                if project_number and "-" in project_number:
+                    pre, _, suffix = project_number.rpartition("-")
+                    if suffix.isdigit():
+                        project_number = f"{pre}-{int(suffix):03d}"
                 project_name = clean_value(p["name"])
                 client_name = clean_value(p["client_name"])
 
                 # -----------------------
-                # CEK DUPLIKAT PROJECT
+                # CHECK DUPLICATE PROJECT
                 # -----------------------
                 if not project_number:
                     warn(f"Project number empty for project '{project_name}'. Skipped.")
@@ -209,13 +226,13 @@ for sheet in ORDER:
                 ).fetchone()
 
                 if existing_project:
-                    print(f"⚠ Project {project_name} (Number {project_number}) sudah ada (ID {existing_project[0]}), skip insert")
-                    # Cek apakah nama project di database sama dengan nama project di excel
+                    print(f"⚠ Project {project_name} (Number {project_number}) already exists (ID {existing_project[0]}), skipping insert")
+                    # Check if project name in database matches project name in Excel
                     project_name_db = conn.execute(
                         text("SELECT name FROM projects WHERE id = :id"),
                         {"id": existing_project[0]}
                     ).fetchone()
-                    # Jika nama project di database berbeda maka samakan dengan nama project di excel
+                    # If project name in DB differs, update to match Excel
                     if project_name_db[0] != project_name:
                         result = conn.execute(
                             text("UPDATE projects SET name = :name WHERE id = :id"),
@@ -223,10 +240,11 @@ for sheet in ORDER:
                         )
                         conn.commit()
                         success(f"Updated project name: {project_name}")
-                    continue  # skip jika sudah ada
+                        projects_updated += 1
+                    continue  # skip if already exists
 
                 # -----------------------
-                # CEK / INSERT CLIENT
+                # CHECK / INSERT CLIENT
                 # -----------------------
                 if not client_name:
                     if last_client_id is None:
@@ -290,6 +308,7 @@ for sheet in ORDER:
 
                 conn.commit()
                 project_id = result.lastrowid
+                projects_inserted += 1
                 success(f"Inserted Project: {project_name} (ID {project_id})")
 
     # ============================================================
@@ -323,7 +342,7 @@ for sheet in ORDER:
                 project_id, client_id = project
                 invoice_number = clean_value(inv["invoice_number"])
 
-                # Ambil nilai (untuk insert dan update)
+                # Get values (for insert and update)
                 dpp = clean_value(inv["dpp"]) or 0
                 profit = clean_value(inv.get("profit", 0)) or 0
                 ppn = clean_value(inv["ppn"]) or 0
@@ -338,7 +357,7 @@ for sheet in ORDER:
                 profit_total = profit
                 total = dpp + profit_total + ppn
 
-                # Status & amount_paid dari Excel: PAID = lunas, else pakai paid_value jika angka > 0
+                # Status & amount_paid from Excel: PAID = fully paid, else use paid_value if > 0
                 is_paid_status = str(inv.get("status", "")).strip().upper() == "PAID"
                 paid_value = inv.get("paid_value", 0) or 0
                 if is_paid_status:
@@ -352,7 +371,7 @@ for sheet in ORDER:
                     amount_paid_cents = 0
 
                 # -----------------------
-                # CEK DUPLIKAT INVOICE (upsert by invoice_number + company_id)
+                # CHECK DUPLICATE INVOICE (upsert by invoice_number + company_id)
                 # -----------------------
                 existing = conn.execute(
                     text("SELECT id FROM invoices WHERE invoice_number = :inv AND company_id = :cid"),
@@ -389,10 +408,11 @@ for sheet in ORDER:
                         }
                     )
                     conn.commit()
+                    invoices_updated += 1
                     success(f"Updated Invoice: {invoice_number} (ID {invoice_id})")
                 else:
                     # -----------------------
-                    # INSERT KE DATABASE
+                    # INSERT INTO DATABASE
                     # -----------------------
                     result = conn.execute(
                         text("""
@@ -442,4 +462,15 @@ for sheet in ORDER:
                         }
                     )
                     conn.commit()
+                    invoices_inserted += 1
                     success(f"Inserted Invoice: {invoice_number} (ID {invoice_id})")
+
+# ============================================================
+# 5. SUMMARY
+# ============================================================
+print(Fore.CYAN + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print(Fore.CYAN + "  IMPORT SUMMARY")
+print(Fore.CYAN + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + Style.RESET_ALL)
+print(Fore.WHITE + f"\n  Project  — Added: {projects_inserted}  |  Updated: {projects_updated}")
+print(Fore.WHITE + f"  Invoice  — Added: {invoices_inserted}  |  Updated: {invoices_updated}")
+print(Fore.CYAN + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + Style.RESET_ALL)
