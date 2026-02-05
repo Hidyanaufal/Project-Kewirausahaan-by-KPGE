@@ -282,6 +282,35 @@ for sheet in ORDER:
                     continue
 
                 # -----------------------
+                # RESOLVE PIC INTERNAL (from Excel "PIC Internal" or default)
+                # Clean: strip, lower, normalize "&" and spaces; match by LIKE lower-to-lower, most similar
+                # -----------------------
+                pic_internal_raw = (clean_value(p.get("pic_internal")) or "").strip()
+                pic_internal_name = " ".join(str(pic_internal_raw).lower().replace("&", " ").split()) if pic_internal_raw else ""
+                pic_id = CREATED_BY
+                if pic_internal_name:
+                    words = [w for w in pic_internal_name.split() if w]
+                    if words:
+                        # Match user whose name contains all words (lower vs lower), prefer shortest match
+                        like_params = {f"w{i}": f"%{w}%" for i, w in enumerate(words)}
+                        like_conds = " AND ".join(f"LOWER(name) LIKE :w{i}" for i in range(len(words)))
+                        q = text(f"SELECT id FROM users WHERE {like_conds} ORDER BY LENGTH(name) LIMIT 1")
+                        pic_user = conn.execute(q, like_params).fetchone()
+                        if pic_user:
+                            pic_id = pic_user[0]
+                        else:
+                            # Fallback: match first word only (e.g. "ROBBY & FERDINAND" -> LIKE '%robby%')
+                            pic_user = conn.execute(
+                                text("SELECT id FROM users WHERE LOWER(name) LIKE :pat ORDER BY LENGTH(name) LIMIT 1"),
+                                {"pat": f"%{words[0]}%"}
+                            ).fetchone()
+                            pic_id = pic_user[0] if pic_user else CREATED_BY
+                        if pic_id == CREATED_BY and not pic_user:
+                            info(f"PIC Internal '{pic_internal_raw}' not found in users, using default (CREATED_BY={CREATED_BY})")
+                    else:
+                        pic_id = CREATED_BY
+
+                # -----------------------
                 # INSERT PROJECT
                 # -----------------------
                 result = conn.execute(
@@ -289,13 +318,14 @@ for sheet in ORDER:
                         INSERT INTO projects
                         (company_id, project_type_id, client_id, pic_id, number, name, work_basis,
                         request_number_date, project_value, start_date, end_date, is_imported)
-                        VALUES (:cid, :ptid, :clid, 1, :num, :name, :basis,
+                        VALUES (:cid, :ptid, :clid, :picid, :num, :name, :basis,
                                 :req, :value, :start, :end, 1)
                     """),
                     {
                         "cid": COMPANY_ID,
                         "ptid": project_type_id,
                         "clid": client_id,
+                        "picid": pic_id,
                         "num": project_number,
                         "name": project_name,
                         "basis": clean_value(p["work_basis"]),
