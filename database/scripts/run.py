@@ -323,19 +323,7 @@ for sheet in ORDER:
                 project_id, client_id = project
                 invoice_number = clean_value(inv["invoice_number"])
 
-                # -----------------------
-                # CEK DUPLIKAT INVOICE
-                # -----------------------
-                existing = conn.execute(
-                    text("SELECT id FROM invoices WHERE invoice_number = :inv AND company_id = :cid"),
-                    {"inv": invoice_number, "cid": COMPANY_ID}
-                ).fetchone()
-
-                if existing:
-                    print(f"⚠ Invoice {invoice_number} sudah ada (ID {existing[0]}), skip insert")
-                    continue  # skip jika sudah ada
-
-                # Ambil nilai
+                # Ambil nilai (untuk insert dan update)
                 dpp = clean_value(inv["dpp"]) or 0
                 profit = clean_value(inv.get("profit", 0)) or 0
                 ppn = clean_value(inv["ppn"]) or 0
@@ -350,54 +338,108 @@ for sheet in ORDER:
                 profit_total = profit
                 total = dpp + profit_total + ppn
 
-                # -----------------------
-                # INSERT KE DATABASE
-                # -----------------------
-                result = conn.execute(
-                    text("""
-                        INSERT INTO invoices
-                        (company_id, client_id, project_id, invoice_number,
-                        date, subtotal, profit_computation, profit_rate, profit_total,
-                        tax_total, total, actual_total, amount_paid, status, currency_code, is_imported)
-                        VALUES (:cid, :clid, :pid, :inv, :date,
-                                :subtotal, 'percentage', :profit_rate, :profit_total,
-                                :ppn, :total, :actual_total, :paid, 'paid', :cur, 1)
-                    """),
-                    {
-                        "cid": COMPANY_ID,
-                        "clid": client_id,
-                        "pid": project_id,
-                        "inv": invoice_number,
-                        "date": clean_value(inv["date"]),
-                        "subtotal": int(round(dpp * 100)),
-                        "profit_rate": profit_rate,
-                        "profit_total": int(round(profit_total * 100)),
-                        "ppn": int(round(ppn * 100)),
-                        "total": int(round(total * 100)),
-                        "actual_total": int(round(total * 100)),
-                        "paid": int(round(total * 100)),
-                        "cur": "IDR",
-                    }
-                )
-                conn.commit()
-                invoice_id = result.lastrowid
+                # Status & amount_paid dari Excel: PAID = lunas, else pakai paid_value jika angka > 0
+                is_paid_status = str(inv.get("status", "")).strip().upper() == "PAID"
+                paid_value = inv.get("paid_value", 0) or 0
+                if is_paid_status:
+                    invoice_status = "paid"
+                    amount_paid_cents = int(round(total * 100))
+                elif paid_value > 0:
+                    invoice_status = "partial"
+                    amount_paid_cents = int(round(paid_value * 100))
+                else:
+                    invoice_status = "sent"
+                    amount_paid_cents = 0
 
-                # INSERT LINE ITEMS
-                conn.execute(
-                    text("""
-                        INSERT INTO document_line_items
-                        (company_id, offering_id, documentable_type, documentable_id,
-                        description, unit_price, tax_total)
-                        VALUES (:cid, :oid, 'App\\\\Models\\\\Accounting\\\\Invoice', :iid, :desc, :price, :tax)
-                    """),
-                    {
-                        "cid": COMPANY_ID,
-                        "oid": offering_id,
-                        "iid": invoice_id,
-                        "desc": clean_value(inv["item_description"]),
-                        "price": int(clean_value(inv["dpp"]) * 100),
-                        "tax": int(clean_value(inv["ppn"]) * 100),
-                    }
-                )
-                conn.commit()
-                success(f"Inserted Invoice: {invoice_number} (ID {invoice_id})")
+                # -----------------------
+                # CEK DUPLIKAT INVOICE (upsert by invoice_number + company_id)
+                # -----------------------
+                existing = conn.execute(
+                    text("SELECT id FROM invoices WHERE invoice_number = :inv AND company_id = :cid"),
+                    {"inv": invoice_number, "cid": COMPANY_ID}
+                ).fetchone()
+
+                if existing:
+                    invoice_id = existing[0]
+                    conn.execute(
+                        text("""
+                            UPDATE invoices SET
+                                status = :status,
+                                amount_paid = :amount_paid,
+                                date = :date,
+                                subtotal = :subtotal,
+                                profit_rate = :profit_rate,
+                                profit_total = :profit_total,
+                                tax_total = :tax_total,
+                                total = :total,
+                                actual_total = :actual_total
+                            WHERE id = :id
+                        """),
+                        {
+                            "id": invoice_id,
+                            "status": invoice_status,
+                            "amount_paid": amount_paid_cents,
+                            "date": clean_value(inv["date"]),
+                            "subtotal": int(round(dpp * 100)),
+                            "profit_rate": profit_rate,
+                            "profit_total": int(round(profit_total * 100)),
+                            "tax_total": int(round(ppn * 100)),
+                            "total": int(round(total * 100)),
+                            "actual_total": int(round(total * 100)),
+                        }
+                    )
+                    conn.commit()
+                    success(f"Updated Invoice: {invoice_number} (ID {invoice_id})")
+                else:
+                    # -----------------------
+                    # INSERT KE DATABASE
+                    # -----------------------
+                    result = conn.execute(
+                        text("""
+                            INSERT INTO invoices
+                            (company_id, client_id, project_id, invoice_number,
+                            date, subtotal, profit_computation, profit_rate, profit_total,
+                            tax_total, total, actual_total, amount_paid, status, currency_code, is_imported)
+                            VALUES (:cid, :clid, :pid, :inv, :date,
+                                    :subtotal, 'percentage', :profit_rate, :profit_total,
+                                    :ppn, :total, :actual_total, :amount_paid, :status, :cur, 1)
+                        """),
+                        {
+                            "cid": COMPANY_ID,
+                            "clid": client_id,
+                            "pid": project_id,
+                            "inv": invoice_number,
+                            "date": clean_value(inv["date"]),
+                            "subtotal": int(round(dpp * 100)),
+                            "profit_rate": profit_rate,
+                            "profit_total": int(round(profit_total * 100)),
+                            "ppn": int(round(ppn * 100)),
+                            "total": int(round(total * 100)),
+                            "actual_total": int(round(total * 100)),
+                            "amount_paid": amount_paid_cents,
+                            "status": invoice_status,
+                            "cur": "IDR",
+                        }
+                    )
+                    conn.commit()
+                    invoice_id = result.lastrowid
+
+                    # INSERT LINE ITEMS
+                    conn.execute(
+                        text("""
+                            INSERT INTO document_line_items
+                            (company_id, offering_id, documentable_type, documentable_id,
+                            description, unit_price, tax_total)
+                            VALUES (:cid, :oid, 'App\\\\Models\\\\Accounting\\\\Invoice', :iid, :desc, :price, :tax)
+                        """),
+                        {
+                            "cid": COMPANY_ID,
+                            "oid": offering_id,
+                            "iid": invoice_id,
+                            "desc": clean_value(inv["item_description"]),
+                            "price": int(round(dpp * 100)),
+                            "tax": int(round(ppn * 100)),
+                        }
+                    )
+                    conn.commit()
+                    success(f"Inserted Invoice: {invoice_number} (ID {invoice_id})")
