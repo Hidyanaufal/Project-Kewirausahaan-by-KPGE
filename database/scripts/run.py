@@ -144,6 +144,11 @@ success(f"Default offering found: ID {offering_id}")
 # ============================================================
 # 4. EXECUTION LOOP
 # ============================================================
+projects_inserted = 0
+projects_updated = 0
+invoices_inserted = 0
+invoices_updated = 0
+
 for sheet in ORDER:
 
     # Determine parser
@@ -156,11 +161,10 @@ for sheet in ORDER:
         continue
 
     section(sheet)
-
     df = pd.read_excel(excel_path, sheet_name=sheet)
 
     # ============================================================
-    # PROJECT SHEETS
+    # PROJECT SHEET
     # ============================================================
     if parser_type == "project":
 
@@ -189,16 +193,65 @@ for sheet in ORDER:
 
             for p in proj_data:
 
+                prefix = str(clean_value(p.get("number_prefix")) or "").strip()
+                number_part = str(clean_value(p.get("number")) or "").strip()
+                # Avoid duplicate prefix: if "Nomor Projek" already contains full number (e.g. "EO25-359"),
+                # do not prepend prefix again (would become "EO25-EO25-359")
+                if prefix and number_part.startswith(prefix):
+                    project_number = number_part or None
+                else:
+                    project_number = f"{prefix}{number_part}".strip() or None
+                # Normalize: zero-pad numeric suffix to 3 digits (e.g. KG25-1 → KG25-001)
+                if project_number and "-" in project_number:
+                    pre, _, suffix = project_number.rpartition("-")
+                    if suffix.isdigit():
+                        project_number = f"{pre}-{int(suffix):03d}"
+                project_name = clean_value(p["name"])
                 client_name = clean_value(p["client_name"])
 
+                # -----------------------
+                # CHECK DUPLICATE PROJECT
+                # -----------------------
+                if not project_number:
+                    warn(f"Project number empty for project '{project_name}'. Skipped.")
+                    continue
+
+                existing_project = conn.execute(
+                    text("""
+                        SELECT id FROM projects
+                        WHERE number = :num AND company_id = :cid
+                        LIMIT 1
+                    """),
+                    {"num": project_number, "cid": COMPANY_ID}
+                ).fetchone()
+
+                if existing_project:
+                    print(f"⚠ Project {project_name} (Number {project_number}) already exists (ID {existing_project[0]}), skipping insert")
+                    # Check if project name in database matches project name in Excel
+                    project_name_db = conn.execute(
+                        text("SELECT name FROM projects WHERE id = :id"),
+                        {"id": existing_project[0]}
+                    ).fetchone()
+                    # If project name in DB differs, update to match Excel
+                    if project_name_db[0] != project_name:
+                        result = conn.execute(
+                            text("UPDATE projects SET name = :name WHERE id = :id"),
+                            {"name": project_name, "id": existing_project[0]}
+                        )
+                        conn.commit()
+                        success(f"Updated project name: {project_name}")
+                        projects_updated += 1
+                    continue  # skip if already exists
+
+                # -----------------------
+                # CHECK / INSERT CLIENT
+                # -----------------------
                 if not client_name:
                     if last_client_id is None:
-                        warn(f"Client empty for project '{p['name']}'. Skipped.")
+                        warn(f"Client empty for project '{project_name}'. Skipped.")
                         continue
-
                     client_id = last_client_id
                     info(f"Using previous client: {last_client_name}")
-
                 else:
                     client = conn.execute(
                         text("""
@@ -225,23 +278,56 @@ for sheet in ORDER:
                     last_client_id = client_id
                     last_client_name = client_name
 
-                if clean_value(p["name"]) is None:
+                if not project_name:
                     continue
 
+                # -----------------------
+                # RESOLVE PIC INTERNAL (from Excel "PIC Internal" or default)
+                # Clean: strip, lower, normalize "&" and spaces; match by LIKE lower-to-lower, most similar
+                # -----------------------
+                pic_internal_raw = (clean_value(p.get("pic_internal")) or "").strip()
+                pic_internal_name = " ".join(str(pic_internal_raw).lower().replace("&", " ").split()) if pic_internal_raw else ""
+                pic_id = CREATED_BY
+                if pic_internal_name:
+                    words = [w for w in pic_internal_name.split() if w]
+                    if words:
+                        # Match user whose name contains all words (lower vs lower), prefer shortest match
+                        like_params = {f"w{i}": f"%{w}%" for i, w in enumerate(words)}
+                        like_conds = " AND ".join(f"LOWER(name) LIKE :w{i}" for i in range(len(words)))
+                        q = text(f"SELECT id FROM users WHERE {like_conds} ORDER BY LENGTH(name) LIMIT 1")
+                        pic_user = conn.execute(q, like_params).fetchone()
+                        if pic_user:
+                            pic_id = pic_user[0]
+                        else:
+                            # Fallback: match first word only (e.g. "ROBBY & FERDINAND" -> LIKE '%robby%')
+                            pic_user = conn.execute(
+                                text("SELECT id FROM users WHERE LOWER(name) LIKE :pat ORDER BY LENGTH(name) LIMIT 1"),
+                                {"pat": f"%{words[0]}%"}
+                            ).fetchone()
+                            pic_id = pic_user[0] if pic_user else CREATED_BY
+                        if pic_id == CREATED_BY and not pic_user:
+                            info(f"PIC Internal '{pic_internal_raw}' not found in users, using default (CREATED_BY={CREATED_BY})")
+                    else:
+                        pic_id = CREATED_BY
+
+                # -----------------------
+                # INSERT PROJECT
+                # -----------------------
                 result = conn.execute(
                     text("""
                         INSERT INTO projects
                         (company_id, project_type_id, client_id, pic_id, number, name, work_basis,
                         request_number_date, project_value, start_date, end_date, is_imported)
-                        VALUES (:cid, :ptid, :clid, 1, :num, :name, :basis,
+                        VALUES (:cid, :ptid, :clid, :picid, :num, :name, :basis,
                                 :req, :value, :start, :end, 1)
                     """),
                     {
                         "cid": COMPANY_ID,
                         "ptid": project_type_id,
                         "clid": client_id,
-                        "num": clean_value(p["number"]),
-                        "name": clean_value(p["name"]),
+                        "picid": pic_id,
+                        "num": project_number,
+                        "name": project_name,
                         "basis": clean_value(p["work_basis"]),
                         "req": clean_value(p["request_number_date"]),
                         "value": clean_value(p["project_value"]) * 100,
@@ -252,12 +338,13 @@ for sheet in ORDER:
 
                 conn.commit()
                 project_id = result.lastrowid
-                success(f"Inserted Project: {p['name']} (ID {project_id})")
+                projects_inserted += 1
+                success(f"Inserted Project: {project_name} (ID {project_id})")
 
     # ============================================================
     # INVOICE SHEET
     # ============================================================
-    elif parser_type == "invoice":
+    if parser_type == "invoice":
 
         inv_data = parse_invoice_sheet(df)
 
@@ -283,15 +370,13 @@ for sheet in ORDER:
                     continue
 
                 project_id, client_id = project
+                invoice_number = clean_value(inv["invoice_number"])
 
-                # Ambil nilai (pastikan clean_value mengembalikan numeric/float)
+                # Get values (for insert and update)
                 dpp = clean_value(inv["dpp"]) or 0
                 profit = clean_value(inv.get("profit", 0)) or 0
                 ppn = clean_value(inv["ppn"]) or 0
 
-                # Hitung profit percentage dan profit_rate dengan skala yang benar:
-                # profit_percentage = (profit / dpp) * 100  (contoh: 12.0)
-                # profit_rate (DB) = profit_percentage * 10_000  (contoh: 12% -> 120000)
                 if dpp > 0 and profit > 0:
                     profit_percentage = (profit / dpp) * 100.0
                     profit_rate = int(round(profit_percentage * 10000))   # 1% -> 10000 ; 12% -> 120000
@@ -302,56 +387,120 @@ for sheet in ORDER:
                 profit_total = profit
                 total = dpp + profit_total + ppn
 
-                result = conn.execute(
-                    text("""
-                        INSERT INTO invoices
-                        (company_id, client_id, project_id, invoice_number,
-                        date, subtotal, profit_computation, profit_rate, profit_total,
-                        tax_total, total, actual_total, amount_paid, status, currency_code, is_imported)
-                        VALUES (:cid, :clid, :pid, :inv, :date,
-                                :subtotal, 'percentage', :profit_rate, :profit_total,
-                                :ppn, :total, :actual_total, :paid, 'paid', :cur, 1)
-                    """),
-                    {
-                        "cid": COMPANY_ID,
-                        "clid": client_id,
-                        "pid": project_id,
-                        "inv": clean_value(inv["invoice_number"]),
-                        "date": clean_value(inv["date"]),
+                # Status & amount_paid from Excel: PAID = fully paid, else use paid_value if > 0
+                is_paid_status = str(inv.get("status", "")).strip().upper() == "PAID"
+                paid_value = inv.get("paid_value", 0) or 0
+                if is_paid_status:
+                    invoice_status = "paid"
+                    amount_paid_cents = int(round(total * 100))
+                elif paid_value > 0:
+                    invoice_status = "partial"
+                    amount_paid_cents = int(round(paid_value * 100))
+                else:
+                    invoice_status = "sent"
+                    amount_paid_cents = 0
 
-                        # simpan rupiah sebagai integer (×100)
-                        "subtotal": int(round(dpp * 100)),
-                        "profit_rate": profit_rate,                   # percent × 10_000
-                        "profit_total": int(round(profit_total * 100)),
-                        "ppn": int(round(ppn * 100)),
-                        "total": int(round(total * 100)),
-                        "actual_total": int(round(total * 100)),
-                        "paid": int(round(total * 100)),
-                        "cur": "IDR",
-                    }
-                )
+                # -----------------------
+                # CHECK DUPLICATE INVOICE (upsert by invoice_number + company_id)
+                # -----------------------
+                existing = conn.execute(
+                    text("SELECT id FROM invoices WHERE invoice_number = :inv AND company_id = :cid"),
+                    {"inv": invoice_number, "cid": COMPANY_ID}
+                ).fetchone()
 
-                conn.commit()
-                invoice_id = result.lastrowid
+                if existing:
+                    invoice_id = existing[0]
+                    conn.execute(
+                        text("""
+                            UPDATE invoices SET
+                                status = :status,
+                                amount_paid = :amount_paid,
+                                date = :date,
+                                subtotal = :subtotal,
+                                profit_rate = :profit_rate,
+                                profit_total = :profit_total,
+                                tax_total = :tax_total,
+                                total = :total,
+                                actual_total = :actual_total
+                            WHERE id = :id
+                        """),
+                        {
+                            "id": invoice_id,
+                            "status": invoice_status,
+                            "amount_paid": amount_paid_cents,
+                            "date": clean_value(inv["date"]),
+                            "subtotal": int(round(dpp * 100)),
+                            "profit_rate": profit_rate,
+                            "profit_total": int(round(profit_total * 100)),
+                            "tax_total": int(round(ppn * 100)),
+                            "total": int(round(total * 100)),
+                            "actual_total": int(round(total * 100)),
+                        }
+                    )
+                    conn.commit()
+                    invoices_updated += 1
+                    success(f"Updated Invoice: {invoice_number} (ID {invoice_id})")
+                else:
+                    # -----------------------
+                    # INSERT INTO DATABASE
+                    # -----------------------
+                    result = conn.execute(
+                        text("""
+                            INSERT INTO invoices
+                            (company_id, client_id, project_id, invoice_number,
+                            date, subtotal, profit_computation, profit_rate, profit_total,
+                            tax_total, total, actual_total, amount_paid, status, currency_code, is_imported)
+                            VALUES (:cid, :clid, :pid, :inv, :date,
+                                    :subtotal, 'percentage', :profit_rate, :profit_total,
+                                    :ppn, :total, :actual_total, :amount_paid, :status, :cur, 1)
+                        """),
+                        {
+                            "cid": COMPANY_ID,
+                            "clid": client_id,
+                            "pid": project_id,
+                            "inv": invoice_number,
+                            "date": clean_value(inv["date"]),
+                            "subtotal": int(round(dpp * 100)),
+                            "profit_rate": profit_rate,
+                            "profit_total": int(round(profit_total * 100)),
+                            "ppn": int(round(ppn * 100)),
+                            "total": int(round(total * 100)),
+                            "actual_total": int(round(total * 100)),
+                            "amount_paid": amount_paid_cents,
+                            "status": invoice_status,
+                            "cur": "IDR",
+                        }
+                    )
+                    conn.commit()
+                    invoice_id = result.lastrowid
 
-                conn.execute(
-                    text("""
-                        INSERT INTO document_line_items
-                        (company_id, offering_id, documentable_type, documentable_id,
-                         description, unit_price, tax_total)
-                        VALUES (:cid, :oid, 'App\\\\Models\\\\Accounting\\\\Invoice', :iid, :desc, :price, :tax)
-                    """),
-                    {
-                        "cid": COMPANY_ID,
-                        "oid": offering_id,
-                        "iid": invoice_id,
-                        "desc": clean_value(inv["item_description"]),
-                        "price": clean_value(inv["dpp"]) * 100,
-                        "tax": clean_value(inv["ppn"]) * 100,
-                    }
-                )
-                conn.commit()
+                    # INSERT LINE ITEMS
+                    conn.execute(
+                        text("""
+                            INSERT INTO document_line_items
+                            (company_id, offering_id, documentable_type, documentable_id,
+                            description, unit_price, tax_total)
+                            VALUES (:cid, :oid, 'App\\\\Models\\\\Accounting\\\\Invoice', :iid, :desc, :price, :tax)
+                        """),
+                        {
+                            "cid": COMPANY_ID,
+                            "oid": offering_id,
+                            "iid": invoice_id,
+                            "desc": clean_value(inv["item_description"]),
+                            "price": int(round(dpp * 100)),
+                            "tax": int(round(ppn * 100)),
+                        }
+                    )
+                    conn.commit()
+                    invoices_inserted += 1
+                    success(f"Inserted Invoice: {invoice_number} (ID {invoice_id})")
 
-                success(f"Inserted Invoice: {inv['invoice_number']} (ID {invoice_id})")
-
-print(Fore.GREEN + "\n✔ Migration completed successfully!" + Style.RESET_ALL)
+# ============================================================
+# 5. SUMMARY
+# ============================================================
+print(Fore.CYAN + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print(Fore.CYAN + "  IMPORT SUMMARY")
+print(Fore.CYAN + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + Style.RESET_ALL)
+print(Fore.WHITE + f"\n  Project  — Added: {projects_inserted}  |  Updated: {projects_updated}")
+print(Fore.WHITE + f"  Invoice  — Added: {invoices_inserted}  |  Updated: {invoices_updated}")
+print(Fore.CYAN + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + Style.RESET_ALL)
