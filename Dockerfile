@@ -53,6 +53,10 @@ WORKDIR /var/www
 # Copy app files
 COPY --chown=www-data:www-data . /var/www
 
+# Fix PHP-FPM user/group warning
+RUN sed -i 's/^user =/;user =/' /usr/local/etc/php-fpm.d/www.conf \
+ && sed -i 's/^group =/;group =/' /usr/local/etc/php-fpm.d/www.conf
+
 # Expose port 9000
 EXPOSE 9000
 
