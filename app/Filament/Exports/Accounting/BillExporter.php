@@ -20,6 +20,8 @@ class BillExporter extends Exporter
             ExportColumn::make('due_date')
                 ->date(),
             ExportColumn::make('vendor.name'),
+            ExportColumn::make('project.number')
+                ->label('Project number'),
             ExportColumn::make('status')
                 ->enum(),
             ExportColumn::make('total')

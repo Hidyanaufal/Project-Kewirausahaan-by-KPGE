@@ -15,12 +15,14 @@ class InvoiceExporter extends Exporter
     {
         return [
             ExportColumn::make('invoice_number'),
-            ExportColumn::make('tax_number'),
+            ExportColumn::make('tkaax_number'),
             ExportColumn::make('date')
                 ->date(),
             ExportColumn::make('due_date')
                 ->date(),
             ExportColumn::make('client.name'),
+            ExportColumn::make('project.number')
+                ->label('Project number'),
             ExportColumn::make('status')
                 ->enum(),
             ExportColumn::make('total')
