@@ -174,11 +174,6 @@ class VendorResource extends Resource
                 Tables\Columns\TextColumn::make('contact.first_available_phone')
                     ->label('Phone')
                     ->state(static fn(Vendor $vendor) => $vendor->contact?->first_available_phone),
-                Tables\Columns\TextColumn::make('address.address_string')
-                    ->label('Address')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->listWithLineBreaks(),
                 Tables\Columns\TextColumn::make('payable_balance')
                     ->label('Payable balance')
                     ->getStateUsing(function (Vendor $vendor) {
