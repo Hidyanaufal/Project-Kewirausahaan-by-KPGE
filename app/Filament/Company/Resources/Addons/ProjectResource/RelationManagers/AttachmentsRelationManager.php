@@ -47,7 +47,7 @@ class AttachmentsRelationManager extends RelationManager
                     ->label('Upload File')
                     ->helperText('Maximum size: 20MB. Supported formats: PDF, Word, or image files.')
                     ->directory('attachments')
-                    // ->reactive()
+                    ->reactive()
                     ->visible(fn(Forms\Get $get) => $get('is_file'))
                     ->visibility('private')
                     ->downloadable()
