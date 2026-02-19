@@ -54,7 +54,8 @@ class ViewBill extends ViewRecord
                 }),
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
-                    Bill::getApproveDraftAction(),
+                    Bill::getApproveDraftAction()
+                    ->after(fn () => $this->dispatch('refresh')),
                 ])->dropdown(false),
                 Actions\ActionGroup::make([
                     Actions\Action::make('journal_summary')
