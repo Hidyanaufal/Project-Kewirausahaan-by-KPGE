@@ -225,7 +225,7 @@ class TransactionObserver
 
         $totalPaidInBillCurrencyCents = $withdrawalTotalInBillCurrencyCents;
 
-        $billTotalInBillCurrencyCents = (int) $bill->total;
+        $billTotalInBillCurrencyCents = (int) ($bill->actual_total ?? $bill->total);
 
         $newStatus = match (true) {
             $totalPaidInBillCurrencyCents >= $billTotalInBillCurrencyCents => BillStatus::Paid,

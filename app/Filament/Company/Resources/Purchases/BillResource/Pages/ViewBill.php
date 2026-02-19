@@ -10,12 +10,14 @@ use App\Filament\Company\Resources\Purchases\VendorResource;
 use App\Helpers\AuthHelper;
 use App\Models\Accounting\Bill;
 use Filament\Actions;
+use Filament\Forms\Components\Placeholder;
 use Filament\Infolists\Components\Group;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\IconPosition;
+use Filament\Support\Enums\MaxWidth;
 use Illuminate\Database\Eloquent\Model;
 
 class ViewBill extends ViewRecord
@@ -54,6 +56,44 @@ class ViewBill extends ViewRecord
                 Actions\ActionGroup::make([
                     Bill::getApproveDraftAction(),
                 ])->dropdown(false),
+                Actions\ActionGroup::make([
+                    Actions\Action::make('journal_summary')
+                        ->icon('heroicon-s-book-open')
+                        ->outlined()
+                        ->modalWidth(MaxWidth::SevenExtraLarge)
+                        ->modalHeading('Journal Summary for ' . $this->record->bill_number)
+                        ->slideOver()
+                        ->modalFooterActions(fn() => [])
+                        ->visible(function () {
+                            return AuthHelper::isAdmin();
+                        })
+                        ->form([
+                            Placeholder::make('journal_entries')
+                                ->view('filament.company.resources.purchases.bill-resource.pages.journal-summary', [
+                                    'journalEntries' => $this->record?->transactions?->flatMap(fn($transaction) => $transaction->journalEntries) ?? collect(),
+                                ]),
+                        ]),
+                    Actions\Action::make('journal_detail')
+                        ->icon('heroicon-o-book-open')
+                        ->outlined()
+                        ->modalWidth(MaxWidth::SevenExtraLarge)
+                        ->modalHeading('Journal Detail for ' . $this->record->bill_number)
+                        ->slideOver()
+                        ->modalFooterActions(fn() => [])
+                        ->visible(function () {
+                            return AuthHelper::isAdmin();
+                        })
+                        ->form([
+                            Placeholder::make('journal_entries')
+                                ->view('filament.company.resources.purchases.bill-resource.pages.journal-detail', [
+                                    'journalEntries' => $this->record?->transactions?->flatMap(fn($transaction) => $transaction->journalEntries) ?? collect(),
+                                ]),
+                        ]),
+                ])
+                    ->dropdown(false)
+                    ->visible(function () {
+                        return AuthHelper::isAdmin();
+                    }),
                 Actions\DeleteAction::make(),
             ])
                 ->label('Actions')

@@ -21,6 +21,7 @@ use App\Models\Company;
 use App\Models\Setting\DocumentDefault;
 use App\Observers\BillObserver;
 use App\Utilities\Currency\CurrencyAccessor;
+use Illuminate\Support\Facades\DB;
 use App\Utilities\Currency\CurrencyConverter;
 use Filament\Actions\Action;
 use Filament\Actions\MountableAction;
@@ -60,6 +61,8 @@ class Bill extends Document
         'tax_total',
         'discount_total',
         'total',
+        'pph23',
+        'actual_total',
         'amount_paid',
         'notes',
         'terms',
@@ -78,6 +81,69 @@ class Bill extends Document
         'discount_rate' => RateCast::class,
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+        static::creating(function (Bill $record) {
+            if (($record->pph23 ?? null) === null && $record->subtotal > 0) {
+                $record->pph23 = (int) round($record->subtotal * 0.02);
+            }
+            $record->actual_total = $record->total - ($record->pph23 ?? 0);
+        });
+        static::updating(function (Bill $record) {
+            if (($record->pph23 ?? null) === null && $record->subtotal > 0) {
+                $record->pph23 = (int) round($record->subtotal * 0.02);
+            }
+            $record->actual_total = $record->total - ($record->pph23 ?? 0);
+
+            if ($record->isDirty('status') && $record->status === BillStatus::Paid && $record->pph23) {
+                $accountPPh23 = Account::getAccountsPPh23($record->company_id);
+                $accountPayable = Account::getAccountsPayableAccount($record->company_id);
+
+                $latestTransaction = Transaction::query()
+                    ->where([
+                        'transactionable_type' => Bill::class,
+                        'transactionable_id' => $record->id,
+                        'is_payment' => true,
+                    ])
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if (! $latestTransaction) {
+                    return;
+                }
+
+                $journals = JournalEntry::query()
+                    ->where('transaction_id', $latestTransaction->id)
+                    ->get();
+
+                /** @var \App\Models\Accounting\JournalEntry|null $apDebitEntry */
+                $apDebitEntry = $journals->where('account_id', $accountPayable->id)
+                    ->where('type', JournalEntryType::Debit)
+                    ->first();
+
+                if (! $apDebitEntry) {
+                    return;
+                }
+
+                $pph23InDefaultCurrency = $record->formatAmountToDefaultCurrency((int) $record->pph23);
+
+                DB::transaction(function () use ($apDebitEntry, $pph23InDefaultCurrency, $latestTransaction, $accountPPh23, $record) {
+                    $apDebitEntry->update(['amount' => $apDebitEntry->amount + $pph23InDefaultCurrency]);
+
+                    JournalEntry::create([
+                        'company_id' => $latestTransaction->company_id,
+                        'transaction_id' => $latestTransaction->id,
+                        'account_id' => $accountPPh23->id,
+                        'type' => JournalEntryType::Credit,
+                        'amount' => $pph23InDefaultCurrency,
+                        'description' => "Bill #{$record->bill_number}: Payment to {$record->vendor->name}",
+                    ]);
+                });
+            }
+        });
+    }
+
     public function getNumberColumn(): string
     {
         return 'bill_number';
@@ -85,7 +151,7 @@ class Bill extends Document
 
     public function getDocumentPrefix(): string
     {
-        $company ??= auth()->user()?->currentCompany;
+        $company = auth()->user()?->currentCompany;
         if (! $company) {
             throw new \RuntimeException('No current company is set for the user.');
         }
