@@ -61,6 +61,9 @@ class Bill extends Document
         'tax_total',
         'discount_total',
         'total',
+        'profit_computation',
+        'profit_rate',
+        'profit_total',
         'pph23',
         'actual_total',
         'amount_paid',
@@ -79,20 +82,24 @@ class Bill extends Document
         'discount_method' => DocumentDiscountMethod::class,
         'discount_computation' => AdjustmentComputation::class,
         'discount_rate' => RateCast::class,
+        'profit_computation' => AdjustmentComputation::class,
+        'profit_rate' => RateCast::class,
     ];
 
     protected static function boot()
     {
         parent::boot();
         static::creating(function (Bill $record) {
-            if (($record->pph23 ?? null) === null && $record->subtotal > 0) {
-                $record->pph23 = (int) round($record->subtotal * 0.02);
+            $baseForPph23 = ($record->subtotal ?? 0) + ($record->profit_total ?? 0);
+            if (($record->pph23 ?? null) === null && $baseForPph23 > 0) {
+                $record->pph23 = (int) round($baseForPph23 * 0.02);
             }
             $record->actual_total = $record->total - ($record->pph23 ?? 0);
         });
         static::updating(function (Bill $record) {
-            if (($record->pph23 ?? null) === null && $record->subtotal > 0) {
-                $record->pph23 = (int) round($record->subtotal * 0.02);
+            $baseForPph23 = ($record->subtotal ?? 0) + ($record->profit_total ?? 0);
+            if (($record->pph23 ?? null) === null && $baseForPph23 > 0) {
+                $record->pph23 = (int) round($baseForPph23 * 0.02);
             }
             $record->actual_total = $record->total - ($record->pph23 ?? 0);
 
@@ -449,6 +456,43 @@ class Bill extends Document
                         'description' => "{$lineItemDescription} (Proportional Discount)",
                     ];
                 }
+            }
+        }
+
+        // Distribute profit (agency fee) to expense accounts (COA) proportionally by line item subtotal
+        $profitTotalInBillCurrency = (int) ($this->profit_total ?? 0);
+        if ($profitTotalInBillCurrency > 0 && $totalLineItemSubtotalInBillCurrency > 0) {
+            $profitByAccount = [];
+            $distributedTotal = 0;
+            $lastAccountId = null;
+
+            foreach ($this->lineItems as $lineItem) {
+                $expenseAccountId = $lineItem->offering->expense_account_id ?? null;
+                if ($expenseAccountId === null) {
+                    continue;
+                }
+                $lineItemSubtotal = (int) $lineItem->getRawOriginal('subtotal');
+                $share = (int) round($profitTotalInBillCurrency * ($lineItemSubtotal / $totalLineItemSubtotalInBillCurrency));
+                $profitByAccount[$expenseAccountId] = ($profitByAccount[$expenseAccountId] ?? 0) + $share;
+                $distributedTotal += $share;
+                $lastAccountId = $expenseAccountId;
+            }
+
+            // Apply rounding remainder to last account so total equals profit_total
+            if ($lastAccountId !== null && $distributedTotal !== $profitTotalInBillCurrency) {
+                $profitByAccount[$lastAccountId] = ($profitByAccount[$lastAccountId] ?? 0) + ($profitTotalInBillCurrency - $distributedTotal);
+            }
+
+            foreach ($profitByAccount as $accountId => $amount) {
+                if ($amount <= 0) {
+                    continue;
+                }
+                $journalEntryData[] = [
+                    'type' => JournalEntryType::Debit,
+                    'account_id' => $accountId,
+                    'amount_in_bill_currency' => $amount,
+                    'description' => "{$baseDescription} (Agency fee / Profit)",
+                ];
             }
         }
 

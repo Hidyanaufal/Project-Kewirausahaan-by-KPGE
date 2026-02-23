@@ -106,12 +106,8 @@ trait ManagesLineItems
             $data,
         );
 
-        $isQuotation = $record instanceof Estimate;
-
-        if (!$isQuotation) {
-            if ($profitTotal > 0) {
-                $taxTotalCents += $profitTotal * 0.11;
-            }
+        if ($record instanceof \App\Models\Accounting\Invoice && $profitTotal > 0) {
+            $taxTotalCents += $profitTotal * 0.11;
         }
 
         $grandTotalCents = $subtotalCents + $taxTotalCents - $discountTotalCents + $profitTotal;

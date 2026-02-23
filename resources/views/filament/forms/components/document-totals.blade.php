@@ -1,5 +1,6 @@
 @php
     use App\Enums\Accounting\DocumentDiscountMethod;
+    use App\Enums\Accounting\DocumentType;
     use App\Utilities\Currency\CurrencyAccessor;
     use App\View\Models\DocumentTotalViewModel;
 
@@ -15,6 +16,8 @@
 
     $discountComponents = collect($components)
         ->filter(fn($component) => Str::startsWith($component->getName(), 'discount_'));
+
+    $profitRowLabel = $type === DocumentType::Bill ? __('Agency Fee') : __('Profit');
 @endphp
 
 <div class="totals-summary w-full lg:pl-[4rem] lg:pr-[6rem] py-8 lg:py-0">
@@ -44,7 +47,7 @@
         @endif
         @if ($profitComponents->count())
         <tr>
-            <td colspan="3" class="text-sm p-2">Profit:</td>
+            <td colspan="3" class="text-sm p-2">{{ $profitRowLabel }}:</td>
             <td colspan="2" class="text-sm p-2">
                 <div class="flex justify-between space-x-2">
                     @foreach($profitComponents as $component)
