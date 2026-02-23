@@ -163,7 +163,8 @@ class EstimateResource extends Resource
                                         $date = $get('date');
                                         $paymentTerms = $get('payment_terms');
 
-                                        if (! $date || $paymentTerms === 'custom') {
+                                        // Jika payment terms belum dipilih atau custom, jangan lakukan sinkronisasi
+                                        if (! $date || $paymentTerms === 'custom' || ! $paymentTerms) {
                                             return;
                                         }
 
