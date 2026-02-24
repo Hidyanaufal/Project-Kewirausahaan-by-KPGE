@@ -31,6 +31,9 @@ class InvoiceExporter extends Exporter
                 ->money(),
             ExportColumn::make('amount_due')
                 ->money(),
+            ExportColumn::make('profit_total')
+                ->label('Profit')
+                ->money(),
             ExportColumn::make('subtotal')
                 ->money(),
             ExportColumn::make('tax_total')

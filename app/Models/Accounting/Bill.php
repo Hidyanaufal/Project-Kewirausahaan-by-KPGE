@@ -21,6 +21,7 @@ use App\Models\Company;
 use App\Models\Setting\DocumentDefault;
 use App\Observers\BillObserver;
 use App\Utilities\Currency\CurrencyAccessor;
+use Illuminate\Support\Facades\DB;
 use App\Utilities\Currency\CurrencyConverter;
 use Filament\Actions\Action;
 use Filament\Actions\MountableAction;
@@ -60,6 +61,11 @@ class Bill extends Document
         'tax_total',
         'discount_total',
         'total',
+        'profit_computation',
+        'profit_rate',
+        'profit_total',
+        'pph23',
+        'actual_total',
         'amount_paid',
         'notes',
         'terms',
@@ -76,7 +82,74 @@ class Bill extends Document
         'discount_method' => DocumentDiscountMethod::class,
         'discount_computation' => AdjustmentComputation::class,
         'discount_rate' => RateCast::class,
+        'profit_computation' => AdjustmentComputation::class,
+        'profit_rate' => RateCast::class,
     ];
+
+    protected static function boot()
+    {
+        parent::boot();
+        static::creating(function (Bill $record) {
+            $baseForPph23 = ($record->subtotal ?? 0) + ($record->profit_total ?? 0);
+            if (($record->pph23 ?? null) === null && $baseForPph23 > 0) {
+                $record->pph23 = (int) round($baseForPph23 * 0.02);
+            }
+            $record->actual_total = $record->total - ($record->pph23 ?? 0);
+        });
+        static::updating(function (Bill $record) {
+            $baseForPph23 = ($record->subtotal ?? 0) + ($record->profit_total ?? 0);
+            if (($record->pph23 ?? null) === null && $baseForPph23 > 0) {
+                $record->pph23 = (int) round($baseForPph23 * 0.02);
+            }
+            $record->actual_total = $record->total - ($record->pph23 ?? 0);
+
+            if ($record->isDirty('status') && $record->status === BillStatus::Paid && $record->pph23) {
+                $accountPPh23 = Account::getAccountsPPh23($record->company_id);
+                $accountPayable = Account::getAccountsPayableAccount($record->company_id);
+
+                $latestTransaction = Transaction::query()
+                    ->where([
+                        'transactionable_type' => Bill::class,
+                        'transactionable_id' => $record->id,
+                        'is_payment' => true,
+                    ])
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if (! $latestTransaction) {
+                    return;
+                }
+
+                $journals = JournalEntry::query()
+                    ->where('transaction_id', $latestTransaction->id)
+                    ->get();
+
+                /** @var \App\Models\Accounting\JournalEntry|null $apDebitEntry */
+                $apDebitEntry = $journals->where('account_id', $accountPayable->id)
+                    ->where('type', JournalEntryType::Debit)
+                    ->first();
+
+                if (! $apDebitEntry) {
+                    return;
+                }
+
+                $pph23InDefaultCurrency = $record->formatAmountToDefaultCurrency((int) $record->pph23);
+
+                DB::transaction(function () use ($apDebitEntry, $pph23InDefaultCurrency, $latestTransaction, $accountPPh23, $record) {
+                    $apDebitEntry->update(['amount' => $apDebitEntry->amount + $pph23InDefaultCurrency]);
+
+                    JournalEntry::create([
+                        'company_id' => $latestTransaction->company_id,
+                        'transaction_id' => $latestTransaction->id,
+                        'account_id' => $accountPPh23->id,
+                        'type' => JournalEntryType::Credit,
+                        'amount' => $pph23InDefaultCurrency,
+                        'description' => "Bill #{$record->bill_number}: Payment to {$record->vendor->name}",
+                    ]);
+                });
+            }
+        });
+    }
 
     public function getNumberColumn(): string
     {
@@ -85,7 +158,7 @@ class Bill extends Document
 
     public function getDocumentPrefix(): string
     {
-        $company ??= auth()->user()?->currentCompany;
+        $company = auth()->user()?->currentCompany;
         if (! $company) {
             throw new \RuntimeException('No current company is set for the user.');
         }
@@ -348,7 +421,7 @@ class Bill extends Document
                 if ($adjustment->isNonRecoverablePurchaseTax()) {
                     $journalEntryData[] = [
                         'type' => JournalEntryType::Debit,
-                        'account_id' => $lineItem->offering->expense_account_id,
+                        'account_id' => $adjustment->account_id ?? $lineItem->offering->expense_account_id,
                         'amount_in_bill_currency' => $adjustmentAmountInBillCurrency,
                         'description' => "{$lineItemDescription} ({$adjustment->name})",
                     ];
@@ -383,6 +456,43 @@ class Bill extends Document
                         'description' => "{$lineItemDescription} (Proportional Discount)",
                     ];
                 }
+            }
+        }
+
+        // Distribute profit (agency fee) to expense accounts (COA) proportionally by line item subtotal
+        $profitTotalInBillCurrency = (int) ($this->profit_total ?? 0);
+        if ($profitTotalInBillCurrency > 0 && $totalLineItemSubtotalInBillCurrency > 0) {
+            $profitByAccount = [];
+            $distributedTotal = 0;
+            $lastAccountId = null;
+
+            foreach ($this->lineItems as $lineItem) {
+                $expenseAccountId = $lineItem->offering->expense_account_id ?? null;
+                if ($expenseAccountId === null) {
+                    continue;
+                }
+                $lineItemSubtotal = (int) $lineItem->getRawOriginal('subtotal');
+                $share = (int) round($profitTotalInBillCurrency * ($lineItemSubtotal / $totalLineItemSubtotalInBillCurrency));
+                $profitByAccount[$expenseAccountId] = ($profitByAccount[$expenseAccountId] ?? 0) + $share;
+                $distributedTotal += $share;
+                $lastAccountId = $expenseAccountId;
+            }
+
+            // Apply rounding remainder to last account so total equals profit_total
+            if ($lastAccountId !== null && $distributedTotal !== $profitTotalInBillCurrency) {
+                $profitByAccount[$lastAccountId] = ($profitByAccount[$lastAccountId] ?? 0) + ($profitTotalInBillCurrency - $distributedTotal);
+            }
+
+            foreach ($profitByAccount as $accountId => $amount) {
+                if ($amount <= 0) {
+                    continue;
+                }
+                $journalEntryData[] = [
+                    'type' => JournalEntryType::Debit,
+                    'account_id' => $accountId,
+                    'amount_in_bill_currency' => $amount,
+                    'description' => "{$baseDescription} (Agency fee / Profit)",
+                ];
             }
         }
 

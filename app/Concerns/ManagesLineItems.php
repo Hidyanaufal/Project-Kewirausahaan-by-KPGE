@@ -87,7 +87,7 @@ trait ManagesLineItems
 
     protected function updateDocumentTotals(Model $record, array $data): array
     {
-        $data['discount_method'] = $dta['discount_method'] ?? DocumentDiscountMethod::PerDocument;
+        $data['discount_method'] = $data['discount_method'] ?? DocumentDiscountMethod::PerDocument;
         $currencyCode = $data['currency_code'] ?? $record->currency_code ?? CurrencyAccessor::getDefaultCurrency();
         $subtotalCents = $record->lineItems()->sum('subtotal');
         $taxTotalCents = $record->lineItems()->sum('tax_total');
@@ -103,14 +103,11 @@ trait ManagesLineItems
             $record,
             $subtotalCents,
             $currencyCode,
+            $data,
         );
 
-        $isQuotation = $record instanceof Estimate;
-
-        if (!$isQuotation) {
-            if ($profitTotal > 0) {
-                $taxTotalCents += $profitTotal * 0.11;
-            }
+        if ($record instanceof \App\Models\Accounting\Invoice && $profitTotal > 0) {
+            $taxTotalCents += $profitTotal * 0.11;
         }
 
         $grandTotalCents = $subtotalCents + $taxTotalCents - $discountTotalCents + $profitTotal;
@@ -127,17 +124,26 @@ trait ManagesLineItems
     protected function calculateProfitTotal(
         Model $record,
         int $subtotalCents,
-        string $currencyCode
+        string $currencyCode,
+        array $data = []
     ): int {
         $result = 0;
-        $profitRate = floatval($record->profit_rate ?? 0);
-        
-        if ($record->profit_computation == AdjustmentComputation::Percentage) {
-            $result = $subtotalCents * ($profitRate / 10000);
+        // Gunakan nilai dari form ($data) saat update agar profit_rate terbaru (mis. 12%) dipakai, bukan nilai lama dari DB
+        $profitComputation = AdjustmentComputation::parse($data['profit_computation'] ?? $record->profit_computation) ?? AdjustmentComputation::Percentage;
+        $profitRate = $data['profit_rate'] ?? $record->profit_rate ?? 0;
+        $profitRate = blank($profitRate) ? '0' : (string) $profitRate;
+
+        if ($profitComputation->isPercentage()) {
+            $scaledProfitRate = RateCalculator::parseLocalizedRate($profitRate);
+            $result = RateCalculator::calculatePercentage($subtotalCents, $scaledProfitRate);
         } else {
-            $result = $profitRate;
+            if (! CurrencyConverter::isValidAmount($profitRate, $currencyCode)) {
+                $profitRate = '0';
+            }
+            $result = CurrencyConverter::convertToCents($profitRate, $currencyCode);
         }
-        return CurrencyConverter::convertToCents($result ?? 0, $currencyCode);
+
+        return $result;
     }
 
     protected function calculateDiscountTotal(

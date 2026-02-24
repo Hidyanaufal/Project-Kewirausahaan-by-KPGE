@@ -45,13 +45,13 @@ class AttachmentsRelationManager extends RelationManager
 
                 Forms\Components\FileUpload::make('file_path')
                     ->label('Upload File')
-                    ->helperText('Maximum size: 10MB. Supported formats: PDF, Word, or image files.')
+                    ->helperText('Maximum size: 20MB. Supported formats: PDF, Word, or image files.')
                     ->directory('attachments')
                     ->reactive()
                     ->visible(fn(Forms\Get $get) => $get('is_file'))
                     ->visibility('private')
                     ->downloadable()
-                    ->maxSize(10240) // 10MB
+                    ->maxSize(20480) // 20MB
                     ->acceptedFileTypes([
                         'application/pdf',
                         'image/*',
@@ -67,7 +67,7 @@ class AttachmentsRelationManager extends RelationManager
                     ->reactive()
                     ->visible(fn(Forms\Get $get) => !$get('is_file'))
                     ->url()
-                    ->maxLength(500)
+                    ->maxLength(2048)
                     ->columnSpanFull()
                     ->suffixAction(
                         Forms\Components\Actions\Action::make('goToLink')
