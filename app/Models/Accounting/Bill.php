@@ -421,7 +421,7 @@ class Bill extends Document
                 if ($adjustment->isNonRecoverablePurchaseTax()) {
                     $journalEntryData[] = [
                         'type' => JournalEntryType::Debit,
-                        'account_id' => $lineItem->offering->expense_account_id,
+                        'account_id' => $adjustment->account_id ?? $lineItem->offering->expense_account_id,
                         'amount_in_bill_currency' => $adjustmentAmountInBillCurrency,
                         'description' => "{$lineItemDescription} ({$adjustment->name})",
                     ];
