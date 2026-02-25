@@ -296,6 +296,10 @@ class AccountService
             $query->whereIn('accounts.id', $accountIds);
         }
 
+        if ($companyId !== null) {
+            $query->where('accounts.company_id', $companyId);
+        }
+
         // Join invoices & bills for filtering
         if ($projectId !== null || $companyId !== null || $projectTypeId !== null) {
             $query
