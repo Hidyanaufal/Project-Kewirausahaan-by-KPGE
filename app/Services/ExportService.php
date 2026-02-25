@@ -373,7 +373,12 @@ class ExportService
                             $rows[] = $category->header;
                         }
                         foreach ($category->data as $row) {
-                            $rows[] = array_values($row);
+                            $flattened = array_map(function ($value) {
+                                return (is_array($value) && array_key_exists('name', $value))
+                                    ? $value['name']
+                                    : $value;
+                            }, $row);
+                            $rows[] = array_values($flattened);
                         }
                     }
                 }
