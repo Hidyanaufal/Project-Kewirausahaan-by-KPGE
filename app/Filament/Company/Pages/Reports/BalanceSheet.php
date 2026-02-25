@@ -249,6 +249,16 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
 
     public function exportPDF(): StreamedResponse
     {
+        if ($this->getActiveTab() === 'summary') {
+            return $this->exportService->exportToPdf(
+                $this->company,
+                $this->report,
+                null,
+                $this->getFilterState('asOfDate'),
+                $this->getActiveTab()
+            );
+        }
+
         return $this->exportService->exportToPdfEnhanced(
             data: $this->buildReportEnhanced()
         );
@@ -256,6 +266,16 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
 
     public function exportXLSX(): BinaryFileResponse
     {
+        if ($this->getActiveTab() === 'summary') {
+            return $this->exportService->exportToExcel(
+                $this->company,
+                $this->report,
+                null,
+                $this->getFilterState('asOfDate'),
+                $this->getActiveTab()
+            );
+        }
+
         return $this->exportService->exportToExcelEnhanced(
             data: $this->buildReportEnhanced(
                 format: 'xlsx'

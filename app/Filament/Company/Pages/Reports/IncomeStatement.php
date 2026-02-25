@@ -181,6 +181,16 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
 
     public function exportXLSX(): BinaryFileResponse
     {
+        if ($this->getActiveTab() === 'summary') {
+            return $this->exportService->exportToExcel(
+                $this->company,
+                $this->report,
+                $this->getFilterState('startDate'),
+                $this->getFilterState('endDate'),
+                $this->getActiveTab()
+            );
+        }
+
         return $this->exportService->exportToExcelEnhanced(
             data: $this->buildReportEnhanced(
                 format: 'xlsx'
@@ -190,6 +200,16 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
 
     public function exportPDF(): StreamedResponse
     {
+        if ($this->getActiveTab() === 'summary') {
+            return $this->exportService->exportToPdf(
+                $this->company,
+                $this->report,
+                $this->getFilterState('startDate'),
+                $this->getFilterState('endDate'),
+                $this->getActiveTab()
+            );
+        }
+
         return $this->exportService->exportToPdfEnhanced(
             data: $this->buildReportEnhanced(
                 format: 'pdf'
