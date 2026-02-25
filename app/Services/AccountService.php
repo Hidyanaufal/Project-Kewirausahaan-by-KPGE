@@ -565,6 +565,8 @@ class AccountService
                 'invoices.invoice_number as code',
                 'invoices.date',
                 'invoices.due_date',
+                'invoices.total',
+                'invoices.tax_total',
                 'invoices.amount_due',
                 'invoices.currency_code',
                 DB::raw("{$datediff} as days_overdue"),
