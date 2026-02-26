@@ -27,13 +27,13 @@ class DocumentTotals extends Grid
                     'percentage' => 'Percentage'
                 ])
                 ->default(AdjustmentComputation::Percentage)
-                ->visible(fn() => in_array($this->getType(), [DocumentType::Invoice, DocumentType::Bill]))
+                ->visible(fn() => in_array($this->getType(), [DocumentType::Invoice, DocumentType::Bill, DocumentType::Estimate]))
                 ->selectablePlaceholder(false)
                 ->live(),
             TextInput::make('profit_rate')
                 ->hiddenLabel()
                 ->live()
-                ->visible(fn() => in_array($this->getType(), [DocumentType::Invoice, DocumentType::Bill]))
+                ->visible(fn() => in_array($this->getType(), [DocumentType::Invoice, DocumentType::Bill, DocumentType::Estimate]))
                 ->extraInputAttributes(['class' => 'text-right'])
                 ->rate(
                     computation: static fn(Get $get) => $get('profit_computation'),
