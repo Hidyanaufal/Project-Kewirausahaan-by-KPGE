@@ -12,6 +12,7 @@ use App\Models\Accounting\Transaction;
 use App\Models\Common\Client;
 use App\Models\Common\Vendor;
 use App\Models\Company;
+use App\Models\Banking\BankAccount;
 use App\Services\AccountService;
 use App\Services\ExportService;
 use App\Services\ReportService;
@@ -45,6 +46,17 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
     protected ExportService $exportService;
 
     protected AccountService $accountService;
+
+    /**
+     * Account names (case-insensitive) to exclude from Bank Book report.
+     *
+     * @var array<string>
+     */
+    private const BANK_BOOK_EXCLUDED_ACCOUNT_NAMES = [
+        'kas kecil',
+        'kas besar',
+        'deposito',
+    ];
 
     public function boot(ReportService $reportService, ExportService $exportService, AccountService $accountService): void
     {
@@ -530,6 +542,21 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         ];
     }
 
+    private function isBankBookExcludedAccount(BankAccount $bank): bool
+    {
+        $account = $bank->account;
+        if (! $account?->name) {
+            return false;
+        }
+        $nameLower = strtolower($account->name);
+        foreach (self::BANK_BOOK_EXCLUDED_ACCOUNT_NAMES as $excluded) {
+            if (str_contains($nameLower, $excluded) || $nameLower === $excluded) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public function __buildReportBankBook(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
@@ -553,9 +580,11 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 if ($params['filtered']) {
                     $q->whereBetween('posted_at', [$params['startDate'], $params['endDate']]);
                 }
-                $q->orderBy('id', 'desc');
+                $q->orderBy('posted_at', 'asc')->orderBy('id', 'asc');
             },
         ])->get();
+
+        $banks = $banks->filter(fn (BankAccount $bank) => ! $this->isBankBookExcludedAccount($bank));
 
         $rows = collect();
 
@@ -580,10 +609,11 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             foreach ($bank->transactions as $trx) {
                 $journalEntries = \App\Models\Accounting\JournalEntry::where('transaction_id', $trx->id)
                     ->where('company_id', $companyId)
+                    ->where('account_id', $bank->account_id)
                     ->get();
 
-                $increase = $journalEntries->where('type', 'debit')->sum('amount');
-                $decrease = $journalEntries->where('type', 'credit')->sum('amount');
+                $increase = $journalEntries->filter(fn ($je) => $je->type->value === 'debit')->sum('amount');
+                $decrease = $journalEntries->filter(fn ($je) => $je->type->value === 'credit')->sum('amount');
 
                 $balance += ($increase - $decrease);
 
@@ -592,8 +622,8 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                         \Carbon\Carbon::parse($trx->posted_at)->format('d M Y'),
                         $trx->transaction_code ?? '-',
                         $trx->description ?? '-',
-                        $increase > 0 ? $toNumber($increase) : '',
-                        $decrease > 0 ? $toNumber($decrease) : '',
+                        $toNumber($increase),
+                        $toNumber($decrease),
                         $toNumber($balance),
                     ],
                 ]);
