@@ -80,20 +80,30 @@ class ReportService
 
             $categoryAccounts = [];
 
-            /** @var Account $account */
-            foreach ($accountsInCategory as $account) {
-                $accountBalances = $this->calculateAccountBalances($account);
+            $groupedByName = $accountsInCategory->groupBy(fn (Account $a) => trim($a->name));
 
-                foreach ($relevantFields as $field) {
-                    $categorySummaryBalances[$field] += $accountBalances[$field];
+            /** @var \Illuminate\Support\Collection $accountGroup */
+            foreach ($groupedByName as $accountGroup) {
+                $rawBalances = array_fill_keys($relevantFields, 0);
+
+                /** @var Account $account */
+                foreach ($accountGroup as $account) {
+                    $accountBalances = $this->calculateAccountBalances($account);
+
+                    foreach ($relevantFields as $field) {
+                        $rawBalances[$field] += $accountBalances[$field];
+                        $categorySummaryBalances[$field] += $accountBalances[$field];
+                    }
                 }
 
-                $formattedAccountBalances = $this->formatBalances($accountBalances);
+                $formattedAccountBalances = $this->formatBalances($rawBalances);
+
+                $first = $accountGroup->first();
 
                 $categoryAccounts[] = new AccountDTO(
-                    $account->name,
-                    $account->code,
-                    $account->id,
+                    $first->name,
+                    $first->code,
+                    $first->id,
                     $formattedAccountBalances,
                     Carbon::parse($startDate)->toDateString(),
                     Carbon::parse($endDate)->toDateString(),
