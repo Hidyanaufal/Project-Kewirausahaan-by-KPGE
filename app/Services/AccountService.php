@@ -296,6 +296,10 @@ class AccountService
             $query->whereIn('accounts.id', $accountIds);
         }
 
+        if ($companyId !== null) {
+            $query->where('accounts.company_id', $companyId);
+        }
+
         // Join invoices & bills for filtering
         if ($projectId !== null || $companyId !== null || $projectTypeId !== null) {
             $query
@@ -561,6 +565,8 @@ class AccountService
                 'invoices.invoice_number as code',
                 'invoices.date',
                 'invoices.due_date',
+                'invoices.total',
+                'invoices.tax_total',
                 'invoices.amount_due',
                 'invoices.currency_code',
                 DB::raw("{$datediff} as days_overdue"),
