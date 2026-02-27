@@ -1046,7 +1046,7 @@ class ReportService
             $entity = $entityType === DocumentEntityType::Client ? $doc->client : $doc->vendor;
 
             $invoiceAmount = $doc->total ?? 0;
-            $primeOwing = $doc->amount_due ?? 0;
+            $primeOwing = ($doc->amount_due - $doc->tax_total) ?? 0;
             $taxOwing = $doc->tax_total ?? 0;
 
             $dueDate = optional($doc->due_date)->format('d M Y');
