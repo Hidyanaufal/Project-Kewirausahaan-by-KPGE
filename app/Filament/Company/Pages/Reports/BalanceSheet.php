@@ -69,9 +69,17 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             ]);
     }
 
+    /**
+     * Build report limited to the current company.
+     */
     protected function buildReport(array $columns): ReportDTO
     {
-        return $this->reportService->buildBalanceSheetReport($this->getFormattedAsOfDate(), $columns);
+        return $this->reportService->buildBalanceSheetReport(
+            $this->getFormattedAsOfDate(),
+            $columns,
+            projectId: null,
+            companyId: $this->company->id
+        );
     }
 
     protected function getTransformer(ReportDTO $reportDTO): ExportableReport

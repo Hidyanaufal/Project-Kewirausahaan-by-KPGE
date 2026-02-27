@@ -292,6 +292,10 @@ class AccountService
             $query->withoutGlobalScopes();
         }
 
+        if ($companyId !== null) {
+            $query->where('accounts.company_id', $companyId);
+        }
+
         if (!empty($accountIds)) {
             $query->whereIn('accounts.id', $accountIds);
         }
