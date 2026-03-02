@@ -142,15 +142,22 @@
                         </tr>
                     @endforeach
 
-                    
-                    
-
                     <!-- Jumlah -->
                     @if ($document->subtotal)
                         <tr>
                             <td colspan="5" class="px-2 text-right border-t border-black">Jumlah</td>
                             <td class="px-2 text-right border-t border-black">
                                 {{ formatMoneyCeiling($document->subtotal) }}
+                            </td>
+                        </tr>
+                    @endif
+
+                    <!-- Profit -->
+                    @if ($document->profit)
+                        <tr>
+                            <td colspan="5" class="px-2 text-right">Profit {{ $document->profitPercentage }}%</td>
+                            <td class="px-2 text-right">
+                                {{ formatMoneyCeiling($document->profit) }}
                             </td>
                         </tr>
                     @endif
@@ -162,16 +169,6 @@
                             {{ formatMoneyCeiling($document->total) }}
                         </td>
                     </tr>
-
-                    <!-- Profit -->
-                    @if ($document->profit)
-                        <tr>
-                            <td colspan="5" class="px-2 text-right">Profit {{ $document->profitPercentage }}%</td>
-                            <td class="px-2 text-right">
-                                {{ formatMoneyCeiling($document->profit) }}
-                            </td>
-                        </tr>
-                    @endif
                 </tbody>
             </table>
         </div>
