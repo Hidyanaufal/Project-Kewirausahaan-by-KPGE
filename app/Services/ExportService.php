@@ -353,7 +353,7 @@ class ExportService
 
                 if ($this->activeTab === 'summary') {
                     $rows[] = $this->report->getSummaryHeaders();
-                    foreach ($this->report->getSummaryCategories() as $category) {
+                    foreach ($this->report->getSummaryCategories() as $categoryName => $category) {
                         if (filled($category->header)) {
                             $rows[] = $category->header;
                         }
@@ -365,6 +365,14 @@ class ExportService
                         if (filled($category->summary)) {
                             $rows[] = $category->summary;
                         }
+
+                        if ($categoryName === 'Cost of Goods Sold' && method_exists($this->report, 'getGrossProfit') && filled($this->report->getGrossProfit())) {
+                            $rows[] = $this->report->getGrossProfit();
+                        }
+                    }
+
+                    if (method_exists($this->report, 'getSummaryOverallTotals') && filled($this->report->getSummaryOverallTotals())) {
+                        $rows[] = $this->report->getSummaryOverallTotals();
                     }
                 } else {
                     $rows[] = $this->report->getHeaders();

@@ -126,15 +126,17 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
             ]);
 
             foreach ($cat->data as $item) {
+                $num = $toNumber($item['net_movement'] ?? 0) / 100;
+                if ($num === 0.0) {
+                    continue;
+                }
+
                 $name = is_array($item['account_name'])
                     ? ($item['account_name']['name'] ?? '')
                     : $item['account_name'];
 
                 $rows->push([
-                    'data' => [
-                        $name,
-                        $toNumber($item['net_movement'] ?? 0) / 100,
-                    ],
+                    'data' => [$name, $num],
                     'style' => ['padding-left' => '20px'],
                 ]);
             }
@@ -146,12 +148,14 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
                 ],
                 'style' => ['font-weight' => 'bold'],
             ]);
-        }
 
-        $rows->push([
-            'data' => ['GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement']) / 100],
-            'style' => ['font-weight' => 'bold'],
-        ]);
+            if ($headerName === 'COST OF GOODS SOLD') {
+                $rows->push([
+                    'data' => ['GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement']) / 100],
+                    'style' => ['font-weight' => 'bold'],
+                ]);
+            }
+        }
 
         $rows->push([
             'data' => ['NET PROFIT/LOSS (Before Tax)', $toNumber($report->getOverallTotals()['net_movement']) / 100],
