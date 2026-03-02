@@ -30,6 +30,7 @@ class Project extends Model
         'project_type_id',
         'client_id',
         'pic_id',
+        'requestor_id',
         'number',
         'name',
         'description',
@@ -77,6 +78,11 @@ class Project extends Model
     public function pic(): BelongsTo
     {
         return $this->belongsTo(User::class, 'pic_id');
+    }
+
+    public function requestor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'requestor_id');
     }
 
     public function pic_client(): BelongsTo

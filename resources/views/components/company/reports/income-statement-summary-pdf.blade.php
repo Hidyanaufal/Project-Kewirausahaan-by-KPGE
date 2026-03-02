@@ -49,10 +49,10 @@
             </tbody>
         @endforeach
         <tfoot>
-        <tr class="category-header-row">
-            @foreach ($report->getOverallTotals() as $index => $total)
-                <td class="{{ $report->getAlignmentClass($index) }}">
-                    {{ $total }}
+        <tr class="table-footer-row">
+            @foreach ($report->getSummaryColumns() as $column)
+                <td class="{{ $report->getAlignmentClass($column->getName()) }}">
+                    {{ $report->getSummaryOverallTotals()[$column->getName()] ?? '' }}
                 </td>
             @endforeach
         </tr>

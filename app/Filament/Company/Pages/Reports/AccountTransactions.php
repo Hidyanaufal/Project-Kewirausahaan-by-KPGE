@@ -12,6 +12,8 @@ use App\Models\Accounting\Transaction;
 use App\Models\Common\Client;
 use App\Models\Common\Vendor;
 use App\Models\Company;
+use App\Models\Banking\BankAccount;
+use App\Services\AccountService;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
@@ -43,10 +45,24 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
 
     protected ExportService $exportService;
 
-    public function boot(ReportService $reportService, ExportService $exportService): void
+    protected AccountService $accountService;
+
+    /**
+     * Account names (case-insensitive) to exclude from Bank Book report.
+     *
+     * @var array<string>
+     */
+    private const BANK_BOOK_EXCLUDED_ACCOUNT_NAMES = [
+        'kas kecil',
+        'kas besar',
+        'deposito',
+    ];
+
+    public function boot(ReportService $reportService, ExportService $exportService, AccountService $accountService): void
     {
         $this->reportService = $reportService;
         $this->exportService = $exportService;
+        $this->accountService = $accountService;
     }
 
     public function getMaxContentWidth(): MaxWidth | string | null
@@ -193,38 +209,91 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         return $this->__buildReportDefault();
     }
 
+    /**
+     * Resolve export filter: when isActiveExportFiltered, return start/end date and optional account/payee.
+     */
+    private function getExportFilterParams(): array
+    {
+        if (! $this->isActiveExportFiltered) {
+            return ['filtered' => false];
+        }
+        $accountId = $this->getFilterState('selectedAccount');
+        $entityId = $this->getFilterState('selectedPayee');
+
+        return [
+            'filtered'   => true,
+            'startDate'  => $this->getFormattedStartDate(),
+            'endDate'    => $this->getFormattedEndDate(),
+            'accountId'  => $accountId !== 'all' ? $accountId : null,
+            'entityId'   => $entityId !== 'all' ? $entityId : null,
+            'periodLabel' => $this->getDisplayStartDate() . ' - ' . $this->getDisplayEndDate(),
+        ];
+    }
+
     public function __buildReportDefault(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
-
+        $companyId = $company->id;
         $now = now()->format('Y-m-d_H-i-s');
-
         $toNumber = fn($value) => number_format((float)$value, 2, ',', '.');
+        $params = $this->getExportFilterParams();
 
-        $accounts = Account::query()
-            ->where('company_id', $company->id)
-            ->with(['journalEntries' => function ($q) {
-                $q->select('account_id', DB::raw('SUM(CASE WHEN type = "debit" THEN amount ELSE 0 END) as total_debit'))
-                    ->addSelect(DB::raw('SUM(CASE WHEN type = "credit" THEN amount ELSE 0 END) as total_credit'))
-                    ->groupBy('account_id');
-            }])
-            ->get();
+        if ($params['filtered']) {
+            $accountIds = $params['accountId'] ? [(int) $params['accountId']] : [];
+            $accounts = $this->accountService->getAccountBalances(
+                $params['startDate'],
+                $params['endDate'],
+                $accountIds,
+                null,
+                $companyId
+            )
+                ->orderByRaw('LENGTH(code), code')
+                ->get();
 
-        $rows = collect();
+            $rows = collect();
+            foreach ($accounts as $account) {
+                $totalDebit = (int) ($account->total_debit ?? 0);
+                $totalCredit = (int) ($account->total_credit ?? 0);
+                $balance = $totalDebit - $totalCredit;
 
-        foreach ($accounts as $account) {
-            $totalDebit = $account->journalEntries->first()->total_debit ?? 0;
-            $totalCredit = $account->journalEntries->first()->total_credit ?? 0;
-            $balance = $totalDebit - $totalCredit;
+                $rows->push([
+                    'data' => [
+                        '__str' . $account->code,
+                        $account->name,
+                        $account->type->getLabel() ?? '-',
+                        $toNumber($balance / 100),
+                    ],
+                ]);
+            }
 
-            $rows->push([
-                'data' => [
-                    '__str' . $account->code,
-                    $account->name,
-                    $account->type->getLabel() ?? '-',
-                    $toNumber($balance / 100),
-                ],
-            ]);
+            $reportPeriod = $params['periodLabel'];
+        } else {
+            $accounts = Account::query()
+                ->where('company_id', $companyId)
+                ->with(['journalEntries' => function ($q) {
+                    $q->select('account_id', DB::raw('SUM(CASE WHEN type = "debit" THEN amount ELSE 0 END) as total_debit'))
+                        ->addSelect(DB::raw('SUM(CASE WHEN type = "credit" THEN amount ELSE 0 END) as total_credit'))
+                        ->groupBy('account_id');
+                }])
+                ->get();
+
+            $rows = collect();
+            foreach ($accounts as $account) {
+                $totalDebit = $account->journalEntries->first()->total_debit ?? 0;
+                $totalCredit = $account->journalEntries->first()->total_credit ?? 0;
+                $balance = $totalDebit - $totalCredit;
+
+                $rows->push([
+                    'data' => [
+                        '__str' . $account->code,
+                        $account->name,
+                        $account->type->getLabel() ?? '-',
+                        $toNumber($balance / 100),
+                    ],
+                ]);
+            }
+
+            $reportPeriod = 'As of ' . now()->format('d M Y');
         }
 
         $header = [
@@ -238,7 +307,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             'filename'      => "{$company->name} Account List {$now}.pdf",
             'company_name'  => $company->name,
             'report_title'  => 'Account List',
-            'report_period' => 'As of ' . now()->format('d M Y'),
+            'report_period' => $reportPeriod,
             'columns'       => $header,
             'rows'          => $rows->toArray(),
         ];
@@ -247,16 +316,30 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
     public function __buildReportAllJournal(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
-
         $now = now()->format('Y-m-d_H-i-s');
-
         $toNumber = fn($v) => is_null($v) ? 0 : (float) $v;
+        $params = $this->getExportFilterParams();
 
-        $transactions = Transaction::query()
-            ->where('company_id', $company->id)
-            ->with([
-                'journalEntries.account:id,code,name',
-            ])
+        $query = Transaction::query()
+            ->where('company_id', $company->id);
+
+        if ($params['filtered']) {
+            $query->whereBetween('posted_at', [$params['startDate'], $params['endDate']]);
+            if ($params['entityId'] !== null) {
+                $entityId = (int) $params['entityId'];
+                if ($entityId < 0) {
+                    $query->where('payeeable_type', Vendor::class)->where('payeeable_id', abs($entityId));
+                } else {
+                    $query->where('payeeable_type', Client::class)->where('payeeable_id', $entityId);
+                }
+            }
+            if ($params['accountId'] !== null) {
+                $query->whereHas('journalEntries', fn($q) => $q->where('account_id', $params['accountId']));
+            }
+        }
+
+        $transactions = $query
+            ->with(['journalEntries.account:id,code,name'])
             ->orderBy('id', 'desc')
             ->get();
 
@@ -329,11 +412,13 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             'Credit (Base)',
         ];
 
+        $reportPeriod = $params['filtered'] ? $params['periodLabel'] : ('As of ' . now()->format('d M Y'));
+
         return [
             'filename'      => "{$company->name} All Journals {$now}.pdf",
             'company_name'  => $company->name,
             'report_title'  => 'All Journals',
-            'report_period' => 'As of ' . now()->format('d M Y'),
+            'report_period' => $reportPeriod,
             'columns'       => $header,
             'rows'          => $rows->toArray(),
         ];
@@ -342,21 +427,34 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
     public function __buildReportDeposit(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
-
         $now = now()->format('Y-m-d_H-i-s');
-
         $toNumber = fn($v) => is_null($v) ? 0 : (float) $v;
+        $params = $this->getExportFilterParams();
 
-        $transactions = Transaction::query()
+        $query = Transaction::query()
             ->where('company_id', $company->id)
             ->where(function ($query) {
                 $query->whereNotNull('member_id')
                     ->where('member_id', '!=', '');
-            })
-            ->with([
-                'journalEntries.account:id,code,name',
-                'member'
-            ])
+            });
+
+        if ($params['filtered']) {
+            $query->whereBetween('posted_at', [$params['startDate'], $params['endDate']]);
+            if ($params['entityId'] !== null) {
+                $entityId = (int) $params['entityId'];
+                if ($entityId < 0) {
+                    $query->where('payeeable_type', Vendor::class)->where('payeeable_id', abs($entityId));
+                } else {
+                    $query->where('payeeable_type', Client::class)->where('payeeable_id', $entityId);
+                }
+            }
+            if ($params['accountId'] !== null) {
+                $query->whereHas('journalEntries', fn($q) => $q->where('account_id', $params['accountId']));
+            }
+        }
+
+        $transactions = $query
+            ->with(['journalEntries.account:id,code,name', 'member'])
             ->orderBy('id', 'desc')
             ->get();
 
@@ -432,34 +530,61 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             'Member',
         ];
 
+        $reportPeriod = $params['filtered'] ? $params['periodLabel'] : ('As of ' . now()->format('d M Y'));
+
         return [
             'filename'      => "{$company->name} Member Deposit Report {$now}.pdf",
             'company_name'  => $company->name,
             'report_title'  => 'Member Deposit Report',
-            'report_period' => 'As of ' . now()->format('d M Y'),
+            'report_period' => $reportPeriod,
             'columns'       => $header,
             'rows'          => $rows->toArray(),
         ];
     }
 
+    private function isBankBookExcludedAccount(BankAccount $bank): bool
+    {
+        $account = $bank->account;
+        if (! $account?->name) {
+            return false;
+        }
+        $nameLower = strtolower($account->name);
+        foreach (self::BANK_BOOK_EXCLUDED_ACCOUNT_NAMES as $excluded) {
+            if (str_contains($nameLower, $excluded) || $nameLower === $excluded) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public function __buildReportBankBook(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
-
         $companyId = $company->id;
-
         $now = now()->format('Y-m-d_H-i-s');
-
         $toNumber = fn($value) => number_format((float)$value / 100, 2, ',', '.');
+        $params = $this->getExportFilterParams();
 
-        $banks = \App\Models\Banking\BankAccount::query()
-            ->with(['account', 'transactions' => function ($q) use ($companyId) {
+        $bankQuery = \App\Models\Banking\BankAccount::query()
+            ->where('company_id', $companyId);
+
+        if ($params['filtered'] && $params['accountId'] !== null) {
+            $bankQuery->where('account_id', $params['accountId']);
+        }
+
+        $banks = $bankQuery->with([
+            'account',
+            'transactions' => function ($q) use ($companyId, $params) {
                 $q->where('company_id', $companyId)
-                    ->whereNotNull('posted_at')
-                    ->orderBy('id', 'desc');
-            }])
-            ->where('company_id', $companyId)
-            ->get();
+                    ->whereNotNull('posted_at');
+                if ($params['filtered']) {
+                    $q->whereBetween('posted_at', [$params['startDate'], $params['endDate']]);
+                }
+                $q->orderBy('posted_at', 'asc')->orderBy('id', 'asc');
+            },
+        ])->get();
+
+        $banks = $banks->filter(fn (BankAccount $bank) => ! $this->isBankBookExcludedAccount($bank));
 
         $rows = collect();
 
@@ -484,10 +609,11 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             foreach ($bank->transactions as $trx) {
                 $journalEntries = \App\Models\Accounting\JournalEntry::where('transaction_id', $trx->id)
                     ->where('company_id', $companyId)
+                    ->where('account_id', $bank->account_id)
                     ->get();
 
-                $increase = $journalEntries->where('type', 'debit')->sum('amount');
-                $decrease = $journalEntries->where('type', 'credit')->sum('amount');
+                $increase = $journalEntries->filter(fn ($je) => $je->type->value === 'debit')->sum('amount');
+                $decrease = $journalEntries->filter(fn ($je) => $je->type->value === 'credit')->sum('amount');
 
                 $balance += ($increase - $decrease);
 
@@ -496,8 +622,8 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                         \Carbon\Carbon::parse($trx->posted_at)->format('d M Y'),
                         $trx->transaction_code ?? '-',
                         $trx->description ?? '-',
-                        $increase > 0 ? $toNumber($increase) : '',
-                        $decrease > 0 ? $toNumber($decrease) : '',
+                        $toNumber($increase),
+                        $toNumber($decrease),
                         $toNumber($balance),
                     ],
                 ]);
@@ -517,11 +643,13 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             'Balance',
         ];
 
+        $reportPeriod = $params['filtered'] ? $params['periodLabel'] : ('As of ' . now()->format('d M Y'));
+
         return [
             'filename'      => "{$company->name} Bank Book {$now}.pdf",
             'company_name'  => $company->name,
             'report_title'  => 'Bank Book',
-            'report_period' => 'As of ' . now()->format('d M Y'),
+            'report_period' => $reportPeriod,
             'columns'       => $header,
             'rows'          => $rows->toArray(),
         ];

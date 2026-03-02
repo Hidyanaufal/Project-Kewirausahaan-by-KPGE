@@ -36,6 +36,12 @@ abstract class BaseReportPage extends Page
 
     public bool $reportLoaded = false;
 
+    /**
+     * When true, PDF/XLSX export uses the same filters as the report display.
+     * When false, export ignores filters (legacy behavior).
+     */
+    protected bool $isActiveExportFiltered = true;
+
     abstract protected function buildReport(array $columns): ReportDTO;
 
     abstract public function exportXLSX(): BinaryFileResponse;

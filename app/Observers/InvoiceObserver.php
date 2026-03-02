@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Enums\Accounting\InvoiceStatus;
+use App\Jobs\SendInvoiceSubmissionNotification;
 use App\Models\Accounting\DocumentLineItem;
 use App\Models\Accounting\Invoice;
 use App\Models\Accounting\Transaction;
@@ -10,6 +11,13 @@ use Illuminate\Support\Facades\DB;
 
 class InvoiceObserver
 {
+    public function created(Invoice $invoice): void
+    {
+        if ($invoice->status === InvoiceStatus::Draft) {
+            SendInvoiceSubmissionNotification::dispatch($invoice->id);
+        }
+    }
+
     public function saving(Invoice $invoice): void
     {
         if (! $invoice->wasApproved()) {

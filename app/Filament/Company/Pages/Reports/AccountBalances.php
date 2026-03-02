@@ -83,7 +83,13 @@ class AccountBalances extends BaseReportPage
 
     protected function buildReport(array $columns): ReportDTO
     {
-        return $this->reportService->buildAccountBalanceReport($this->getFormattedStartDate(), $this->getFormattedEndDate(), $columns);
+        return $this->reportService->buildAccountBalanceReport(
+            $this->getFormattedStartDate(),
+            $this->getFormattedEndDate(),
+            $columns,
+            null,
+            $this->company->id
+        );
     }
 
     protected function getTransformer(ReportDTO $reportDTO): ExportableReport

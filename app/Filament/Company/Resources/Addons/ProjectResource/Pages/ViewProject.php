@@ -15,6 +15,7 @@ use Illuminate\Contracts\Support\Htmlable;
 use App\Filament\Company\Resources\Addons\ProjectResource\RelationManagers;
 use App\Filament\Infolists\Components\BannerEntry;
 use App\Helpers\AuthHelper;
+use App\Jobs\SendProjectApprovedNotification;
 use App\Models\Addons\Project;
 use Filament\Notifications\Notification;
 use Rmsramos\Activitylog\Actions\ActivityLogTimelineSimpleAction;
@@ -60,6 +61,9 @@ class ViewProject extends ViewRecord
                 $record->number = Project::generateProjectNumber($record->project_type_id);
                 $record->status = ProjectStatus::Approved;
                 $record->save();
+
+                SendProjectApprovedNotification::dispatch($record->id);
+
                 Notification::make()
                     ->success()
                     ->title('Project Approved')
