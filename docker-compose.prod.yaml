@@ -32,7 +32,10 @@ services:
       - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
       - mykpg_prod_storage:/var/www/storage/app
     depends_on:
-      - db
+      db:
+        condition: service_healthy  # Tunggu sampai db healthy
+      app:  # Juga tunggu app siap
+        condition: service_started
     networks:
       - mykpg_prod_network
 
@@ -64,6 +67,12 @@ services:
       - mykpg_prod_db_storage:/var/lib/mysql
     networks:
       - mykpg_prod_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 networks:
   mykpg_prod_network:
