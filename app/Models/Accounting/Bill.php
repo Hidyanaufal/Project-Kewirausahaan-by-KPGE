@@ -230,7 +230,7 @@ class Bill extends Document
 
     public function shouldBeOverdue(): bool
     {
-        return $this->due_date->isBefore(company_today()) && $this->canBeOverdue();
+        return $this->due_date?->isBefore(company_today()) && $this->canBeOverdue();
     }
 
     public function wasInitialized(): bool

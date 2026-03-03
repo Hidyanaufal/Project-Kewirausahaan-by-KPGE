@@ -502,7 +502,7 @@ class Invoice extends Document
 
     public function shouldBeOverdue(): bool
     {
-        return $this->due_date->isBefore(company_today()) && $this->canBeOverdue();
+        return $this->due_date?->isBefore(company_today()) && $this->canBeOverdue();
     }
 
     public function isDraft(): bool
@@ -580,7 +580,7 @@ class Invoice extends Document
     public function canBeApproved(): bool
     {
         return $this->status !== InvoiceStatus::Cancelled
-            && $this->isDraft()
+            && ($this->isDraft() || $this->status === InvoiceStatus::Sent)
             && ! $this->wasApproved()
             && AuthHelper::isAdmin();
     }
@@ -588,7 +588,7 @@ class Invoice extends Document
     public function canBeFinalized(): bool
     {
         return $this->status !== InvoiceStatus::Cancelled
-            && $this->status === InvoiceStatus::Unsent
+            && in_array($this->status, [InvoiceStatus::Unsent, InvoiceStatus::Sent], true)
             && $this->wasApproved()
             && ! $this->isFinalized()
             && AuthHelper::isAdmin();
@@ -712,18 +712,23 @@ class Invoice extends Document
 
     public function approveDraft(?Carbon $approvedAt = null): void
     {
-        if (! $this->isDraft()) {
-            throw new \RuntimeException('Invoice is not in draft status.');
+        if (! $this->isDraft() && $this->status !== InvoiceStatus::Sent) {
+            throw new \RuntimeException('Invoice is not in draft or sent status.');
         }
 
         $this->updateApprovalTransaction();
 
         $approvedAt ??= company_now();
 
-        $this->update([
-            'approved_at' => $approvedAt,
-            'status' => InvoiceStatus::Unsent,
-        ]);
+        if ($this->status === InvoiceStatus::Sent) {
+            // Backfill approval: set approved_at only, keep status Sent
+            $this->update(['approved_at' => $approvedAt]);
+        } else {
+            $this->update([
+                'approved_at' => $approvedAt,
+                'status' => InvoiceStatus::Unsent,
+            ]);
+        }
     }
 
     public function finalizeInvoice(?Carbon $finalizedAt = null): void
