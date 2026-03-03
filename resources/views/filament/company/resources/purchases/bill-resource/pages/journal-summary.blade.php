@@ -22,8 +22,8 @@
 
             @foreach($entries as $journalEntry)
                 <tr>
-                    @if ($loop->first) <!-- Display account name only for the first entry in the group -->
-                        <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100" rowspan="{{ count($entries) }}">{{ $journalEntry->account->name }}</td>
+                    @if ($loop->first) <!-- Display account code + name only for the first entry in the group -->
+                        <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100" rowspan="{{ count($entries) }}">{{ $journalEntry->account->code ? $journalEntry->account->code . ' - ' : '' }}{{ $journalEntry->account->name }}</td>
                     @endif
 
                     <!-- Debit -->
@@ -60,7 +60,7 @@
 
             <!-- Display total debit and credit for this account -->
             <tr class="font-semibold bg-gray-50 dark:bg-gray-800">
-                <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">Total for {{ $journalEntry->account->name }}</td>
+                <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">Total for {{ $journalEntry->account->code ? $journalEntry->account->code . ' - ' : '' }}{{ $journalEntry->account->name }}</td>
                 <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{{ number_format($accountDebit / 100) }}</td>
                 <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{{ number_format($accountCredit / 100) }}</td>
                 <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100"></td>

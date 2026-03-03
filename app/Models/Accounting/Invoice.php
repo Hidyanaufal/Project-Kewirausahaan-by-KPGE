@@ -588,7 +588,6 @@ class Invoice extends Document
     public function canBeFinalized(): bool
     {
         return $this->status !== InvoiceStatus::Cancelled
-            && in_array($this->status, [InvoiceStatus::Unsent, InvoiceStatus::Sent], true)
             && $this->wasApproved()
             && ! $this->isFinalized()
             && AuthHelper::isAdmin();
