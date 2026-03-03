@@ -226,6 +226,8 @@ class AccountService
      * @param array $accountIds
      * @param int|null $projectId
      * @param int|null $companyId
+     * @param int|null $projectTypeId
+     * @param int|string|null $entityId Payee filter: positive = Client id, negative = Vendor id
      * @return Builder
      */
     public function getAccountBalances(
@@ -235,6 +237,7 @@ class AccountService
         $projectId = null,
         $companyId = null,
         $projectTypeId = null,
+        $entityId = null,
     ): Builder {
         $accountIds = array_map('intval', $accountIds);
 
@@ -302,6 +305,17 @@ class AccountService
 
         if ($companyId !== null) {
             $query->where('accounts.company_id', $companyId);
+        }
+
+        if ($entityId !== null) {
+            $entityId = (int) $entityId;
+            if ($entityId < 0) {
+                $query->where('transactions.payeeable_type', Vendor::class)
+                    ->where('transactions.payeeable_id', abs($entityId));
+            } else {
+                $query->where('transactions.payeeable_type', Client::class)
+                    ->where('transactions.payeeable_id', $entityId);
+            }
         }
 
         // Join invoices & bills for filtering
