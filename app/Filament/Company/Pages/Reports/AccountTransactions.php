@@ -233,7 +233,9 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 $params['endDate'],
                 $accountIds,
                 null,
-                $companyId
+                $companyId,
+                null,
+                $params['entityId']
             )
                 ->orderByRaw('LENGTH(code), code')
                 ->get();
@@ -552,6 +554,14 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                     ->whereNotNull('posted_at');
                 if ($params['filtered']) {
                     $q->whereBetween('posted_at', [$params['startDate'], $params['endDate']]);
+                }
+                if ($params['entityId'] !== null) {
+                    $entityId = (int) $params['entityId'];
+                    if ($entityId < 0) {
+                        $q->where('payeeable_type', Vendor::class)->where('payeeable_id', abs($entityId));
+                    } else {
+                        $q->where('payeeable_type', Client::class)->where('payeeable_id', $entityId);
+                    }
                 }
                 $q->orderBy('id', 'desc');
             },
