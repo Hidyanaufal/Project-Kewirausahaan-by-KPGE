@@ -141,7 +141,6 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
     protected function getAccountOptions(): array
     {
         $accounts = Account::query()
-            ->limit(10)
             ->get()
             ->groupBy(fn(Account $account) => $account->category->getPluralLabel())
             ->map(fn(Collection $accounts) => $accounts->pluck('name', 'id'))
