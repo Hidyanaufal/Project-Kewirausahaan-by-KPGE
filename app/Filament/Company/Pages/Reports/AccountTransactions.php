@@ -582,9 +582,6 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 if ($params['filtered']) {
                     $q->whereBetween('posted_at', [$params['startDate'], $params['endDate']]);
                 }
-<<<<<<< HEAD
-                $q->orderBy('posted_at', 'asc')->orderBy('id', 'asc');
-=======
                 if ($params['entityId'] !== null) {
                     $entityId = (int) $params['entityId'];
                     if ($entityId < 0) {
@@ -594,7 +591,6 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                     }
                 }
                 $q->orderBy('id', 'desc');
->>>>>>> ca1d238bc564ae768fc477899fb1be79f0b0b132
             },
         ])->get();
 
