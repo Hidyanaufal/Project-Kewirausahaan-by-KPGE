@@ -79,7 +79,7 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
         // 🔹 Ambil dari report service khusus payable
         $data = $this->reportService->buildOutstandingReportBillLevel(
             $this->getFormattedAsOfDate(),
-            $this->getEntityType()
+            $this->company->id
         );
 
         $columns = array_filter($data['columns'], fn($col) => strtolower($col) !== 'bill');
@@ -160,7 +160,8 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
             $this->getFormattedAsOfDate(),
             $this->getEntityType(),
             $daysPerPeriod,
-            $numberOfPeriods
+            $numberOfPeriods,
+            $this->company->id
         );
 
         $columns = $dataDetail['columns'];

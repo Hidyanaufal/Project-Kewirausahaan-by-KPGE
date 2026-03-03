@@ -831,13 +831,14 @@ class ReportService
         DocumentEntityType $entityType,
         array $columns = [],
         int $daysPerPeriod = 30,
-        int $numberOfPeriods = 4
+        int $numberOfPeriods = 4,
+        $companyId = null
     ): ReportDTO {
         $asOfDateCarbon = Carbon::parse($asOfDate);
 
         $documents = $entityType === DocumentEntityType::Client
-            ? $this->accountService->getUnpaidClientInvoices($asOfDate)->with(['client:id,name'])->get()->groupBy('client_id')
-            : $this->accountService->getUnpaidVendorBills($asOfDate)->with(['vendor:id,name'])->get()->groupBy('vendor_id');
+            ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)->with(['client:id,name'])->get()->groupBy('client_id')
+            : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)->with(['vendor:id,name'])->get()->groupBy('vendor_id');
 
         $categories = [];
         $totalAging = [
@@ -902,15 +903,16 @@ class ReportService
         string $asOfDate,
         DocumentEntityType $entityType,
         int $daysPerPeriod = 30,
-        int $numberOfPeriods = 4
+        int $numberOfPeriods = 4,
+        $companyId = null
     ): array {
         $asOfDateCarbon = Carbon::parse($asOfDate);
 
         $documents = $entityType === DocumentEntityType::Client
-            ? $this->accountService->getUnpaidClientInvoices($asOfDate)
+            ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)
             ->with(['client:id,name'])
             ->get()
-            : $this->accountService->getUnpaidVendorBills($asOfDate)
+            : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
             ->with(['vendor:id,name'])
             ->get();
 
@@ -971,12 +973,13 @@ class ReportService
         string $asOfDate,
         DocumentEntityType $entityType,
         int $daysPerPeriod = 30,
-        int $numberOfPeriods = 4
+        int $numberOfPeriods = 4,
+        $companyId = null
     ): array {
         $asOfDateCarbon = Carbon::parse($asOfDate);
 
         // Ambil semua vendor bills yang belum dibayar sampai tanggal tertentu
-        $bills = $this->accountService->getUnpaidVendorBills($asOfDate)
+        $bills = $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
             ->with(['vendor:id,name'])
             ->get();
 
@@ -1039,14 +1042,15 @@ class ReportService
     public function buildOutstandingReportInvoiceLevel(
         string $asOfDate,
         DocumentEntityType $entityType,
+        $companyId = null
     ): array {
         $asOfDateCarbon = Carbon::parse($asOfDate);
 
         $documents = $entityType === DocumentEntityType::Client
-            ? $this->accountService->getUnpaidClientInvoices($asOfDate)
+            ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)
             ->with(['client:id,name'])
             ->get()
-            : $this->accountService->getUnpaidVendorBills($asOfDate)
+            : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
             ->with(['vendor:id,name'])
             ->get();
 
@@ -1098,11 +1102,12 @@ class ReportService
 
     public function buildOutstandingReportBillLevel(
         string $asOfDate,
+        $companyId = null
     ): array {
         $asOfDateCarbon = Carbon::parse($asOfDate);
 
         // Ambil semua vendor bills yang belum dibayar hingga tanggal tertentu
-        $bills = $this->accountService->getUnpaidVendorBills($asOfDate)
+        $bills = $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
             ->with(['vendor:id,name'])
             ->get();
 
@@ -1152,10 +1157,11 @@ class ReportService
         ];
     }
 
-    public function buildEntityBalanceSummaryReport(string $startDate, string $endDate, DocumentEntityType $entityType, array $columns = []): ReportDTO
+    public function buildEntityBalanceSummaryReport(string $startDate, string $endDate, DocumentEntityType $entityType, array $columns = [], $companyId = null): ReportDTO
     {
         $documents = match ($entityType) {
             DocumentEntityType::Client => Invoice::query()
+                ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
                 ->whereBetween('date', [$startDate, $endDate])
                 ->whereNotIn('status', [
                     InvoiceStatus::Draft,
@@ -1166,6 +1172,7 @@ class ReportService
                 ->get()
                 ->groupBy('client_id'),
             DocumentEntityType::Vendor => Bill::query()
+                ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
                 ->whereBetween('date', [$startDate, $endDate])
                 ->whereNot('status', BillStatus::Void)
                 ->with(['vendor:id,name'])
@@ -1229,10 +1236,12 @@ class ReportService
         string $startDate,
         string $endDate,
         DocumentEntityType $entityType,
-        array $columns = []
+        array $columns = [],
+        $companyId = null
     ): ReportDTO {
         $documents = match ($entityType) {
             DocumentEntityType::Client => Invoice::query()
+                ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
                 ->whereBetween('date', [$startDate, $endDate])
                 ->whereNotIn('status', [InvoiceStatus::Draft, InvoiceStatus::Void])
                 ->whereNotNull('approved_at')
@@ -1242,6 +1251,7 @@ class ReportService
                 ->get()
                 ->groupBy('client_id'),
             DocumentEntityType::Vendor => Bill::query()
+                ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
                 ->whereBetween('date', [$startDate, $endDate])
                 ->whereNotIn('status', [BillStatus::Void])
                 ->whereNotNull('paid_at')

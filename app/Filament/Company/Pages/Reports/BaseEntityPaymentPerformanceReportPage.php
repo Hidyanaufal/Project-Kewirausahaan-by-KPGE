@@ -94,7 +94,8 @@ abstract class BaseEntityPaymentPerformanceReportPage extends BaseReportPage
             startDate: $this->getFormattedStartDate(),
             endDate: $this->getFormattedEndDate(),
             entityType: $this->getEntityType(),
-            columns: $columns
+            columns: $columns,
+            companyId: $this->company->id
         );
     }
 

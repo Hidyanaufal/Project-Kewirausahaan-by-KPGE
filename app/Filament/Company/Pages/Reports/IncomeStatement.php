@@ -75,7 +75,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
             $this->getFormattedEndDate(),
             $columns,
             $this->getFilterState('project_id'),
-            $this->getFilterState('company_id') ?? AuthHelper::currentCompany(),
+            $this->company->id
         );
     }
 

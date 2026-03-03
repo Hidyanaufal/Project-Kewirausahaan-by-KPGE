@@ -559,7 +559,7 @@ class AccountService
         return $earliestDate ?? company_today()->toDateTimeString();
     }
 
-    public function getUnpaidClientInvoices(?string $asOfDate = null): Builder
+    public function getUnpaidClientInvoices(?string $asOfDate = null, $companyId = null): Builder
     {
         $asOfDate = $asOfDate ?? company_today()->toDateString();
         $driver = DB::getDriverName();
@@ -576,7 +576,7 @@ class AccountService
                 break;
         }
 
-        return Invoice::query()
+        $query = Invoice::query()
             ->select([
                 'invoices.id',
                 'invoices.client_id',
@@ -592,9 +592,15 @@ class AccountService
             ->addBinding([$asOfDate], 'select')
             ->unpaid()
             ->where('amount_due', '>', 0);
+
+        if ($companyId !== null) {
+            $query->where('invoices.company_id', $companyId);
+        }
+
+        return $query;
     }
 
-    public function getUnpaidVendorBills(?string $asOfDate = null): Builder
+    public function getUnpaidVendorBills(?string $asOfDate = null, $companyId = null): Builder
     {
         $asOfDate = $asOfDate ?? company_today()->toDateString();
         $driver = DB::getDriverName();
@@ -611,7 +617,7 @@ class AccountService
                 break;
         }
 
-        return Bill::query()
+        $query = Bill::query()
             ->select([
                 'bills.id',
                 'bills.bill_number as code',
@@ -625,5 +631,11 @@ class AccountService
             ->addBinding([$asOfDate], 'select')
             ->unpaid()
             ->where('amount_due', '>', 0);
+
+        if ($companyId !== null) {
+            $query->where('bills.company_id', $companyId);
+        }
+
+        return $query;
     }
 }

@@ -128,7 +128,13 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
 
     protected function buildReport(array $columns): ReportDTO
     {
-        return $this->reportService->buildTrialBalanceReport($this->getFilterState('reportType'), $this->getFormattedAsOfDate(), $columns);
+        return $this->reportService->buildTrialBalanceReport(
+            $this->getFilterState('reportType'),
+            $this->getFormattedAsOfDate(),
+            $columns,
+            projectId: null,
+            companyId: $this->company->id
+        );
     }
 
     protected function getTransformer(ReportDTO $reportDTO): ExportableReport

@@ -185,6 +185,8 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             columns: $columns,
             accountId: $this->getFilterState('selectedAccount'),
             entityId: $this->getFilterState('selectedPayee'),
+            projectId: null,
+            companyId: $this->company->id
         );
     }
 

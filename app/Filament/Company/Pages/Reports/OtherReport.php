@@ -81,7 +81,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
             $this->getFormattedEndDate(),
             $columns,
             $this->getFilterState('project_id'),
-            $this->getFilterState('company_id'),
+            $this->company->id
         );
     }
 

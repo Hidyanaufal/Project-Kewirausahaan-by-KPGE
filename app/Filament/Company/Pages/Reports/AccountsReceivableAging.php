@@ -86,7 +86,8 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
 
         $data = $this->reportService->buildOutstandingReportInvoiceLevel(
             $this->getFormattedAsOfDate(),
-            $this->getEntityType()
+            $this->getEntityType(),
+            $this->company->id
         );
 
         $columns = array_filter($data['columns'], fn($col) => strtolower($col) !== 'invoice');
@@ -174,7 +175,8 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
             $this->getFormattedAsOfDate(),
             $this->getEntityType(),
             $daysPerPeriod,
-            $numberOfPeriods
+            $numberOfPeriods,
+            $this->company->id
         );
 
         $columns = $dataDetail['columns'];
