@@ -165,7 +165,7 @@
                     @if ($document->discount)
                     <!-- Discount -->
                     <tr>
-                        <td colspan="5" class="px-2 text-right">Discount{{ $document->discountRateLabel ? ' ' . $document->discountRateLabel : '' }}</td>
+                        <td colspan="5" class="px-2 text-right">Discount</td>
                         <td class="px-2 text-right">
                             {{ formatMoneyCeiling($document->discount) }}
                         </td>
