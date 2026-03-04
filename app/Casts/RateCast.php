@@ -17,7 +17,7 @@ class RateCast implements CastsAttributes
         }
 
         $currencyCode = $attributes['currency_code'] ?? $this->getDefaultCurrencyCode();
-        $computation = AdjustmentComputation::parse($attributes['computation'] ?? $attributes['discount_computation'] ?? null);
+        $computation = $this->getComputationForKey($key, $attributes);
 
         if ($computation?->isFixed()) {
             return money($value, $currencyCode)->formatSimple();
@@ -36,7 +36,7 @@ class RateCast implements CastsAttributes
             return $value;
         }
 
-        $computation = AdjustmentComputation::parse($attributes['computation'] ?? $attributes['discount_computation'] ?? null);
+        $computation = $this->getComputationForKey($key, $attributes);
 
         $currencyCode = $attributes['currency_code'] ?? $this->getDefaultCurrencyCode();
 
@@ -45,6 +45,15 @@ class RateCast implements CastsAttributes
         }
 
         return RateCalculator::parseLocalizedRate($value);
+    }
+
+    private function getComputationForKey(string $key, array $attributes): ?AdjustmentComputation
+    {
+        return match ($key) {
+            'profit_rate' => AdjustmentComputation::parse($attributes['profit_computation'] ?? null),
+            'discount_rate' => AdjustmentComputation::parse($attributes['discount_computation'] ?? null),
+            default => AdjustmentComputation::parse($attributes['computation'] ?? null),
+        };
     }
 
     private function getDefaultCurrencyCode(): string
