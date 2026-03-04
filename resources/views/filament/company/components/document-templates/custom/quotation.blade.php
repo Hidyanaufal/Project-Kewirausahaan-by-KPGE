@@ -162,6 +162,16 @@
                         </tr>
                     @endif
 
+                    @if ($document->discount)
+                    <!-- Discount -->
+                    <tr>
+                        <td colspan="5" class="px-2 text-right">Discount{{ $document->discountRateLabel ? ' ' . $document->discountRateLabel : '' }}</td>
+                        <td class="px-2 text-right">
+                            {{ formatMoneyCeiling($document->discount) }}
+                        </td>
+                    </tr>
+                    @endif
+
                     <!-- Total -->
                     <tr>
                         <td colspan="5" class="px-2 font-semibold text-right">Total</td>

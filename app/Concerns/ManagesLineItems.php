@@ -110,7 +110,7 @@ trait ManagesLineItems
             $taxTotalCents += $profitTotal * 0.11;
         }
 
-        $grandTotalCents = $subtotalCents + $taxTotalCents - $discountTotalCents + $profitTotal;
+        $grandTotalCents = $subtotalCents + $profitTotal - $discountTotalCents + $taxTotalCents;
 
         return [
             'subtotal' => $subtotalCents,
