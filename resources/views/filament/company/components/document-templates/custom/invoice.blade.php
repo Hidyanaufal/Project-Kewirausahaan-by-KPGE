@@ -224,6 +224,16 @@
                     </td>
                 </tr>
 
+                @if ($document->discount)
+                <!-- Discount -->
+                <tr>
+                    <td colspan="2" class="px-2 text-right">Discount</td>
+                    <td class="px-2 text-right">
+                        {{ formatMoneyCeiling($document->discount) }}
+                    </td>
+                </tr>
+                @endif
+
                 <!-- PPN -->
                 <tr>
                     <td colspan="2" class="px-2 text-right">PPN 11%</td>

@@ -69,9 +69,17 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             ]);
     }
 
+    /**
+     * Build report limited to the current company.
+     */
     protected function buildReport(array $columns): ReportDTO
     {
-        return $this->reportService->buildBalanceSheetReport($this->getFormattedAsOfDate(), $columns);
+        return $this->reportService->buildBalanceSheetReport(
+            $this->getFormattedAsOfDate(),
+            $columns,
+            projectId: null,
+            companyId: $this->company->id
+        );
     }
 
     protected function getTransformer(ReportDTO $reportDTO): ExportableReport
@@ -249,6 +257,16 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
 
     public function exportPDF(): StreamedResponse
     {
+        if ($this->getActiveTab() === 'summary') {
+            return $this->exportService->exportToPdf(
+                $this->company,
+                $this->report,
+                null,
+                $this->getFilterState('asOfDate'),
+                $this->getActiveTab()
+            );
+        }
+
         return $this->exportService->exportToPdfEnhanced(
             data: $this->buildReportEnhanced()
         );
@@ -256,6 +274,16 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
 
     public function exportXLSX(): BinaryFileResponse
     {
+        if ($this->getActiveTab() === 'summary') {
+            return $this->exportService->exportToExcel(
+                $this->company,
+                $this->report,
+                null,
+                $this->getFilterState('asOfDate'),
+                $this->getActiveTab()
+            );
+        }
+
         return $this->exportService->exportToExcelEnhanced(
             data: $this->buildReportEnhanced(
                 format: 'xlsx'

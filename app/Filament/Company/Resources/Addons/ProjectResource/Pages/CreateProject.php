@@ -6,6 +6,7 @@ use App\Concerns\HasMediumContentWidth;
 use App\Enums\Addons\ProjectStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Helpers\AuthHelper;
+use App\Jobs\SendProjectSubmissionNotification;
 use App\Models\Addons\Project;
 use Filament\Resources\Pages\CreateRecord;
 use Livewire\Attributes\Url;
@@ -33,10 +34,23 @@ class CreateProject extends CreateRecord
         $data['request_number_date'] = today();
         $data['status'] = AuthHelper::isAdmin() ? ProjectStatus::Approved : ProjectStatus::Draft;
 
+        if ($data['status'] == ProjectStatus::Draft) {
+            $data['requestor_id'] = AuthHelper::currentUser();
+        }
+
         if ($data['status'] == ProjectStatus::Approved) {
             $data['number'] = Project::generateProjectNumber($data['project_type_id']);
         }
 
         return $data;
+    }
+
+    protected function afterCreate(): void
+    {
+        $record = $this->getRecord();
+
+        if ($record->status === ProjectStatus::Draft && $record->requestor_id) {
+            SendProjectSubmissionNotification::dispatch($record->id);
+        }
     }
 }

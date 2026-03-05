@@ -17,17 +17,27 @@ trait CompanyOwned
     {
         static::creating(static function ($model) {
             if (empty($model->company_id)) {
-                $companyId = session('current_company_id');
+                $companyId = null;
 
-                if (! $companyId && ($user = Auth::user()) && ($companyId = $user->current_company_id)) {
-                    session(['current_company_id' => $companyId]);
+                // For notifications: use only payload or notifiable — never session (queue worker session is unreliable).
+                if ($model instanceof Notification) {
+                    $data = $model->data ?? [];
+                    if (! empty($data['company_id'])) {
+                        $companyId = $data['company_id'];
+                    } elseif (! empty(($data['viewData'] ?? [])['company_id'])) {
+                        $companyId = $data['viewData']['company_id'];
+                    } elseif ($model->notifiable_type === User::class && ! empty($model->notifiable_id)) {
+                        $notifiable = User::withoutGlobalScopes()->find($model->notifiable_id);
+                        if ($notifiable instanceof User && $notifiable->current_company_id) {
+                            $companyId = $notifiable->current_company_id;
+                        }
+                    }
                 }
 
-                // For notifications in job context, get company_id from the notifiable user
-                if (! $companyId && $model instanceof Notification && $model->notifiable_type === User::class) {
-                    $notifiable = $model->notifiable;
-                    if ($notifiable instanceof User) {
-                        $companyId = $notifiable->current_company_id;
+                if (! $companyId) {
+                    $companyId = session('current_company_id');
+                    if (! $companyId && ($user = Auth::user()) && ($companyId = $user->current_company_id)) {
+                        session(['current_company_id' => $companyId]);
                     }
                 }
 

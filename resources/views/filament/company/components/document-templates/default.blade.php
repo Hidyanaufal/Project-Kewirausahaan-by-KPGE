@@ -104,7 +104,7 @@
             @if($document->discount)
                 <tr class="text-success-800">
                     <td class="py-2 pl-6" colspan="2"></td>
-                    <td class="py-2 text-right">Discount:</td>
+                    <td class="py-2 text-right">Discount</td>
                     <td class="py-2 pr-6 text-right">
                         ({{ $document->discount }})
                     </td>

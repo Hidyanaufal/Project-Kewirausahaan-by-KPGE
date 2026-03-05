@@ -22,6 +22,10 @@
             font-weight: bold;
         }
 
+        .table-footer-row > td {
+            border-top: 2px solid #374151;
+        }
+
         .company-name {
             font-size: 1.125rem;
             font-weight: bold;

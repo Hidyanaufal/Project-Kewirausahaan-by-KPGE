@@ -3,12 +3,20 @@
 namespace App\Observers;
 
 use App\Enums\Accounting\EstimateStatus;
+use App\Jobs\SendQuotationSubmissionNotification;
 use App\Models\Accounting\DocumentLineItem;
 use App\Models\Accounting\Estimate;
 use Illuminate\Support\Facades\DB;
 
 class EstimateObserver
 {
+    public function created(Estimate $estimate): void
+    {
+        if ($estimate->status === EstimateStatus::Draft) {
+            SendQuotationSubmissionNotification::dispatch($estimate->id);
+        }
+    }
+
     public function saving(Estimate $estimate): void
     {
         if (! $estimate->wasApproved()) {

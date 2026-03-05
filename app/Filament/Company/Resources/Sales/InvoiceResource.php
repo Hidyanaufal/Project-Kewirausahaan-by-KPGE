@@ -609,6 +609,7 @@ class InvoiceResource extends Resource
                             'Total',
                             'Amount Paid',
                             'Amount Due',
+                            'Profit',
                             'Subtotal',
                             'Tax Total',
                         ];
@@ -625,6 +626,7 @@ class InvoiceResource extends Resource
                                     $record->total / 100, // Total
                                     $record->amount_paid / 100, // Amount Paid
                                     $record->amount_due / 100, // Amount Due
+                                    $record->profit_total / 100, // Profit
                                     $record->subtotal / 100, // Subtotal
                                     $record->tax_total / 100, // Tax Total
                                 ],

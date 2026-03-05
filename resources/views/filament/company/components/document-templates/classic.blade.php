@@ -119,7 +119,7 @@
                     @endif
                     @if($document->discount)
                         <tr class="text-success-800">
-                            <td class="py-2 text-right">Discount:</td>
+                            <td class="py-2 text-right">Discount</td>
                             <td class="py-2 text-right">
                                 ({{ $document->discount }})
                             </td>

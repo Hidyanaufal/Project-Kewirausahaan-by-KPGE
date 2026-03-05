@@ -31,6 +31,7 @@ readonly class DocumentDTO
         public string $currencyCode,
         public ?string $subtotal,
         public ?string $discount,
+        public ?string $discountRateLabel = null,
         public ?string $profitPercentage,
         public ?string $profit,
         public ?string $tax,
@@ -119,7 +120,15 @@ readonly class DocumentDTO
         if ($document?->profit_rate) {
             $profitRate = $document?->profit_rate;
         }
-        
+
+        $discountRateLabel = null;
+        if ($document->discount_total > 0 && $document->discount_rate) {
+            $rateFormatted = $document->discount_rate;
+            $discountRateLabel = ($document->discount_computation?->isPercentage() ?? false)
+                ? $rateFormatted . '%'
+                : $rateFormatted;
+        }
+
         return new self(
             detail: $document,
             header: $settings->header,
@@ -134,6 +143,7 @@ readonly class DocumentDTO
             currencyCode: $currencyCode,
             subtotal: $subtotal,
             discount: $discount,
+            discountRateLabel: $discountRateLabel,
             tax: $tax,
             profitPercentage: $profitRate,
             profit: $profit,

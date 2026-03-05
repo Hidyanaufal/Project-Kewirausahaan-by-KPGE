@@ -2,9 +2,12 @@
 
 namespace App\Filament\Company\Resources\Purchases\BillResource\RelationManagers;
 
+use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\PaymentMethod;
 use App\Enums\Accounting\TransactionType;
+use App\Models\Accounting\Account;
 use App\Models\Accounting\Bill;
+use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Transaction;
 use App\Models\Banking\BankAccount;
 use App\Utilities\Currency\CurrencyAccessor;
@@ -108,7 +111,16 @@ class PaymentsRelationManager extends RelationManager
                                     }
                                 },
                             ]),
-                    ])->columns(2),
+                        Forms\Components\TextInput::make('pph23')
+                            ->label('PPh 23')
+                            ->nullable()
+                            ->money(function (RelationManager $livewire) {
+                                /** @var Bill $bill */
+                                $bill = $livewire->getOwnerRecord();
+
+                                return $bill->currency_code;
+                            }),
+                    ])->columns(3),
                 Forms\Components\Placeholder::make('currency_conversion')
                     ->label('Currency Conversion')
                     ->content(function (Forms\Get $get, RelationManager $livewire) {
@@ -223,9 +235,22 @@ class PaymentsRelationManager extends RelationManager
                     })
                     ->mountUsing(function (Form $form) {
                         $record = $this->getOwnerRecord();
+                        $initialTransaction = $record->initialTransaction;
+                        $defaultPph23 = 0;
+                        if ($initialTransaction) {
+                            $journals = JournalEntry::where('transaction_id', $initialTransaction->id)->get();
+                            $expenseAccountIds = Account::where('company_id', $record->company_id)
+                                ->where('category', AccountCategory::Expense)
+                                ->pluck('id');
+                            $expenseJournals = $journals->whereIn('account_id', $expenseAccountIds);
+                            $expenseTotal = $expenseJournals->sum('amount');
+                            $defaultPph23 = (int) round($expenseTotal * 0.02);
+                        }
                         $form->fill([
                             'posted_at' => company_today()->toDateString(),
-                            'amount' => $record->amount_due,
+                            'amount' => $record->actual_total ?? $record->amount_due,
+                            'pph23' => $defaultPph23 ?: null,
+                            'payment_method'    => PaymentMethod::BankPayment
                         ]);
                     })
                     ->databaseTransaction()
@@ -233,7 +258,8 @@ class PaymentsRelationManager extends RelationManager
                     ->action(function (Tables\Actions\CreateAction $action, array $data) {
                         /** @var Bill $record */
                         $record = $this->getOwnerRecord();
-
+                        $record->pph23 = ! empty($data['pph23']) ? $data['pph23'] : null;
+                        $record->save();
                         $record->recordPayment($data);
 
                         $action->success();

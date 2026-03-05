@@ -1,7 +1,7 @@
 <table class="w-full table-auto min-w-[50rem] divide-y divide-gray-200 dark:divide-white/5">
     <thead>
         <tr class="bg-gray-50 dark:bg-gray-800">
-            <th class="px-3 py-2 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">ID</th>
+            <th class="px-3 py-2 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">Code</th>
             <th class="px-3 py-2 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">Account</th>
             <th class="px-3 py-2 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">Debit</th>
             <th class="px-3 py-2 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">Credit</th>
@@ -22,9 +22,9 @@
         @foreach($groupedEntries as $timestamp => $entries)
             @foreach($entries as $journalEntry)
                 <tr>
-                    <!-- ID -->
+                    <!-- Account Code -->
                     <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
-                        {{ $journalEntry->id }}
+                        {{ $journalEntry->account->code ?? '-' }}
                     </td>
 
                     <!-- Account Name -->
@@ -71,7 +71,7 @@
     </tbody>
     <tfoot>
         <tr class="bg-gray-100 dark:bg-gray-700">
-            <td colspan="2" class="px-3 py-2 text-sm font-semibold text-left text-gray-900 dark:text-gray-100">Total</td>
+            <td colspan="3" class="px-3 py-2 text-sm font-semibold text-left text-gray-900 dark:text-gray-100">Total</td>
             <td class="px-3 py-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
                 {{ number_format($totalDebit / 100) }}
             </td>

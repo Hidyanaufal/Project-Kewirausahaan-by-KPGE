@@ -198,6 +198,8 @@ class PaymentsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+        ->emptyStateHeading('No payments recorded')
+        ->emptyStateDescription('Please approve this invoice before recording any payments')
             ->recordTitleAttribute('description')
             ->columns([
                 Tables\Columns\TextColumn::make('posted_at')
@@ -238,7 +240,7 @@ class PaymentsRelationManager extends RelationManager
                     ->slideOver()
                     ->modalWidth(MaxWidth::TwoExtraLarge)
                     ->visible(function () {
-                        return $this->getOwnerRecord()->canRecordPayment();
+                        return $this->getOwnerRecord()->canRecordPayment() && $this->getOwnerRecord()->isFinalized();
                     })
                     ->mountUsing(function (Form $form) {
                         $record = $this->getOwnerRecord();
