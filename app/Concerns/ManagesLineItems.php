@@ -106,8 +106,9 @@ trait ManagesLineItems
             $data,
         );
 
-        if ($record instanceof \App\Models\Accounting\Invoice && $profitTotal > 0) {
-            $taxTotalCents += $profitTotal * 0.11;
+        if ($record instanceof \App\Models\Accounting\Invoice) {
+            $baseForTax = $subtotalCents + $profitTotal - $discountTotalCents;
+            $taxTotalCents = (int) round(0.11 * $baseForTax);
         }
 
         $grandTotalCents = $subtotalCents + $profitTotal - $discountTotalCents + $taxTotalCents;
