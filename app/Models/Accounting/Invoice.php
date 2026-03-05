@@ -469,6 +469,11 @@ class Invoice extends Document
         return $this->order_number;
     }
 
+    public function getAmountDueAttribute($value): int
+    {
+        return (int) ($this->getAttribute('total') - $this->getAttribute('amount_paid'));
+    }
+
     public function amountDue(): ?string
     {
         return $this->amount_due;
@@ -820,7 +825,7 @@ class Invoice extends Document
             $journalEntryData[] = [
                 'type' => JournalEntryType::Credit,
                 'account_id' => Account::getAccountsWapu()->id,
-                'amount_in_invoice_currency' => $profitTotal * 0.11,
+                'amount_in_invoice_currency' => $this->tax_total,
                 'description' => $profitDescription,
             ];
         }
