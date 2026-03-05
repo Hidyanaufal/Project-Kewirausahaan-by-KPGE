@@ -320,6 +320,22 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
             }
         }
 
+        $totalRowData = [];
+        foreach ($columns as $colKey) {
+            if ($colKey === 'entity_name') {
+                $totalRowData[] = $overallTotal[$colKey] ?? 'Total';
+            } else {
+                $totalRowData[] = $toNumber($overallTotal[$colKey] ?? 0);
+            }
+        }
+        $rows->push([
+            'data' => $totalRowData,
+            'style' => [
+                'font-weight' => 'bold',
+                'color' => 'rgb(6, 6, 174)',
+            ],
+        ]);
+
         $data['rows'] = $rows->toArray();
 
         return $data;
