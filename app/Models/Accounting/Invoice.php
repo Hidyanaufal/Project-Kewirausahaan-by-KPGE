@@ -143,7 +143,7 @@ class Invoice extends Document
     {
         parent::boot();
         static::updating(function (Invoice $record) {
-            $subtotal = $record->subtotal + $record->profit_total;
+            $subtotal = $record->subtotal + $record->profit_total - ($record->discount_total ?? 0);
             $tax_pph23 = $subtotal * 0.02;
             if ($record->isWapu()) {
                 $record->actual_total = $subtotal - $tax_pph23;
