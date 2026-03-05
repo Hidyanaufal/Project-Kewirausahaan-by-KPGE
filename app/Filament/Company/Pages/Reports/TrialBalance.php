@@ -117,7 +117,10 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
                         'standard' => 'Standard',
                         'postClosing' => 'Post-Closing',
                     ])
-                    ->selectablePlaceholder(false),
+                    ->default('standard')
+                    ->disabled()
+                    ->visible(false),
+                    
                 DateRangeSelect::make('dateRange')
                     ->label('As of')
                     ->selectablePlaceholder(false)
