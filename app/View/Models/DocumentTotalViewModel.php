@@ -33,20 +33,16 @@ class DocumentTotalViewModel
         $discountMethod = DocumentDiscountMethod::parse($this->data['discount_method']);
         $isPerDocumentDiscount = $discountMethod->isPerDocument();
 
+        if ($this->documentType == DocumentType::Invoice) {
+            $baseForTaxInCents = $subtotalInCents + $profitTotalInCents - $discountTotalInCents;
+            $taxTotalInCents = (int) round(0.11 * $baseForTaxInCents);
+        }
+
         $taxTotal = $taxTotalInCents > 0
             ? CurrencyConverter::formatCentsToMoney($taxTotalInCents, $currencyCode)
             : null;
 
         $profitTotal = CurrencyConverter::formatCentsToMoney($profitTotalInCents, $currencyCode);
-
-        if ($this->documentType == DocumentType::Invoice) {
-            if ($profitTotalInCents) {
-                $taxTotalInCents += $profitTotalInCents * 0.11;
-                $taxTotal = $taxTotalInCents > 0
-                    ? CurrencyConverter::formatCentsToMoney($taxTotalInCents, $currencyCode)
-                    : null;
-            }
-        }
 
         $discountTotal = ($isPerDocumentDiscount || $discountTotalInCents > 0)
             ? CurrencyConverter::formatCentsToMoney($discountTotalInCents, $currencyCode)
@@ -57,7 +53,7 @@ class DocumentTotalViewModel
             ? CurrencyConverter::formatCentsToMoney($subtotalInCents, $currencyCode)
             : null;
 
-        $grandTotalInCents = $subtotalInCents + $profitTotalInCents + ($taxTotalInCents - $discountTotalInCents);
+        $grandTotalInCents = $subtotalInCents + $profitTotalInCents - $discountTotalInCents + $taxTotalInCents;
         $grandTotal = CurrencyConverter::formatCentsToMoney($grandTotalInCents, $currencyCode);
 
         $amountDueInCents = $this->calculateAmountDueInCents($grandTotalInCents, $currencyCode);
