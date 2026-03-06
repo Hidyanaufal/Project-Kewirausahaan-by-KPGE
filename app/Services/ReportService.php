@@ -37,6 +37,11 @@ class ReportService
         protected AccountService $accountService,
     ) {}
 
+    public function getEarliestTransactionDate(): string
+    {
+        return $this->accountService->getEarliestTransactionDate();
+    }
+
     /**
      * @template T of BalanceFormattable
      *
