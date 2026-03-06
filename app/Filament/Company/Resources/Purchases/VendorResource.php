@@ -74,9 +74,7 @@ class VendorResource extends Resource
                                     ->maxLength(10)
                                     ->visible(static fn(Forms\Get $get) => ContractorType::parse($get('contractor_type')) === ContractorType::Business)
                                     ->maxLength(255),
-                                // Forms\Components\TextInput::make('account_number')
-                                //     ->label('Account number yahahahaha')
-                                //     ->maxLength(255),
+                                
                                 Forms\Components\TextInput::make('website')
                                     ->maxLength(255),
                                 Forms\Components\Textarea::make('notes')
