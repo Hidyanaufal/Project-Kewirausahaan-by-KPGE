@@ -143,7 +143,7 @@ class Invoice extends Document
     {
         parent::boot();
         static::updating(function (Invoice $record) {
-            $subtotal = $record->subtotal + $record->profit_total;
+            $subtotal = $record->subtotal + $record->profit_total - ($record->discount_total ?? 0);
             $tax_pph23 = $subtotal * 0.02;
             if ($record->isWapu()) {
                 $record->actual_total = $subtotal - $tax_pph23;
@@ -469,6 +469,11 @@ class Invoice extends Document
         return $this->order_number;
     }
 
+    public function getAmountDueAttribute($value): int
+    {
+        return (int) ($this->getAttribute('total') - $this->getAttribute('amount_paid'));
+    }
+
     public function amountDue(): ?string
     {
         return $this->amount_due;
@@ -502,7 +507,7 @@ class Invoice extends Document
 
     public function shouldBeOverdue(): bool
     {
-        return $this->due_date->isBefore(company_today()) && $this->canBeOverdue();
+        return $this->due_date?->isBefore(company_today()) && $this->canBeOverdue();
     }
 
     public function isDraft(): bool
@@ -580,7 +585,7 @@ class Invoice extends Document
     public function canBeApproved(): bool
     {
         return $this->status !== InvoiceStatus::Cancelled
-            && $this->isDraft()
+            && ($this->isDraft() || $this->status === InvoiceStatus::Sent)
             && ! $this->wasApproved()
             && AuthHelper::isAdmin();
     }
@@ -588,7 +593,7 @@ class Invoice extends Document
     public function canBeFinalized(): bool
     {
         return $this->status !== InvoiceStatus::Cancelled
-            && $this->status === InvoiceStatus::Unsent
+            && in_array($this->status, [InvoiceStatus::Unsent, InvoiceStatus::Sent], true)
             && $this->wasApproved()
             && ! $this->isFinalized()
             && AuthHelper::isAdmin();
@@ -712,18 +717,23 @@ class Invoice extends Document
 
     public function approveDraft(?Carbon $approvedAt = null): void
     {
-        if (! $this->isDraft()) {
-            throw new \RuntimeException('Invoice is not in draft status.');
+        if (! $this->isDraft() && $this->status !== InvoiceStatus::Sent) {
+            throw new \RuntimeException('Invoice is not in draft or sent status.');
         }
 
         $this->updateApprovalTransaction();
 
         $approvedAt ??= company_now();
 
-        $this->update([
-            'approved_at' => $approvedAt,
-            'status' => InvoiceStatus::Unsent,
-        ]);
+        if ($this->status === InvoiceStatus::Sent) {
+            // Backfill approval: set approved_at only, keep status Sent
+            $this->update(['approved_at' => $approvedAt]);
+        } else {
+            $this->update([
+                'approved_at' => $approvedAt,
+                'status' => InvoiceStatus::Unsent,
+            ]);
+        }
     }
 
     public function finalizeInvoice(?Carbon $finalizedAt = null): void
@@ -820,7 +830,7 @@ class Invoice extends Document
             $journalEntryData[] = [
                 'type' => JournalEntryType::Credit,
                 'account_id' => Account::getAccountsWapu()->id,
-                'amount_in_invoice_currency' => $profitTotal * 0.11,
+                'amount_in_invoice_currency' => $this->tax_total,
                 'description' => $profitDescription,
             ];
         }

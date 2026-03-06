@@ -64,12 +64,13 @@ class ViewInvoice extends ViewRecord
             Actions\ActionGroup::make([
                 Actions\ActionGroup::make([
                     Invoice::getUnifiedApproveAction()
+                        ->after(fn() => $this->dispatch('refresh'))
                         ->visible(function (Invoice $record) {
-                            return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
+                            return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && !$record->isFinalized();
                         }),
                     Invoice::getMarkAsSentAction()
                         ->visible(function (Invoice $record) {
-                            return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
+                            return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && $record->canBeMarkedAsSent();
                         }),
                     Invoice::getPrintDocumentAction()
                         ->visible(function (Invoice $record) {
@@ -84,7 +85,7 @@ class ViewInvoice extends ViewRecord
                     ->dropdown(false)
                     ->visible(function (Invoice $record) {
                         // Hide action group if all child actions are not visible
-                        $hasVisibleAction = 
+                        $hasVisibleAction =
                             (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && ($record->canBeApproved() || $record->canBeFinalized())) || // Unified Approve
                             (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && $record->canBeMarkedAsSent()) || // Mark as Sent
                             ($record->status !== InvoiceStatus::Cancelled && $record->status !== InvoiceStatus::Draft) || // Print (after first approval)
@@ -137,15 +138,15 @@ class ViewInvoice extends ViewRecord
             ])
                 ->visible(function (Invoice $record) {
                     // Hide main action group if all child groups and actions are not visible
-                    $hasVisibleAction = 
-                        // First action group (approve, mark as sent, print, cancel)
+                    $hasVisibleAction =
+                            // First action group (approve, mark as sent, print, cancel)
                         ((AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && ($record->canBeApproved() || $record->canBeFinalized())) ||
-                         (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && $record->canBeMarkedAsSent()) ||
-                         ($record->status !== InvoiceStatus::Cancelled && $record->status !== InvoiceStatus::Draft) ||
-                         (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled)) ||
-                        // Journal action group
+                            (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled && $record->canBeMarkedAsSent()) ||
+                            ($record->status !== InvoiceStatus::Cancelled && $record->status !== InvoiceStatus::Draft) ||
+                            (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled)) ||
+                            // Journal action group
                         (AuthHelper::isAdmin()) ||
-                        // Delete action
+                            // Delete action
                         (AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled);
                     return $hasVisibleAction;
                 })
