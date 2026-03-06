@@ -114,9 +114,22 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
 
         $startFormatted = now()->format('d M Y');
 
-        $toNumber = fn($v) => is_null($v)
-            ? 0
-            : (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $v));
+        // Nilai balance siap export: numerik/Money dipakai langsung (termasuk tanda negatif); string di-parse format Indonesia
+        $toNumber = function ($v) {
+            if (is_null($v)) {
+                return 0.0;
+            }
+            if (is_int($v) || is_float($v)) {
+                return (float) $v;
+            }
+            if ($v instanceof \App\ValueObjects\Money) {
+                return (float) $v->getValue();
+            }
+            $str = (string) $v;
+            $negative = str_starts_with($str, '-');
+            $parsed = (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $str));
+            return $negative ? -abs($parsed) : $parsed;
+        };
 
         $data = [
             'filename'      => "{$company->name} Balance Sheet {$now}.pdf",
@@ -173,6 +186,11 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             }
         };
 
+        $subtreeBalance = function ($account) use (&$subtreeBalance): float {
+            return $account->ending_balance->getValue()
+                + $account->children->sum(fn($a) => $subtreeBalance($a));
+        };
+
         // Loop kategori dengan urutan eksplisit: ASSET → LIABILITY → EQUITY
         $orderedCategories = [
             AccountCategory::Asset,
@@ -212,37 +230,57 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 ]);
 
                 $parentAccounts = $accountsByType->whereNull('parent_id');
-                $appendAccountRows($parentAccounts, 2);
+                foreach ($parentAccounts as $parent) {
+                    $appendAccountRows(collect([$parent]), 2);
+                    $groupTotal = $subtreeBalance($parent);
+                    if ($groupTotal != 0) {
+                        $rows->push([
+                            'data' => [
+                                'Total ' . $parent->name,
+                                $toNumber($groupTotal),
+                            ],
+                            'style' => [
+                                'font-weight'   => 'bold',
+                                'padding-left'  => '30px',
+                                'color'         => 'rgb(6, 6, 174)',
+                            ],
+                        ]);
+                    }
+                }
 
-                // subtotal per tipe
+                // subtotal per tipe (hanya tampilkan jika bukan 0)
                 $typeTotal = $accountsByType->sum(fn($a) => $a->ending_balance->getValue());
-                $rows->push([
-                    'data' => [
-                        "Total " . str_replace('_', ' ', ucwords(strtolower($type))),
-                        $toNumber($typeTotal),
-                    ],
-                    'style' => [
-                        'font-weight'   => 'bold',
-                        'padding-left'  => '10px',
-                        'color'         => 'rgb(6, 6, 174)',
-                    ],
-                ]);
+                if ($typeTotal != 0) {
+                    $rows->push([
+                        'data' => [
+                            "Total " . str_replace('_', ' ', ucwords(strtolower($type))),
+                            $toNumber($typeTotal),
+                        ],
+                        'style' => [
+                            'font-weight'   => 'bold',
+                            'padding-left'  => '10px',
+                            'color'         => 'rgb(6, 6, 174)',
+                        ],
+                    ]);
+                }
             }
 
-            // subtotal per kategori
+            // subtotal per kategori (hanya tampilkan jika bukan 0)
             $categoryTotal = collect($types)
                 ->flatten()
                 ->sum(fn($a) => $a->ending_balance->getValue());
 
-            $rows->push([
-                'data' => [
-                    "Total " . strtoupper($categoryValue),
-                    $toNumber($categoryTotal),
-                ],
-                'style' => [
-                    'font-weight' => 'bold',
-                ],
-            ]);
+            if ($categoryTotal != 0) {
+                $rows->push([
+                    'data' => [
+                        "Total " . strtoupper($categoryValue),
+                        $toNumber($categoryTotal),
+                    ],
+                    'style' => [
+                        'font-weight' => 'bold',
+                    ],
+                ]);
+            }
         }
 
         $data['rows'] = $rows->toArray();
