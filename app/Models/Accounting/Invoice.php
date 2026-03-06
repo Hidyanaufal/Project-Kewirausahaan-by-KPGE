@@ -471,6 +471,10 @@ class Invoice extends Document
 
     public function getAmountDueAttribute($value): int
     {
+        if ($value !== null && $value !== '') {
+            return (int) $value;
+        }
+
         return (int) ($this->getAttribute('total') - $this->getAttribute('amount_paid'));
     }
 

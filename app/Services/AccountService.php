@@ -584,6 +584,8 @@ class AccountService
                 'invoices.date',
                 'invoices.due_date',
                 'invoices.total',
+                'invoices.actual_total',
+                'invoices.amount_paid',
                 'invoices.tax_total',
                 'invoices.amount_due',
                 'invoices.currency_code',
