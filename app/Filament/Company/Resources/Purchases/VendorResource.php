@@ -77,7 +77,7 @@ class VendorResource extends Resource
                                 
                                 Forms\Components\TextInput::make('website')
                                     ->maxLength(255),
-                                Forms\Components\Textarea::make('notes')
+                                Forms\Components\Textarea::make('Nomor Rekening / Nama Bank')
                                     ->columnSpanFull(),
                             ]),
                         CustomSection::make('Primary Contact')
