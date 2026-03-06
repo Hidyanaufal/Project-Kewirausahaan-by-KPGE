@@ -9,9 +9,13 @@ use App\Filament\Company\Resources\Purchases\BillResource;
 use App\Models\Accounting\Bill;
 use App\Models\Addons\Project;
 use App\Models\Common\Vendor;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\MaxWidth;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Url;
 
 class CreateBill extends CreateRecord
@@ -51,21 +55,61 @@ class CreateBill extends CreateRecord
 
     protected function handleRecordCreation(array $data): Model
     {
-        /** @var Bill $record */
-        $data['status'] =  BillStatus::Draft;
+        $lock = null;
 
-        $record = parent::handleRecordCreation($data);
+        try {
+            DB::beginTransaction();
 
-        $this->handleLineItems($record, collect($data['lineItems'] ?? []));
+            $company = auth()->user()?->currentCompany;
+            if (! $company) {
+                throw new \RuntimeException('No current company is set for the user.');
+            }
 
-        $totals = $this->updateDocumentTotals($record, $data);
+            $lockKey = 'bill_number_lock_' . $company->id . '_' . now()->format('y');
+            $lock = Cache::lock($lockKey, 15);
+            $lock->block(10);
 
-        $record->updateQuietly($totals);
+            $data['bill_number'] = Bill::getNextDocumentNumber($company);
+            $data['status'] = BillStatus::Draft;
 
-        if (! $record->initialTransaction) {
-            $record->createInitialTransaction();
+            /** @var Bill $record */
+            $record = parent::handleRecordCreation($data);
+
+            $this->handleLineItems($record, collect($data['lineItems'] ?? []));
+
+            $totals = $this->updateDocumentTotals($record, $data);
+
+            $record->updateQuietly($totals);
+
+            if (! $record->initialTransaction) {
+                $record->createInitialTransaction();
+            }
+
+            DB::commit();
+
+            return $record;
+        } catch (LockTimeoutException $e) {
+            DB::rollBack();
+            Notification::make()
+                ->danger()
+                ->title('Bill creation busy')
+                ->body('Another bill is being created. Please try again in a moment.')
+                ->send();
+            $this->halt();
+            throw $e;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Notification::make()
+                ->danger()
+                ->title('Something went wrong')
+                ->body($e->getMessage())
+                ->send();
+            $this->halt();
+            throw $e;
+        } finally {
+            if ($lock !== null) {
+                $lock->release();
+            }
         }
-
-        return $record;
     }
 }
