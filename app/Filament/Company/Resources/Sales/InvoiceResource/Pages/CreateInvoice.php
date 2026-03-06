@@ -12,7 +12,9 @@ use App\Models\Common\Client;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\MaxWidth;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Url;
@@ -60,8 +62,21 @@ class CreateInvoice extends CreateRecord
 
     protected function handleRecordCreation(array $data): Model
     {
+        $lock = null;
+
         try {
             DB::beginTransaction();
+
+            $company = auth()->user()?->currentCompany;
+            if (! $company) {
+                throw new \RuntimeException('No current company is set for the user.');
+            }
+
+            $lockKey = 'invoice_number_lock_' . $company->id . '_' . now()->format('y');
+            $lock = Cache::lock($lockKey, 15);
+            $lock->block(10);
+
+            $data['invoice_number'] = Invoice::getNextDocumentNumber($company);
 
             /** @var Invoice $record */
             $record = parent::handleRecordCreation($data);
@@ -75,7 +90,7 @@ class CreateInvoice extends CreateRecord
                     'name' => 'PPN WAPU'
                 ])->first();
 
-                if (!$wapuAdjusment) {
+                if (! $wapuAdjusment) {
                     throw new \Exception('This transaction exceeds 10,000,000. Please configure PPN WAPU in the adjustment settings before proceeding.');
                 }
 
@@ -93,7 +108,17 @@ class CreateInvoice extends CreateRecord
             }
 
             DB::commit();
+
             return $record;
+        } catch (LockTimeoutException $e) {
+            DB::rollBack();
+            Notification::make()
+                ->danger()
+                ->title('Invoice creation busy')
+                ->body('Another invoice is being created. Please try again in a moment.')
+                ->send();
+            $this->halt();
+            throw $e;
         } catch (\Exception $e) {
             DB::rollBack();
             Notification::make()
@@ -102,6 +127,11 @@ class CreateInvoice extends CreateRecord
                 ->body($e->getMessage())
                 ->send();
             $this->halt();
+            throw $e;
+        } finally {
+            if ($lock !== null) {
+                $lock->release();
+            }
         }
     }
 }
