@@ -372,6 +372,7 @@ class BillResource extends Resource
                         DocumentTotals::make()
                             ->type(DocumentType::Bill),
                         Forms\Components\Textarea::make('terms')
+                        ->label('Notes Bill')
                     ]),
             ]);
     }
