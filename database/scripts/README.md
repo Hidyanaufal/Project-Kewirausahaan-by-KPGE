@@ -4,18 +4,18 @@ A lightweight tool for migrating multi-sheet Excel data (with specific naming pa
 
 ## 🚀 Features
 
--   Read Excel files with multiple sheets.
--   Supports sheet naming pattern like `Project-{jenis_projek}` and `Invoice`.
--   Custom processing order (e.g., process all `Project-*` before `Invoice`).
--   Data transformation & validation layer.
--   Insert clean data into MySQL.
+- Read Excel files with multiple sheets.
+- Supports sheet naming pattern like `Project-{jenis_projek}` and `Invoice`.
+- Custom processing order (e.g., process all `Project-*` before `Invoice`).
+- Data transformation & validation layer.
+- Insert clean data into MySQL.
 
 ## 📦 Tech Stack
 
--   **Python 3.10+**
--   **pandas** for Excel reading
--   **openpyxl** for XLSX engine
--   **SQLAlchemy** for DB operations
+- **Python 3.10+**
+- **pandas** for Excel reading
+- **openpyxl** for XLSX engine
+- **SQLAlchemy** for DB operations
 
 ## 📁 Project Structure
 
@@ -64,15 +64,15 @@ python main.py --file data.xlsx
 
 ## 🧪 Example Sheet Pattern
 
--   `Project-Website`
--   `Project-MobileApp`
--   `Invoice`
+- `Project-Website`
+- `Project-MobileApp`
+- `Invoice`
 
 ## 🔐 Validation Layer
 
--   Missing required fields
--   Data type checks
--   Duplicate detection
+- Missing required fields
+- Data type checks
+- Duplicate detection
 
 ## 🗄️ Database Output
 
@@ -80,9 +80,11 @@ Data will be inserted into MySQL according to mapping logic inside `mapping/*.py
 
 ## 📌 Notes
 
--   Sheet names _must_ follow the agreed pattern.
--   Only `.xlsx` is supported.
+- Sheet names _must_ follow the agreed pattern.
+- Only `.xlsx` is supported.
 
 ## 📞 Support
 
 Need help? Just ask, bro 😄
+
+test
