@@ -66,6 +66,7 @@ class ViewEstimate extends ViewRecord
                     Estimate::getPrintDocumentAction(),
                     Estimate::getNegotiateAction(),
                     Estimate::getConvertToInvoiceAction(),
+                     Estimate::getCancelEstimateAction(Actions\Action::class),
                 ])->dropdown(false),
                 Actions\DeleteAction::make(),
             ])

@@ -634,4 +634,26 @@ class Estimate extends Document
     {
         return $this->belongsTo(Project::class);
     }
+
+    public static function getCancelEstimateAction(string $action = Action::class): MountableAction
+    {
+        return $action::make('cancelEstimate')
+            ->label('Cancel Quotation')
+            ->icon('heroicon-m-x-circle')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->visible(function (self $record) {
+                return AuthHelper::isAdmin() && $record->status !== EstimateStatus::Declined;
+            })
+            ->action(function (self $record, MountableAction $action) {
+                $record->update([
+                    'status' => EstimateStatus::Declined,
+                    'declined_at' => company_now(),
+                ]);
+
+                $action->success();
+            });
+    }
+
+    
 }
