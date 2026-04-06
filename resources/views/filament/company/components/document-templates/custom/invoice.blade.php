@@ -30,22 +30,6 @@
     return $withSymbol ? 'Rp' . $formatted : $formatted;
 }
 
-    function formatMoneyCeiling(?string $formattedMoney) {
-        if (!$formattedMoney) return null;
-        
-        // Parse: "Rp12.500,25" -> 12500.25
-        $numeric = str_replace(['Rp', ' '], '', $formattedMoney);
-        $numeric = str_replace('.', '', $numeric); // Remove thousands separator
-        $numeric = str_replace(',', '.', $numeric); // Convert decimal comma to dot
-        $numeric = (float) $numeric;
-        
-        // Apply ceiling (round up)
-        $rounded = ceil($numeric);
-        
-        // Format back: Rp12.501 (no decimals)
-        return 'Rp' . number_format($rounded, 0, ',', '.');
-    }
-
 @endphp
 
 <div class="p-6 text-gray-800 bg-white rounded-md shadow-sm invoice-container">
@@ -162,7 +146,7 @@
                             @endisset
                         </td>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                            {{ formatMoneyCeiling($document->subtotal) }}
+                            {{ formatMoneyRoundWhole($document->subtotal) }}
                         </td>
                     </tr>
                 @else
@@ -197,7 +181,7 @@
                         @endif
                     </td>
                     <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                        {{ formatMoneyCeiling($item->subtotal) }}
+                        {{ formatMoneyRoundWhole($item->subtotal) }}
                     </td>
                     @endforeach
                 @endif
@@ -207,7 +191,7 @@
                 <tr>
                     <td colspan="2" class="px-2 text-right border-t border-black">Profit {{ $document->profitPercentage }}%</td>
                     <td class="px-2 text-right border-t border-black">
-                        {{ formatMoneyCeiling($document->profit) }}
+                        {{ formatMoneyRoundWhole($document->profit) }}
                     </td>
                 </tr>
 
@@ -216,7 +200,7 @@
                     <td colspan="2" class="px-2 text-right border-t border-black">Jumlah</td>
                     <td class="px-2 text-right border-t border-black">
                         {{
-                            formatMoneyCeiling(
+                            formatMoneyRoundWhole(
                                 rupiahToNumber($document->subtotal)
                                 + rupiahToNumber($document->profit)
                             )
@@ -229,7 +213,7 @@
                 <tr>
                     <td colspan="2" class="px-2 text-right">Discount</td>
                     <td class="px-2 text-right">
-                        {{ formatMoneyCeiling($document->discount) }}
+                        {{ formatMoneyRoundWhole($document->discount) }}
                     </td>
                 </tr>
                 @endif
@@ -238,7 +222,7 @@
                 <tr>
                     <td colspan="2" class="px-2 text-right">PPN 11%</td>
                     <td class="px-2 text-right">
-                        {{ formatMoneyCeiling($document->tax) }}
+                        {{ formatMoneyRoundWhole($document->tax) }}
                     </td>
                 </tr>
 
@@ -246,7 +230,7 @@
                 <tr>
                     <td colspan="2" class="px-2 font-semibold text-right">Total</td>
                     <td class="px-2 font-semibold text-right">
-                        {{ formatMoneyCeiling($document->total) }}
+                        {{ formatMoneyRoundWhole($document->total) }}
                     </td>
                 </tr>
 
