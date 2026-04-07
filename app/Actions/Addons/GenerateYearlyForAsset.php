@@ -25,7 +25,7 @@ class GenerateYearlyForAsset
         }
 
         $method = $asset->depreciation_method?->value
-            ?? $asset->group?->default_method
+            ?? $asset->group?->default_method?->value
             ?? 'garis_lurus';
 
         $lifeMonths = $asset->useful_life_months
