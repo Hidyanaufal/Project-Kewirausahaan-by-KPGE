@@ -80,6 +80,34 @@ class JournalEntryResource extends Resource
                             ? number_format($record->amount / 100, 2)
                             : ''
                     ),
+                Tables\Columns\TextColumn::make('transaction.transactionable.invoice_number')
+                    ->label('Invoice Number')
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas('transaction', function (Builder $q) use ($search) {
+                            $q->whereHasMorph(
+                                'transactionable',
+                                [\App\Models\Accounting\Invoice::class],
+                                function (Builder $q) use ($search) {
+                                    $q->where('invoice_number', $search);
+                                }
+                            );
+                        });
+                    })                    
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('transaction.transactionable.bill_number')
+                    ->label('Bill Number')
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas('transaction', function (Builder $q) use ($search) {
+                            $q->whereHasMorph(
+                                'transactionable',
+                                [\App\Models\Accounting\Bill::class],
+                                function (Builder $q) use ($search) {
+                                    $q->where('bill_number', $search);
+                                }
+                            );
+                        });
+                    })                    
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('id', 'desc')
             ->groups([
