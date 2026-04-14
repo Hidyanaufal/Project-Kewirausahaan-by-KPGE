@@ -502,13 +502,19 @@ class MacroServiceProvider extends ServiceProvider
             return $this->shiftTimezone($timezone);
         });
 
-        ExportColumn::macro('money', function () {
+        ExportColumn::macro('money', function (?string $currency = null) {
             $this->formatStateUsing(static function ($state) {
-                if (blank($state) || ! is_int($state)) {
+                if ($state === null || $state === '') {
                     return 0.00;
                 }
 
-                return CurrencyConverter::convertCentsToFloat($state);
+                if (! is_numeric($state)) {
+                    return 0.00;
+                }
+
+                $cents = (int) $state;
+
+                return CurrencyConverter::convertCentsToFloat($cents);
             });
 
             return $this;

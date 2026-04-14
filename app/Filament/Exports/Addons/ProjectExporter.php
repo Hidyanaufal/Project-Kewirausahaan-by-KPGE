@@ -45,6 +45,19 @@ class ProjectExporter extends Exporter
             ExportColumn::make('pic_client_name')
                 ->label('PIC Client')
                 ->enabledByDefault(false),
+
+            ExportColumn::make('approved_invoice_total_without_ppn_sum')
+                ->label('Total Invoice (Tanpa PPN)')
+                ->getStateUsing(static fn (Project $record): int => $record->total_invoice_without_ppn)
+                ->money('idr'),
+            ExportColumn::make('approved_bill_total_sum')
+                ->label('Total Biaya')
+                ->getStateUsing(static fn (Project $record): int => $record->total_biaya)
+                ->money('idr'),
+            ExportColumn::make('net_earning')
+                ->label('Net Earning')
+                ->getStateUsing(static fn (Project $record): int => $record->net_earning)
+                ->money('idr'),
         ];
     }
 
