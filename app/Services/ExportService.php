@@ -6,6 +6,7 @@ use App\Contracts\ExportableReport;
 use App\Contracts\HasSummaryReport;
 use App\Models\Company;
 use App\Transformers\CashFlowStatementReportTransformer;
+use App\Utilities\Currency\CurrencyConverter;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Support\Carbon;
@@ -13,12 +14,45 @@ use League\Csv\Bom;
 use League\Csv\CannotInsertRecord;
 use League\Csv\Exception;
 use League\Csv\Writer;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ExportService
 {
+    /**
+     * @param  array<string, mixed>  $row
+     * @return list<mixed>
+     */
+    public function flattenSummaryRowForExcel(HasSummaryReport $report, array $row, bool $parseAmounts = true): array
+    {
+        $flat = [];
+
+        foreach ($report->getSummaryColumns() as $column) {
+            $name = $column->getName();
+            $value = $row[$name] ?? '';
+
+            if (is_array($value) && array_key_exists('name', $value)) {
+                $value = $value['name'];
+            }
+
+            if (
+                $parseAmounts
+                && $name !== 'account_name'
+                && ! $column->isDate()
+                && $value !== '' && $value !== null
+            ) {
+                if (is_string($value) && CurrencyConverter::isValidAmount($value)) {
+                    $value = CurrencyConverter::convertToFloat($value);
+                }
+            }
+
+            $flat[] = $value;
+        }
+
+        return $flat;
+    }
+
     public function exportToCsv(Company $company, ExportableReport $report, ?string $startDate = null, ?string $endDate = null, ?string $activeTab = null): StreamedResponse
     {
         if ($startDate && $endDate) {
@@ -325,13 +359,16 @@ class ExportService
         $timestamp = company_now()->format('Y-m-d_H-i-s');
 
         $filename = $company->name . ' ' . $report->getTitle() . ' ' . $dateLabel . ' ' . $timestamp . '.xlsx';
-        $export = new class($company, $report, $startDate, $endDate, $activeTab) implements \Maatwebsite\Excel\Concerns\FromArray {
+        $exportService = $this;
+        $export = new class($company, $report, $startDate, $endDate, $activeTab, $exportService) implements \Maatwebsite\Excel\Concerns\FromArray, \Maatwebsite\Excel\Concerns\WithEvents, \Maatwebsite\Excel\Concerns\WithStyles, \Maatwebsite\Excel\Concerns\WithTitle
+        {
             public function __construct(
                 protected Company $company,
                 protected ExportableReport $report,
                 protected ?string $startDate,
                 protected ?string $endDate,
                 protected ?string $activeTab,
+                protected ExportService $exportService,
             ) {}
 
             public function array(): array
@@ -349,32 +386,38 @@ class ExportService
                 $rows[] = [$this->report->getTitle()];
                 $rows[] = [$this->company->name];
                 $rows[] = [$dateLabel];
-                $rows[] = [];
 
-                if ($this->activeTab === 'summary') {
-                    $rows[] = $this->report->getSummaryHeaders();
-                    foreach ($this->report->getSummaryCategories() as $categoryName => $category) {
+                if ($this->activeTab === 'summary' && $this->report instanceof HasSummaryReport) {
+                    /** @var HasSummaryReport $summaryReport */
+                    $summaryReport = $this->report;
+
+                    $rows[] = $this->exportService->flattenSummaryRowForExcel($summaryReport, $summaryReport->getSummaryHeaders(), false);
+
+                    foreach ($summaryReport->getSummaryCategories() as $categoryName => $category) {
                         if (filled($category->header)) {
-                            $rows[] = $category->header;
+                            $rows[] = $this->exportService->flattenSummaryRowForExcel($summaryReport, $category->header);
                         }
 
                         foreach ($category->types ?? [] as $type) {
-                            $rows[] = $type->summary;
+                            $rows[] = $this->exportService->flattenSummaryRowForExcel($summaryReport, $type->summary);
                         }
 
                         if (filled($category->summary)) {
-                            $rows[] = $category->summary;
+                            $rows[] = $this->exportService->flattenSummaryRowForExcel($summaryReport, $category->summary);
                         }
 
-                        if ($categoryName === 'Cost of Goods Sold' && method_exists($this->report, 'getGrossProfit') && filled($this->report->getGrossProfit())) {
-                            $rows[] = $this->report->getGrossProfit();
+                        if ($categoryName === 'Cost of Goods Sold' && method_exists($summaryReport, 'getGrossProfit') && filled($summaryReport->getGrossProfit())) {
+                            $rows[] = $this->exportService->flattenSummaryRowForExcel($summaryReport, $summaryReport->getGrossProfit());
                         }
                     }
 
-                    if (method_exists($this->report, 'getSummaryOverallTotals') && filled($this->report->getSummaryOverallTotals())) {
-                        $rows[] = $this->report->getSummaryOverallTotals();
+                    if (filled($summaryReport->getSummaryOverallTotals())) {
+                        $rows[] = $this->exportService->flattenSummaryRowForExcel($summaryReport, $summaryReport->getSummaryOverallTotals());
                     }
                 } else {
+                    // Satu baris kosong sebelum tabel detail (summary tidak memakai baris ini agar baris header = 4)
+                    $rows[] = [];
+
                     $rows[] = $this->report->getHeaders();
                     foreach ($this->report->getCategories() as $category) {
                         if ($category->header) {
@@ -392,6 +435,116 @@ class ExportService
                 }
 
                 return $rows;
+            }
+
+            public function styles(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet): array
+            {
+                if ($this->activeTab !== 'summary' || ! ($this->report instanceof HasSummaryReport)) {
+                    return [];
+                }
+
+                $highestRow = $sheet->getHighestRow();
+                $highestCol = $sheet->getHighestColumn();
+
+                $sheet->mergeCells('A1:' . $highestCol . '1');
+                $sheet->mergeCells('A2:' . $highestCol . '2');
+                $sheet->mergeCells('A3:' . $highestCol . '3');
+
+                $sheet->getStyle('A1')->applyFromArray([
+                    'font' => [
+                        'name' => 'Roboto',
+                        'size' => 15,
+                        'bold' => true,
+                        'color' => ['rgb' => 'B30202'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                    ],
+                ]);
+
+                $sheet->getStyle('A2')->applyFromArray([
+                    'font' => [
+                        'name' => 'Roboto',
+                        'size' => 12,
+                        'bold' => true,
+                        'color' => ['rgb' => '333333'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                    ],
+                ]);
+
+                $sheet->getStyle('A3')->applyFromArray([
+                    'font' => [
+                        'name' => 'Roboto',
+                        'size' => 12,
+                        'italic' => true,
+                        'color' => ['rgb' => '333333'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                    ],
+                ]);
+
+                // Baris 1–3: judul; baris 4: header kolom (ACCOUNTS / periode). Tanpa baris kosong sebelum header.
+                $headerRow = 4;
+                $sheet->getStyle("A{$headerRow}:" . $highestCol . $headerRow)->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => '0606AE'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                        'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                    ],
+                    'borders' => [
+                        'bottom' => [
+                            'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                            'color' => ['rgb' => '000000'],
+                        ],
+                    ],
+                ]);
+
+                $tableRange = "A{$headerRow}:" . $highestCol . $highestRow;
+                $sheet->getStyle($tableRange)->getBorders()->getAllBorders()
+                    ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+
+                $firstDataRow = $headerRow + 1;
+                if ($firstDataRow <= $highestRow) {
+                    foreach (range('B', $highestCol) as $col) {
+                        $sheet->getStyle("{$col}{$firstDataRow}:{$col}{$highestRow}")
+                            ->getNumberFormat()->setFormatCode('#,##0.00');
+                        $sheet->getStyle("{$col}{$firstDataRow}:{$col}{$highestRow}")
+                            ->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
+                    }
+                }
+
+                $sheet->getStyle("A{$headerRow}:A{$highestRow}")
+                    ->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
+
+                foreach (range('A', $highestCol) as $col) {
+                    $sheet->getColumnDimension($col)->setAutoSize(true);
+                }
+
+                return [];
+            }
+
+            public function registerEvents(): array
+            {
+                return [
+                    \Maatwebsite\Excel\Events\AfterSheet::class => function (\Maatwebsite\Excel\Events\AfterSheet $event): void {
+                        if ($this->activeTab !== 'summary' || ! ($this->report instanceof HasSummaryReport)) {
+                            return;
+                        }
+
+                        $event->sheet->freezePane('A5');
+                    },
+                ];
+            }
+
+            public function title(): string
+            {
+                return $this->report->getTitle();
             }
         };
 
@@ -424,11 +577,7 @@ class ExportService
     public function exportToExcelEnhanced(array $data): \Symfony\Component\HttpFoundation\BinaryFileResponse
     {
         $filename = str_replace('.pdf', '.xlsx', $data['filename']);
-        $export = new class($data) implements
-            \Maatwebsite\Excel\Concerns\FromArray,
-            \Maatwebsite\Excel\Concerns\WithStyles,
-            \Maatwebsite\Excel\Concerns\WithEvents,
-            \Maatwebsite\Excel\Concerns\WithTitle
+        $export = new class($data) implements \Maatwebsite\Excel\Concerns\FromArray, \Maatwebsite\Excel\Concerns\WithEvents, \Maatwebsite\Excel\Concerns\WithStyles, \Maatwebsite\Excel\Concerns\WithTitle
         {
             use \Maatwebsite\Excel\Concerns\RegistersEventListeners;
 
@@ -503,7 +652,7 @@ class ExportService
                 ]);
 
                 // ====== HEADER TABLE ======
-                $sheet->getStyle("A4:" . $highestCol . "4")->applyFromArray([
+                $sheet->getStyle('A4:' . $highestCol . '4')->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'color' => ['rgb' => '0606AE'], // biru seperti PDF
@@ -521,7 +670,7 @@ class ExportService
                 ]);
 
                 // ====== BORDER UNTUK SEMUA DATA ======
-                $tableRange = "A4:" . $highestCol . $highestRow;
+                $tableRange = 'A4:' . $highestCol . $highestRow;
                 $sheet->getStyle($tableRange)->getBorders()->getAllBorders()
                     ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 
