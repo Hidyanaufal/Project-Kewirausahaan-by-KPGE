@@ -25,12 +25,8 @@ class AccountService
     ) {}
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getDebitBalance(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
@@ -40,12 +36,8 @@ class AccountService
     }
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getCreditBalance(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
@@ -55,12 +47,8 @@ class AccountService
     }
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getNetMovement(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
@@ -76,12 +64,8 @@ class AccountService
     }
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param bool $override
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money|null
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getStartingBalance(Account $account, string $startDate, bool $override = false, $projectId = null, $companyId = null): ?Money
     {
@@ -95,12 +79,8 @@ class AccountService
     }
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money|null
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getEndingBalance(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): ?Money
     {
@@ -131,12 +111,8 @@ class AccountService
     }
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return array
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getBalances(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): array
     {
@@ -161,7 +137,7 @@ class AccountService
         ];
 
         // Return balances, filtering out any null values
-        return array_filter($balances, static fn($value) => $value !== null);
+        return array_filter($balances, static fn ($value) => $value !== null);
     }
 
     /**
@@ -169,12 +145,8 @@ class AccountService
      *
      * Added optional projectId & companyId filters to restrict transactions if provided.
      *
-     * @param string $startDate
-     * @param string $endDate
-     * @param string|null $entityId
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Closure
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getTransactionDetailsSubquery(string $startDate, string $endDate, ?string $entityId = null, $projectId = null, $companyId = null): Closure
     {
@@ -221,14 +193,10 @@ class AccountService
     /**
      * Main query for account balances.
      *
-     * @param string $startDate
-     * @param string $endDate
-     * @param array $accountIds
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @param int|null $projectTypeId
-     * @param int|string|null $entityId Payee filter: positive = Client id, negative = Vendor id
-     * @return Builder
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
+     * @param  int|null  $projectTypeId
+     * @param  int|string|null  $entityId  Payee filter: positive = Client id, negative = Vendor id
      */
     public function getAccountBalances(
         string $startDate,
@@ -299,7 +267,7 @@ class AccountService
             $query->where('accounts.company_id', $companyId);
         }
 
-        if (!empty($accountIds)) {
+        if (! empty($accountIds)) {
             $query->whereIn('accounts.id', $accountIds);
         }
 
@@ -330,7 +298,7 @@ class AccountService
                         ->where('transactions.transactionable_type', '=', Bill::class);
                 })
                 ->leftJoin('projects', function ($join) {
-                    $join->on('projects.id', '=', DB::raw("COALESCE(invoices.project_id, bills.project_id, transactions.project_id)"));
+                    $join->on('projects.id', '=', DB::raw('COALESCE(invoices.project_id, bills.project_id, transactions.project_id)'));
                 });
 
             if ($projectId !== null) {
@@ -359,16 +327,11 @@ class AccountService
         return $query;
     }
 
-
     /**
      * Cash flow specific account balances (only accounts linked to bank accounts).
      *
-     * @param string $startDate
-     * @param string $endDate
-     * @param array $accountIds
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Builder
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getCashFlowAccountBalances(string $startDate, string $endDate, array $accountIds = [], $projectId = null, $companyId = null): Builder
     {
@@ -389,11 +352,8 @@ class AccountService
     /**
      * Total balance for all bank accounts (with optional project/company filters).
      *
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getTotalBalanceForAllBankAccounts(string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
@@ -467,10 +427,8 @@ class AccountService
     /**
      * Starting balance for all bank accounts (with optional filters).
      *
-     * @param string $startDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getStartingBalanceForAllBankAccounts(string $startDate, $projectId = null, $companyId = null): Money
     {
@@ -533,11 +491,8 @@ class AccountService
     /**
      * Bank account balances helper (uses getAccountBalances).
      *
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Builder|array
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getBankAccountBalances(string $startDate, string $endDate, $projectId = null, $companyId = null): Builder | array
     {
@@ -567,12 +522,15 @@ class AccountService
         switch ($driver) {
             case 'pgsql':
                 $datediff = '(?::date - invoices.due_date::date)';
+
                 break;
             case 'sqlite':
                 $datediff = 'JULIANDAY(?) - JULIANDAY(invoices.due_date)';
+
                 break;
             default:
                 $datediff = 'DATEDIFF(?, invoices.due_date)';
+
                 break;
         }
 
@@ -610,12 +568,15 @@ class AccountService
         switch ($driver) {
             case 'pgsql':
                 $datediff = '(?::date - bills.due_date::date)';
+
                 break;
             case 'sqlite':
                 $datediff = 'JULIANDAY(?) - JULIANDAY(bills.due_date)';
+
                 break;
             default:
                 $datediff = 'DATEDIFF(?, bills.due_date)';
+
                 break;
         }
 

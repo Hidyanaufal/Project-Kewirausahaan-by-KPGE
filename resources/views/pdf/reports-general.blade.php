@@ -52,6 +52,7 @@
         table th {
             border-bottom: 1px solid #000;
             text-align: center;
+            font-weight: normal;
         }
     </style>
 </head>
@@ -74,17 +75,34 @@
             <tbody>
                 @foreach ($data['rows'] as $row)
                     @php
-                        $style = isset($row['style'])
-                            ? collect($row['style'])->map(fn($v, $k) => "$k: $v")->join('; ')
-                            : '';
+                        $rowStyles = $row['style'] ?? [];
+                        $rowCellStyles = $row['cell_styles'] ?? [];
+                        $indentDescriptionOnly = isset($rowStyles['padding-left']) && ! isset($rowStyles['font-weight']);
                     @endphp
                     <tr>
-                        @foreach ($row['data'] as $cell)
+                        @foreach ($row['data'] as $index => $cell)
                             @php
                                 $isMarkedString = Str::startsWith($cell, '__str');
                                 if ($isMarkedString) {
                                     $cell = Str::replaceFirst('__str', '', $cell);
                                 }
+
+                                if ($indentDescriptionOnly) {
+                                    $effectiveStyles = $index === 0
+                                        ? ['padding-left' => $rowStyles['padding-left']]
+                                        : [];
+                                } else {
+                                    $effectiveStyles = $rowStyles;
+                                }
+
+                                $effectiveStyles = array_merge(
+                                    $effectiveStyles,
+                                    $rowCellStyles[$index] ?? []
+                                );
+
+                                $style = collect($effectiveStyles)
+                                    ->map(fn ($v, $k) => "{$k}: {$v}")
+                                    ->join('; ');
                             @endphp
                             <td style="text-align: {{ !$isMarkedString && is_numeric($cell) ? 'right' : 'left' }}">
                                 <p style="{{ $style }}">

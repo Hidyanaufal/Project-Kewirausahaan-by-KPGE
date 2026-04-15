@@ -100,20 +100,20 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
         $startShort = $start->format('j M');
         $endShort = $end->format('j M Y');
 
-        $toNumber = fn($v) => is_null($v)
+        $toNumber = fn ($v) => is_null($v)
             ? 0
             : (float) str_replace(',', '.', preg_replace('/[^\d]/', '', $v));
 
         $data = [
-            'filename'           => "{$company->name} {$report->getTitle()} {$now}.{$format}",
-            'company_name'       => $company->name,
-            'report_title'       => $report->getTitle(),
-            'report_period'      => "From {$startFormatted} to {$endFormatted}",
-            'columns'            => [
-                "Description",
-                "{$startShort} - {$endShort}"
+            'filename' => "{$company->name} {$report->getTitle()} {$now}.{$format}",
+            'company_name' => $company->name,
+            'report_title' => $report->getTitle(),
+            'report_period' => "From {$startFormatted} to {$endFormatted}",
+            'columns' => [
+                'Description',
+                "{$startShort} - {$endShort}",
             ],
-            'rows'               => [],
+            'rows' => [],
         ];
 
         $rows = collect();
