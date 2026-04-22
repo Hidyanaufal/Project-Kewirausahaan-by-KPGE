@@ -17,6 +17,14 @@ class ProjectApprovedNotification extends Mailable
         public Project $project
     ) {}
 
+    /**
+     * URL to view the project in the company panel (after login).
+     */
+    public function viewUrl(): string
+    {
+        return url('/company/' . $this->project->company_id . '/addons/projects/' . $this->project->id);
+    }
+
     public function envelope(): Envelope
     {
         return new Envelope(
@@ -28,6 +36,7 @@ class ProjectApprovedNotification extends Mailable
     {
         return new Content(
             view: 'emails.project-approved',
+            with: ['viewUrl' => $this->viewUrl()],
         );
     }
 
