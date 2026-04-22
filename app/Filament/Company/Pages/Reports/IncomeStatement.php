@@ -9,10 +9,12 @@ use App\Filament\Company\Pages\Concerns\HasReportTabs;
 use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Helpers\AuthHelper;
 use App\Models\Company;
+use App\Services\CompanySettingsService;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
 use App\Transformers\IncomeStatementReportTransformer;
+use App\Utilities\Currency\CurrencyConverter;
 use Carbon\Carbon;
 use Filament\Forms\Form;
 use Filament\Support\Enums\Alignment;
@@ -84,9 +86,32 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
         return new IncomeStatementReportTransformer($reportDTO);
     }
 
+    /**
+     * @param  bool  $isFixMinus  true: parse nilai terformat (termasuk tanda minus) seperti di app; false: perilaku lama (digit-only / 100).
+     */
+    private function parseEnhancedReportAmount(mixed $value, bool $isFixMinus = false): float
+    {
+        if ($value === null || $value === '') {
+            return 0.0;
+        }
+
+        if ($isFixMinus) {
+            if (is_int($value) || is_float($value)) {
+                return (float) $value;
+            }
+
+            $currency = CompanySettingsService::getDefaultCurrency($this->company->id);
+
+            return CurrencyConverter::convertToFloat((string) $value, $currency);
+        }
+
+        return (float) str_replace(',', '.', preg_replace('/[^\d]/', '', (string) $value)) / 100;
+    }
+
     public function buildReportEnhanced(
         ?string $template = null,
-        string $format = 'pdf'
+        string $format = 'pdf',
+        bool $isFixMinus = false,
     ): array {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $report = $this->report;
@@ -100,9 +125,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
         $startShort = $start->format('j M');
         $endShort = $end->format('j M Y');
 
-        $toNumber = fn ($v) => is_null($v)
-            ? 0
-            : (float) str_replace(',', '.', preg_replace('/[^\d]/', '', $v));
+        $toNumber = fn (mixed $v): float => $this->parseEnhancedReportAmount($v, $isFixMinus);
 
         $data = [
             'filename' => "{$company->name} {$report->getTitle()} {$now}.{$format}",
@@ -126,7 +149,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
             ]);
 
             foreach ($cat->data as $item) {
-                $num = $toNumber($item['net_movement'] ?? 0) / 100;
+                $num = $toNumber($item['net_movement'] ?? 0);
                 if ($num === 0.0) {
                     continue;
                 }
@@ -144,26 +167,26 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
             $rows->push([
                 'data' => [
                     "Total Cost of {$headerName}",
-                    $toNumber($cat->summary['net_movement'] ?? 0) / 100,
+                    $toNumber($cat->summary['net_movement'] ?? 0),
                 ],
                 'style' => [],
             ]);
 
             if ($headerName === 'COST OF GOODS SOLD') {
                 $rows->push([
-                    'data' => ['GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement']) / 100],
+                    'data' => ['GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement'])],
                     'style' => [],
                 ]);
             }
         }
 
         $rows->push([
-            'data' => ['NET PROFIT/LOSS (Before Tax)', $toNumber($report->getOverallTotals()['net_movement']) / 100],
+            'data' => ['NET PROFIT/LOSS (Before Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
             'style' => [],
         ]);
 
         $rows->push([
-            'data' => ['NET PROFIT/LOSS (After Tax)', $toNumber($report->getOverallTotals()['net_movement']) / 100],
+            'data' => ['NET PROFIT/LOSS (After Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
             'style' => [],
         ]);
 
@@ -197,7 +220,8 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
 
         return $this->exportService->exportToExcelEnhanced(
             data: $this->buildReportEnhanced(
-                format: 'xlsx'
+                format: 'xlsx',
+                isFixMinus: true,
             )
         );
     }
@@ -216,7 +240,8 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
 
         return $this->exportService->exportToPdfEnhanced(
             data: $this->buildReportEnhanced(
-                format: 'pdf'
+                format: 'pdf',
+                isFixMinus: true,
             )
         );
     }
