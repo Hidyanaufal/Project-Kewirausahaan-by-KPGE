@@ -97,12 +97,6 @@ class GenerateYearlyForAsset
                     ->where('fiscal_year', $year)
                     ->first();
 
-                if ($existing && !$force) {
-                    $opening = $existing->closing_fiscal_book_value;
-                    $skipped[] = $year;
-                    continue;
-                }
-
                 $yearStartMonth = $year === $startYear ? $startMonth : 1;
                 $yearEndMonth = 12;
 
@@ -129,55 +123,173 @@ class GenerateYearlyForAsset
                 }
 
                 $maxMonthsByDate = ($yearEndMonth - $yearStartMonth) + 1;
-                $monthsToRun = min($maxMonthsByDate, $remainingLifeAtYearStart);
+                $monthsToRunTotal = min($maxMonthsByDate, $remainingLifeAtYearStart);
 
-                // Hitung penyusutan
+                // Nilai buku awal tahun ini adalah hasil closing tahun sebelumnya (atau acquisition_cost untuk tahun pertama).
+                $yearOpening = $opening;
+
+                // Siapkan breakdown bulanan, bisa berasal dari existing (extend) atau hitung ulang penuh.
                 $monthly = [];
-                $deprExpense = 0.0;
+                $didChange = false;
 
-                if ($method === 'garis_lurus') {
-                    $base = max(0, $asset->acquisition_cost - $asset->salvage_value);
-                    $perMonth = $lifeMonths > 0 ? ($base / $lifeMonths) : 0.0;
+                // Helper kecil untuk normalisasi bulan existing.
+                $normalizeExistingMonthly = function (?array $source) use ($yearStartMonth, $yearEndMonth): array {
+                    $out = [];
+                    foreach (($source ?? []) as $m => $amt) {
+                        $m = (int) $m;
+                        if ($m < $yearStartMonth || $m > $yearEndMonth) {
+                            continue;
+                        }
+                        if ($m < 1 || $m > 12) {
+                            continue;
+                        }
+                        $out[$m] = (float) $amt;
+                    }
+                    ksort($out);
+                    return $out;
+                };
 
-                    for ($i = 0; $i < $monthsToRun; $i++) {
-                        $m = $yearStartMonth + $i;
-                        if ($opening > $asset->salvage_value) {
-                            $charge = round($perMonth, 2);
-                            $charge = min($charge, max(0, $opening - $asset->salvage_value));
-                            $monthly[$m] = $charge;
-                            $deprExpense += $charge;
-                            $opening -= $charge;
-                        } else {
-                            $monthly[$m] = 0.0;
+                // Jika ada record existing dan tidak force, coba extend untuk bulan yang belum ada.
+                if ($existing && !$force) {
+                    $monthly = $normalizeExistingMonthly((array) $existing->monthly_breakdown);
+
+                    // Trim jika existing punya bulan melebihi batas useful life untuk tahun ini.
+                    $lastAllowedMonth = $yearStartMonth + $monthsToRunTotal - 1;
+                    foreach (array_keys($monthly) as $m) {
+                        if ($m > $lastAllowedMonth) {
+                            unset($monthly[$m]);
                         }
                     }
 
-                    $opening = round(($existing->opening_fiscal_book_value ?? ($opening + $deprExpense)), 2);
+                    $monthsAlreadyRecorded = count($monthly);
+                    $remainingLifeAfterExisting = max(0, $remainingLifeAtYearStart - $monthsAlreadyRecorded);
+
+                    $existingExpense = array_sum($monthly);
+                    $book = max($asset->salvage_value, round($yearOpening - $existingExpense, 2));
+
+                    // Cari bulan yang hilang, isi berurutan dari awal range sampai batas yang boleh.
+                    $monthsGenerated = 0;
+                    if ($remainingLifeAfterExisting > 0 && $book > $asset->salvage_value) {
+                        if ($method === 'garis_lurus') {
+                            $base = max(0, $asset->acquisition_cost - $asset->salvage_value);
+                            $perMonth = $lifeMonths > 0 ? ($base / $lifeMonths) : 0.0;
+
+                            for ($m = $yearStartMonth; $m <= $lastAllowedMonth; $m++) {
+                                if (array_key_exists($m, $monthly)) {
+                                    continue;
+                                }
+                                if ($monthsGenerated >= $remainingLifeAfterExisting) {
+                                    break;
+                                }
+                                if ($book <= $asset->salvage_value) {
+                                    break;
+                                }
+                                $charge = round($perMonth, 2);
+                                $charge = min($charge, max(0, $book - $asset->salvage_value));
+                                $monthly[$m] = $charge;
+                                $book = round($book - $charge, 2);
+                                $monthsGenerated++;
+                            }
+                        } else {
+                            $annualRate = (float) ($asset->group->declining_rate ?? 0.25);
+                            $monthlyRate = $annualRate / 12;
+
+                            for ($m = $yearStartMonth; $m <= $lastAllowedMonth; $m++) {
+                                if (array_key_exists($m, $monthly)) {
+                                    continue;
+                                }
+                                if ($monthsGenerated >= $remainingLifeAfterExisting) {
+                                    break;
+                                }
+                                if ($book <= $asset->salvage_value) {
+                                    break;
+                                }
+                                $charge = round($book * $monthlyRate, 2);
+                                $charge = min($charge, max(0, $book - $asset->salvage_value));
+                                $book = round($book - $charge, 2);
+                                $monthly[$m] = $charge;
+                                $monthsGenerated++;
+                            }
+                        }
+                    }
+
+                    ksort($monthly);
+
+                    // Cek apakah record ini sudah "lengkap" sesuai range & useful life.
+                    $expectedMonths = [];
+                    for ($m = $yearStartMonth; $m <= ($yearStartMonth + $monthsToRunTotal - 1); $m++) {
+                        $expectedMonths[] = $m;
+                    }
+                    $missingMonths = array_filter($expectedMonths, fn ($m) => !array_key_exists($m, $monthly));
+
+                    if (!empty($missingMonths)) {
+                        // Tidak bisa diisi (mis. sudah salvage/remaining life habis), tapi tetap treat sebagai tidak berubah
+                        // jika memang existing sudah sama. Kalau ada generate yang berhasil di atas, akan terdeteksi via diff.
+                    }
+
+                    // Detect perubahan dibanding existing.
+                    $existingNormalized = $normalizeExistingMonthly((array) $existing->monthly_breakdown);
+                    foreach (array_keys($existingNormalized) as $m) {
+                        if ($m > ($yearStartMonth + $monthsToRunTotal - 1)) {
+                            unset($existingNormalized[$m]);
+                        }
+                    }
+                    ksort($existingNormalized);
+
+                    $didChange = $monthly !== $existingNormalized
+                        || (float) $existing->opening_fiscal_book_value !== (float) $yearOpening;
                 } else {
-                    $annualRate = (float) ($asset->group->declining_rate ?? 0.25);
-                    $monthlyRate = $annualRate / 12;
-                    $book = $opening;
+                    // Hitung ulang penuh (force atau belum ada record).
+                    $book = $yearOpening;
+                    if ($method === 'garis_lurus') {
+                        $base = max(0, $asset->acquisition_cost - $asset->salvage_value);
+                        $perMonth = $lifeMonths > 0 ? ($base / $lifeMonths) : 0.0;
 
-                    for ($i = 0; $i < $monthsToRun; $i++) {
-                        $m = $yearStartMonth + $i;
-                        if ($book > $asset->salvage_value) {
-                            $charge = round($book * $monthlyRate, 2);
-                            $charge = min($charge, max(0, $book - $asset->salvage_value));
-                            $book -= $charge;
-                            $monthly[$m] = $charge;
-                            $deprExpense += $charge;
-                        } else {
-                            $monthly[$m] = 0.0;
+                        for ($i = 0; $i < $monthsToRunTotal; $i++) {
+                            $m = $yearStartMonth + $i;
+                            if ($book > $asset->salvage_value) {
+                                $charge = round($perMonth, 2);
+                                $charge = min($charge, max(0, $book - $asset->salvage_value));
+                                $monthly[$m] = $charge;
+                                $book = round($book - $charge, 2);
+                            } else {
+                                $monthly[$m] = 0.0;
+                            }
+                        }
+                    } else {
+                        $annualRate = (float) ($asset->group->declining_rate ?? 0.25);
+                        $monthlyRate = $annualRate / 12;
+
+                        for ($i = 0; $i < $monthsToRunTotal; $i++) {
+                            $m = $yearStartMonth + $i;
+                            if ($book > $asset->salvage_value) {
+                                $charge = round($book * $monthlyRate, 2);
+                                $charge = min($charge, max(0, $book - $asset->salvage_value));
+                                $book = round($book - $charge, 2);
+                                $monthly[$m] = $charge;
+                            } else {
+                                $monthly[$m] = 0.0;
+                            }
                         }
                     }
+
+                    $didChange = true;
                 }
 
-                $closing = max($asset->salvage_value, round($opening - $deprExpense, 2));
+                $deprExpense = (float) array_sum($monthly);
+                $closing = max($asset->salvage_value, round($yearOpening - $deprExpense, 2));
+
+                // Jika existing & tidak force & tidak ada perubahan, tetap skip tahun ini.
+                if ($existing && !$force && !$didChange) {
+                    $opening = $existing->closing_fiscal_book_value;
+                    $skipped[] = $year;
+                    continue;
+                }
 
                 $record = DepreciationRecord::updateOrCreate(
                     ['asset_id' => $asset->id, 'fiscal_year' => $year],
                     [
-                        'opening_fiscal_book_value'   => $opening,
+                        'opening_fiscal_book_value'   => $yearOpening,
                         'depreciation_expense'        => $deprExpense,
                         'closing_fiscal_book_value'   => $closing,
                         'fiscal_method'               => $method,
@@ -188,7 +300,7 @@ class GenerateYearlyForAsset
 
                 $created[] = $record;
                 if ($asset->group && $asset->group->contraAsset && $asset->group->assetAccount) {
-                    if ($force || $existing) {
+                    if ($didChange || $force || $existing) {
                         self::deleteMonthlyDepreciationJournals(assetId: $asset->id, fiscalYear: $year);
                     }
 
