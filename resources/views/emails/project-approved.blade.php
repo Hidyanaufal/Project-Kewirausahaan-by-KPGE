@@ -7,6 +7,8 @@
     <style>
         body { font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
         .highlight { background: #f0fdf4; padding: 12px; border-radius: 6px; margin: 16px 0; }
+        .button { display: inline-block; padding: 12px 24px; background: #22c55e; color: #fff !important; text-decoration: none; border-radius: 6px; margin-top: 16px; }
+        .button:hover { background: #16a34a; }
         .muted { color: #666; font-size: 14px; }
     </style>
 </head>
@@ -17,6 +19,10 @@
         <p style="margin: 0;"><strong>Nomor project:</strong> {{ $project->number }}</p>
         <p style="margin: 8px 0 0 0;"><strong>Nama project:</strong> {{ $project->name }}</p>
     </div>
-    <p class="muted">Anda dapat melihat detail project di aplikasi.</p>
+    <p class="muted">Anda dapat melihat detail project di aplikasi setelah login.</p>
+    <p>
+        <a href="{{ $viewUrl }}" class="button">Lihat detail project</a>
+    </p>
+    <p class="muted" style="margin-top: 24px;">Jika tombol tidak berfungsi, salin tautan ini ke browser: {{ $viewUrl }}</p>
 </body>
 </html>

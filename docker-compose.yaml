@@ -59,7 +59,8 @@ services:
     container_name: mykpg_db
     restart: unless-stopped
     ports:
-      - "${DB_EXPOSE_PORT}"
+      # Default supaya `docker compose up mailpit` (atau perintah lain) tetap valid walau DB_EXPOSE_PORT kosong di .env
+      - "${DB_EXPOSE_PORT:-127.0.0.1:3306:3306}"
     environment:
       MYSQL_DATABASE: ${DB_DATABASE}
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
@@ -73,6 +74,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # Mailpit: tangkap email lokal (SMTP 1025, UI http://localhost:8025)
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mykpg_mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    networks:
+      - mykpg_network
 
 networks:
   mykpg_network:
