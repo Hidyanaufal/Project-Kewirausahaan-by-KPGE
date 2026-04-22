@@ -54,6 +54,11 @@
             text-align: center;
             font-weight: normal;
         }
+        /* Hanya header "Description" (th pertama) rata kiri + padding */
+        table th:first-child {
+            text-align: left;
+            padding-left: 6px;
+        }
     </style>
 </head>
 <body>
