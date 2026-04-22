@@ -5,15 +5,15 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
+use App\Enums\Accounting\AccountCategory;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
 use App\Helpers\AuthHelper;
-use App\Enums\Accounting\AccountCategory;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\Transaction;
+use App\Models\Banking\BankAccount;
 use App\Models\Common\Client;
 use App\Models\Common\Vendor;
 use App\Models\Company;
-use App\Models\Banking\BankAccount;
 use App\Services\AccountService;
 use App\Services\ExportService;
 use App\Services\ReportService;
@@ -21,18 +21,17 @@ use App\Support\Column;
 use App\Transformers\AccountTransactionReportTransformer;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Forms;
 use Filament\Forms\Components\Actions;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
-use Filament\Forms;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
 use Guava\FilamentClusters\Forms\Cluster;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Livewire\WithPagination;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -144,8 +143,8 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
     {
         $accounts = Account::query()
             ->get()
-            ->groupBy(fn(Account $account) => $account->category->getPluralLabel())
-            ->map(fn(Collection $accounts) => $accounts->pluck('name', 'id'))
+            ->groupBy(fn (Account $account) => $account->category->getPluralLabel())
+            ->map(fn (Collection $accounts) => $accounts->pluck('name', 'id'))
             ->toArray();
 
         $allAccountsOption = [
@@ -165,7 +164,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         $vendors = Vendor::query()
             ->orderBy('name')
             ->pluck('name', 'id')
-            ->mapWithKeys(fn($name, $id) => [-$id => $name])
+            ->mapWithKeys(fn ($name, $id) => [-$id => $name])
             ->toArray();
 
         $allEntitiesOption = [
@@ -210,7 +209,27 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         if ($template == 'deposit') {
             return $this->__buildReportDeposit($exportFilterOverride);
         }
+
         return $this->__buildReportDefault($exportFilterOverride);
+    }
+
+    /**
+     * Form modal export sometimes dehydrates hidden fields as null or ''.
+     * Fall back to the same applied report filters the table uses so payee/account stay in sync.
+     *
+     * @param  array<string, mixed>  $override
+     * @return array<string, mixed>
+     */
+    private function mergeExportOverrideWithAppliedFilters(array $override): array
+    {
+        foreach (['startDate', 'endDate', 'selectedAccount', 'selectedPayee'] as $key) {
+            $value = $override[$key] ?? null;
+            if ($value === null || $value === '') {
+                $override[$key] = $this->getFilterState($key);
+            }
+        }
+
+        return $override;
     }
 
     /**
@@ -225,6 +244,10 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             return ['filtered' => false];
         }
 
+        if ($override !== null) {
+            $override = $this->mergeExportOverrideWithAppliedFilters($override);
+        }
+
         if ($override !== null && ! empty($override['startDate']) && ! empty($override['endDate'])) {
             $startDateRaw = $override['startDate'];
             $endDateRaw = $override['endDate'];
@@ -233,17 +256,17 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             $accountId = isset($override['selectedAccount']) && $override['selectedAccount'] !== 'all'
                 ? (int) $override['selectedAccount']
                 : null;
-            $payeeRaw = $override['selectedPayee'] ?? $this->getFilterState('selectedPayee');
+            $payeeRaw = $override['selectedPayee'];
             $entityId = isset($payeeRaw) && $payeeRaw !== 'all' && $payeeRaw !== ''
                 ? (int) $payeeRaw
                 : null;
 
             return [
-                'filtered'   => true,
-                'startDate'  => Carbon::parse($startDate)->startOfDay()->toDateTimeString(),
-                'endDate'    => Carbon::parse($endDate)->endOfDay()->toDateTimeString(),
-                'accountId'  => $accountId,
-                'entityId'   => $entityId,
+                'filtered' => true,
+                'startDate' => Carbon::parse($startDate)->startOfDay()->toDateTimeString(),
+                'endDate' => Carbon::parse($endDate)->endOfDay()->toDateTimeString(),
+                'accountId' => $accountId,
+                'entityId' => $entityId,
                 'periodLabel' => Carbon::parse($startDate)->toDefaultDateFormat() . ' - ' . Carbon::parse($endDate)->toDefaultDateFormat(),
             ];
         }
@@ -260,11 +283,11 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         }
 
         return [
-            'filtered'   => true,
-            'startDate'  => Carbon::parse($startDateNormalized)->startOfDay()->toDateTimeString(),
-            'endDate'    => Carbon::parse($endDateNormalized)->endOfDay()->toDateTimeString(),
-            'accountId'  => $accountId !== 'all' ? (int) $accountId : null,
-            'entityId'   => $entityId !== 'all' ? $entityId : null,
+            'filtered' => true,
+            'startDate' => Carbon::parse($startDateNormalized)->startOfDay()->toDateTimeString(),
+            'endDate' => Carbon::parse($endDateNormalized)->endOfDay()->toDateTimeString(),
+            'accountId' => $accountId !== 'all' ? (int) $accountId : null,
+            'entityId' => $entityId !== 'all' ? $entityId : null,
             'periodLabel' => Carbon::parse($startDateNormalized)->toDefaultDateFormat() . ' - ' . Carbon::parse($endDateNormalized)->toDefaultDateFormat(),
         ];
     }
@@ -300,7 +323,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $companyId = $company->id;
         $now = now()->format('Y-m-d_H-i-s');
-        $toNumber = fn($value) => number_format((float) $value, 2, ',', '.');
+        $toNumber = fn ($value) => number_format((float) $value, 2, ',', '.');
         $params = $this->getExportFilterParams($exportFilterOverride);
 
         if ($params['filtered']) {
@@ -342,7 +365,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             $balanceMapPartial[$id] = ($row->starting_balance ?? 0) + $netMovement;
         }
 
-        $accountIdsNonZero = array_keys(array_filter($balanceMapPartial, fn($balanceCents) => $balanceCents !== 0));
+        $accountIdsNonZero = array_keys(array_filter($balanceMapPartial, fn ($balanceCents) => $balanceCents !== 0));
 
         if ($entityId !== null && $entityId !== '' && count($accountIdsNonZero) > 0) {
             $balanceQueryFull = $this->accountService->getAccountBalances(
@@ -388,15 +411,33 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             $accountIdsNonZero
         );
 
+        $accountIdForRunningReport = ($params['accountId'] ?? null) !== null
+            ? (string) $params['accountId']
+            : 'all';
+        $entityIdForRunningReport = isset($params['entityId']) && $params['entityId'] !== null && $params['entityId'] !== ''
+            ? (string) (int) $params['entityId']
+            : 'all';
+
+        $runningEndingByAccountId = $this->reportService->getAccountTransactionEndingBalancesMinor(
+            $params['filtered'] ? $params['startDate'] : $startDate,
+            $params['filtered'] ? $params['endDate'] : $endDate,
+            $accountIdForRunningReport,
+            $entityIdForRunningReport,
+            null,
+            $companyId,
+        );
+
         $rows = collect();
         foreach ($accountsInTreeOrder as $account) {
             $endingBalanceCents = $balanceMap[$account->id] ?? 0;
+            $runningEndingCents = $runningEndingByAccountId[$account->id] ?? 0;
             $rows->push([
                 'data' => [
                     '__str' . $account->code,
                     $account->name,
                     $account->type->getLabel() ?? '-',
                     $toNumber($endingBalanceCents / 100),
+                    $toNumber($runningEndingCents / 100),
                 ],
             ]);
         }
@@ -406,15 +447,16 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             'Account Name',
             'Account Type',
             'Balance',
+            'Running Balance',
         ];
 
         return [
-            'filename'      => "{$company->name} Account List {$now}.pdf",
-            'company_name'  => $company->name,
-            'report_title'  => 'Account List',
+            'filename' => "{$company->name} Account List {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'Account List',
             'report_period' => $reportPeriod,
-            'columns'       => $header,
-            'rows'          => $rows->toArray(),
+            'columns' => $header,
+            'rows' => $rows->toArray(),
         ];
     }
 
@@ -422,7 +464,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $now = now()->format('Y-m-d_H-i-s');
-        $toNumber = fn($v) => is_null($v) ? 0 : (float) $v;
+        $toNumber = fn ($v) => is_null($v) ? 0 : (float) $v;
         $params = $this->getExportFilterParams($exportFilterOverride);
 
         $query = Transaction::query()
@@ -439,7 +481,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 }
             }
             if ($params['accountId'] !== null) {
-                $query->whereHas('journalEntries', fn($q) => $q->where('account_id', $params['accountId']));
+                $query->whereHas('journalEntries', fn ($q) => $q->where('account_id', $params['accountId']));
             }
         }
 
@@ -477,7 +519,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 $isDebit = $je->type->value === 'debit';
 
                 $debit = $isDebit ? $amount : 0;
-                $credit = !$isDebit ? $amount : 0;
+                $credit = ! $isDebit ? $amount : 0;
 
                 $totalDebit += $debit;
                 $totalCredit += $credit;
@@ -505,7 +547,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 ],
                 'style' => [
                     'font-weight' => 'bold',
-                    'color'       => 'rgb(6, 6, 174)',
+                    'color' => 'rgb(6, 6, 174)',
                 ],
             ]);
         }
@@ -520,12 +562,12 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         $reportPeriod = $params['filtered'] ? $params['periodLabel'] : ('As of ' . now()->format('d M Y'));
 
         return [
-            'filename'      => "{$company->name} All Journals {$now}.pdf",
-            'company_name'  => $company->name,
-            'report_title'  => 'All Journals',
+            'filename' => "{$company->name} All Journals {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'All Journals',
             'report_period' => $reportPeriod,
-            'columns'       => $header,
-            'rows'          => $rows->toArray(),
+            'columns' => $header,
+            'rows' => $rows->toArray(),
         ];
     }
 
@@ -533,7 +575,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $now = now()->format('Y-m-d_H-i-s');
-        $toNumber = fn($v) => is_null($v) ? 0 : (float) $v;
+        $toNumber = fn ($v) => is_null($v) ? 0 : (float) $v;
         $params = $this->getExportFilterParams($exportFilterOverride);
 
         $query = Transaction::query()
@@ -554,7 +596,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 }
             }
             if ($params['accountId'] !== null) {
-                $query->whereHas('journalEntries', fn($q) => $q->where('account_id', $params['accountId']));
+                $query->whereHas('journalEntries', fn ($q) => $q->where('account_id', $params['accountId']));
             }
         }
 
@@ -577,7 +619,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                     $txn->transaction_code,
                     $txn->type->getLabel(),
                     '',
-                    $txn->member->name
+                    $txn->member->name,
 
                 ],
                 'style' => [
@@ -592,7 +634,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 $isDebit = $je->type->value === 'debit';
 
                 $debit = $isDebit ? $amount : 0;
-                $credit = !$isDebit ? $amount : 0;
+                $credit = ! $isDebit ? $amount : 0;
 
                 $totalDebit += $debit;
                 $totalCredit += $credit;
@@ -603,7 +645,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                         $account->name ?? '-',
                         $debit,
                         $credit,
-                        ''
+                        '',
                     ],
                     'style' => [
                         'padding-left' => '20px',
@@ -619,11 +661,11 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 '',
                 $totalDebit,
                 $totalCredit,
-                ''
+                '',
             ],
             'style' => [
                 'font-weight' => 'bold',
-                'color'       => 'rgb(6, 6, 174)',
+                'color' => 'rgb(6, 6, 174)',
             ],
         ]);
 
@@ -638,12 +680,12 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         $reportPeriod = $params['filtered'] ? $params['periodLabel'] : ('As of ' . now()->format('d M Y'));
 
         return [
-            'filename'      => "{$company->name} Member Deposit Report {$now}.pdf",
-            'company_name'  => $company->name,
-            'report_title'  => 'Member Deposit Report',
+            'filename' => "{$company->name} Member Deposit Report {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'Member Deposit Report',
             'report_period' => $reportPeriod,
-            'columns'       => $header,
-            'rows'          => $rows->toArray(),
+            'columns' => $header,
+            'rows' => $rows->toArray(),
         ];
     }
 
@@ -659,6 +701,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 return true;
             }
         }
+
         return false;
     }
 
@@ -667,7 +710,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $companyId = $company->id;
         $now = now()->format('Y-m-d_H-i-s');
-        $toNumber = fn($value) => number_format((float)$value / 100, 2, ',', '.');
+        $toNumber = fn ($value) => number_format((float) $value / 100, 2, ',', '.');
         $params = $this->getExportFilterParams($exportFilterOverride);
 
         $bankQuery = \App\Models\Banking\BankAccount::query()
@@ -713,7 +756,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 ],
                 'style' => [
                     'font-weight' => 'bold',
-                    'color'       => 'rgb(6, 6, 174)',
+                    'color' => 'rgb(6, 6, 174)',
                 ],
             ]);
 
@@ -759,12 +802,12 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         $reportPeriod = $params['filtered'] ? $params['periodLabel'] : ('As of ' . now()->format('d M Y'));
 
         return [
-            'filename'      => "{$company->name} Bank Book {$now}.pdf",
-            'company_name'  => $company->name,
-            'report_title'  => 'Bank Book',
+            'filename' => "{$company->name} Bank Book {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'Bank Book',
             'report_period' => $reportPeriod,
-            'columns'       => $header,
-            'rows'          => $rows->toArray(),
+            'columns' => $header,
+            'rows' => $rows->toArray(),
         ];
     }
 
@@ -803,11 +846,12 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 ->action(function (array $data) {
                     $format = $data['format'];
                     $template = $data['template'];
+                    // Same keys as mergeExportOverrideWithAppliedFilters; empty hidden values are fixed in getExportFilterParams.
                     $filterParams = [
-                        'startDate' => $data['startDate'] ?? $this->getFilterState('startDate'),
-                        'endDate' => $data['endDate'] ?? $this->getFilterState('endDate'),
-                        'selectedAccount' => $data['selectedAccount'] ?? $this->getFilterState('selectedAccount'),
-                        'selectedPayee' => $data['selectedPayee'] ?? $this->getFilterState('selectedPayee'),
+                        'startDate' => $data['startDate'] ?? null,
+                        'endDate' => $data['endDate'] ?? null,
+                        'selectedAccount' => $data['selectedAccount'] ?? null,
+                        'selectedPayee' => $data['selectedPayee'] ?? null,
                     ];
 
                     if ($format == 'xlsx') {
@@ -817,7 +861,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                     if ($format == 'pdf') {
                         return $this->exportPDF($template, $filterParams);
                     }
-                })
+                }),
         ];
     }
 

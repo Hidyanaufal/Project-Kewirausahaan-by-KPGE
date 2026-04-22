@@ -181,6 +181,81 @@ class ReportService
         return new Money($retainedEarnings, CurrencyAccessor::getDefaultCurrency());
     }
 
+    /**
+     * Accounts with journal lines for the Account Transactions report (same query + eager load as {@see buildAccountTransactionsReport}).
+     *
+     * @param  array<int|string>  $accountIds
+     * @return \Illuminate\Database\Eloquent\Collection<int, Account>
+     */
+    private function loadAccountsForAccountTransactionReport(
+        string $startDate,
+        string $endDate,
+        array $accountIds,
+        ?string $entityId,
+        $projectId,
+        $companyId,
+    ) {
+        $query = $this->accountService->getAccountBalances($startDate, $endDate, $accountIds, $projectId, $companyId)
+            ->orderByRaw('LENGTH(code), code');
+
+        return $query->with(['journalEntries' => $this->accountService->getTransactionDetailsSubquery($startDate, $endDate, $entityId, $projectId, $companyId)])->get();
+    }
+
+    /**
+     * Ending running balance (minor units) after walking journal lines the same way as the Account Transactions screen.
+     */
+    private function computeTransactionReportEndingBalanceMinor(Account $account): int
+    {
+        $currentBalance = $account->starting_balance;
+        foreach ($account->journalEntries as $journalEntry) {
+            $signedAmount = $journalEntry->signed_amount;
+            if ($account->category->isNormalDebitBalance()) {
+                $currentBalance += $signedAmount;
+            } else {
+                $currentBalance -= $signedAmount;
+            }
+        }
+
+        return (int) $currentBalance;
+    }
+
+    /**
+     * Per-account ending balance from the same walk as the Account Transactions UI (minor units, e.g. cents).
+     * Only accounts with at least one journal line in the filtered range appear in the map.
+     *
+     * @return array<int, int>
+     */
+    public function getAccountTransactionEndingBalancesMinor(
+        string $startDate,
+        string $endDate,
+        ?string $accountId = 'all',
+        ?string $entityId = 'all',
+        $projectId = null,
+        $companyId = null,
+    ): array {
+        $accountIds = $accountId !== 'all' ? [$accountId] : [];
+        $entityIdResolved = $entityId !== 'all' ? $entityId : null;
+
+        $accounts = $this->loadAccountsForAccountTransactionReport(
+            $startDate,
+            $endDate,
+            $accountIds,
+            $entityIdResolved,
+            $projectId,
+            $companyId,
+        );
+
+        $balances = [];
+        foreach ($accounts as $account) {
+            if ($account->journalEntries->isEmpty()) {
+                continue;
+            }
+            $balances[(int) $account->id] = $this->computeTransactionReportEndingBalanceMinor($account);
+        }
+
+        return $balances;
+    }
+
     public function buildAccountTransactionsReport(string $startDate, string $endDate, ?array $columns = null, ?string $accountId = 'all', ?string $entityId = 'all', $projectId = null, $companyId = null): ReportDTO
     {
         $columns ??= [];
@@ -190,10 +265,14 @@ class ReportService
 
         $entityId = $entityId !== 'all' ? $entityId : null;
 
-        $query = $this->accountService->getAccountBalances($startDate, $endDate, $accountIds, $projectId, $companyId)
-            ->orderByRaw('LENGTH(code), code');
-
-        $accounts = $query->with(['journalEntries' => $this->accountService->getTransactionDetailsSubquery($startDate, $endDate, $entityId, $projectId, $companyId)])->get();
+        $accounts = $this->loadAccountsForAccountTransactionReport(
+            $startDate,
+            $endDate,
+            $accountIds,
+            $entityId,
+            $projectId,
+            $companyId,
+        );
 
         $reportCategories = [];
 
