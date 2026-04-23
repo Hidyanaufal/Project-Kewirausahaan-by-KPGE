@@ -27,6 +27,7 @@
                             @if($categoryAccountCell['name'] === 'Retained Earnings' && isset($categoryAccountCell['start_date']) && isset($categoryAccountCell['end_date']))
                                 <x-filament::link
                                     color="primary"
+                                    class="font-normal"
                                     target="_blank"
                                     icon="heroicon-o-arrow-top-right-on-square"
                                     :icon-position="\Filament\Support\Enums\IconPosition::After"
@@ -51,6 +52,7 @@
                                 @endphp
                                 <x-filament::link
                                     color="primary"
+                                    class="font-normal"
                                     target="_blank"
                                     icon="heroicon-o-arrow-top-right-on-square"
                                     :icon-position="\Filament\Support\Enums\IconPosition::After"
