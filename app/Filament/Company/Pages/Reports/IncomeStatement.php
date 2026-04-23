@@ -169,25 +169,25 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
                     "Total Cost of {$headerName}",
                     $toNumber($cat->summary['net_movement'] ?? 0),
                 ],
-                'style' => [],
+                'style' => ['font-weight' => 'bold'],
             ]);
 
             if ($headerName === 'COST OF GOODS SOLD') {
                 $rows->push([
                     'data' => ['GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement'])],
-                    'style' => [],
+                    'style' => ['font-weight' => 'bold'],
                 ]);
             }
         }
 
         $rows->push([
             'data' => ['NET PROFIT/LOSS (Before Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
-            'style' => [],
+            'style' => ['font-weight' => 'bold'],
         ]);
 
         $rows->push([
             'data' => ['NET PROFIT/LOSS (After Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
-            'style' => [],
+            'style' => ['font-weight' => 'bold'],
         ]);
 
         $data['rows'] = $rows->toArray();
