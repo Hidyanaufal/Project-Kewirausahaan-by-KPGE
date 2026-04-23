@@ -13,7 +13,11 @@
 </head>
 <body>
     <h2>Pengajuan quotation baru</h2>
-    <p>Ada pengajuan quotation (penawaran) baru yang menunggu tinjauan.</p>
+    @if(!empty($requestor?->name))
+        <p>Ada pengajuan quotation (penawaran) baru oleh <strong>{{ $requestor->name }}</strong> yang menunggu tinjauan.</p>
+    @else
+        <p>Ada pengajuan quotation (penawaran) baru yang menunggu tinjauan.</p>
+    @endif
     <p><strong>Nomor:</strong> {{ $estimate->estimate_number ?? 'Draft' }}</p>
     @if($estimate->client)
         <p><strong>Client:</strong> {{ $estimate->client->name }}</p>

@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Accounting\Estimate;
+use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -14,7 +15,8 @@ class QuotationSubmissionNotification extends Mailable
     use Queueable, SerializesModels;
 
     public function __construct(
-        public Estimate $estimate
+        public Estimate $estimate,
+        public ?User $requestor = null,
     ) {}
 
     public function viewUrl(): string
@@ -33,7 +35,10 @@ class QuotationSubmissionNotification extends Mailable
     {
         return new Content(
             view: 'emails.quotation-submission',
-            with: ['viewUrl' => $this->viewUrl()],
+            with: [
+                'viewUrl' => $this->viewUrl(),
+                'requestor' => $this->requestor,
+            ],
         );
     }
 

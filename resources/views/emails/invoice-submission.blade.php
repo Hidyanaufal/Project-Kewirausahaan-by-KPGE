@@ -13,7 +13,11 @@
 </head>
 <body>
     <h2>Pengajuan invoice baru</h2>
-    <p>Ada pengajuan invoice baru yang menunggu tinjauan.</p>
+    @if(!empty($requestor?->name))
+        <p>Ada pengajuan invoice baru oleh <strong>{{ $requestor->name }}</strong> yang menunggu tinjauan.</p>
+    @else
+        <p>Ada pengajuan invoice baru yang menunggu tinjauan.</p>
+    @endif
     <p><strong>Nomor:</strong> {{ $invoice->invoice_number ?? 'Draft' }}</p>
     @if($invoice->client)
         <p><strong>Client:</strong> {{ $invoice->client->name }}</p>

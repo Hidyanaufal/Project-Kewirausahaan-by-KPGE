@@ -4,6 +4,7 @@ namespace App\Filament\Company\Resources\Sales\EstimateResource\Pages;
 
 use App\Concerns\HandlePageRedirect;
 use App\Concerns\ManagesLineItems;
+use App\Enums\Accounting\EstimateStatus;
 use App\Filament\Company\Resources\Sales\EstimateResource;
 use App\Models\Accounting\Estimate;
 use App\Models\Addons\Project;
@@ -46,6 +47,9 @@ class CreateEstimate extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        // Pastikan status ter-set agar observer (created) bisa kirim email submission.
+        $data['status'] ??= EstimateStatus::Draft;
+
         return $data;
     }
 
