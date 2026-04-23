@@ -4,6 +4,7 @@ namespace App\Filament\Company\Resources\Sales\InvoiceResource\Pages;
 
 use App\Concerns\HandlePageRedirect;
 use App\Concerns\ManagesLineItems;
+use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Models\Accounting\Adjustment;
 use App\Models\Accounting\Invoice;
@@ -52,6 +53,9 @@ class CreateInvoice extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        // Pastikan status ter-set agar observer (created) bisa kirim email submission.
+        $data['status'] ??= InvoiceStatus::Draft;
+
         return $data;
     }
 
@@ -133,5 +137,8 @@ class CreateInvoice extends CreateRecord
                 $lock->release();
             }
         }
+
+        // Unreachable karena $this->halt(), tapi diperlukan untuk kepuasan static analyzer.
+        throw new \RuntimeException('Invoice creation halted.');
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Accounting\Invoice;
+use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -14,7 +15,8 @@ class InvoiceSubmissionNotification extends Mailable
     use Queueable, SerializesModels;
 
     public function __construct(
-        public Invoice $invoice
+        public Invoice $invoice,
+        public ?User $requestor = null,
     ) {}
 
     public function viewUrl(): string
@@ -33,7 +35,10 @@ class InvoiceSubmissionNotification extends Mailable
     {
         return new Content(
             view: 'emails.invoice-submission',
-            with: ['viewUrl' => $this->viewUrl()],
+            with: [
+                'viewUrl' => $this->viewUrl(),
+                'requestor' => $this->requestor,
+            ],
         );
     }
 

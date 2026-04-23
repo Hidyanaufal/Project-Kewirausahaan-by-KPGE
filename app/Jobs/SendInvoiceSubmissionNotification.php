@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Mail\InvoiceSubmissionNotification;
 use App\Models\Accounting\Invoice;
+use App\Models\User;
 use App\Services\NotificationRecipientService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -27,11 +28,18 @@ class SendInvoiceSubmissionNotification implements ShouldQueue
             return;
         }
 
+        $requestor = null;
+        if ($invoice->created_by) {
+            $requestor = User::find($invoice->created_by);
+        } elseif ($invoice->updated_by) {
+            $requestor = User::find($invoice->updated_by);
+        }
+
         $admins = $recipientService->getAdminUsersFor($invoice->company_id);
 
         foreach ($admins as $admin) {
             if ($admin->email) {
-                Mail::to($admin->email)->send(new InvoiceSubmissionNotification($invoice));
+                Mail::to($admin->email)->send(new InvoiceSubmissionNotification($invoice, $requestor));
             }
         }
     }
