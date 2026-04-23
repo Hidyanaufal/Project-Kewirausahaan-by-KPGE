@@ -15,6 +15,7 @@ use App\Utilities\Currency\CurrencyAccessor;
 use App\ValueObjects\Money;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\DB;
 
@@ -143,14 +144,25 @@ class AccountService
     /**
      * Transaction details subquery for eager loading.
      *
-     * Added optional projectId & companyId filters to restrict transactions if provided.
+     * Company / project / project-type scoping matches {@see getAccountBalances} (invoice, bill, or transaction paths).
      *
      * @param  int|null  $projectId
      * @param  int|null  $companyId
+     * @param  int|null  $projectTypeId
      */
-    public function getTransactionDetailsSubquery(string $startDate, string $endDate, ?string $entityId = null, $projectId = null, $companyId = null): Closure
-    {
-        return static function ($query) use ($startDate, $endDate, $entityId, $projectId, $companyId) {
+    public function getTransactionDetailsSubquery(
+        string $startDate,
+        string $endDate,
+        ?string $entityId = null,
+        $projectId = null,
+        $companyId = null,
+        $projectTypeId = null,
+    ): Closure {
+        $projectId = $projectId !== null && $projectId !== '' ? (int) $projectId : null;
+        $companyId = $companyId !== null && $companyId !== '' ? (int) $companyId : null;
+        $projectTypeId = $projectTypeId !== null && $projectTypeId !== '' ? (int) $projectTypeId : null;
+
+        return function ($query) use ($startDate, $endDate, $entityId, $projectId, $companyId, $projectTypeId) {
             $query->select(
                 'journal_entries.id',
                 'journal_entries.account_id',
@@ -180,14 +192,74 @@ class AccountService
                 }
             }
 
-            if ($projectId !== null) {
-                $query->where('transactions.project_id', $projectId);
-            }
-
-            if ($companyId !== null) {
-                $query->where('transactions.company_id', $companyId);
-            }
+            $this->applyMultichannelScopeToJournalEntriesQuery($query, $projectId, $companyId, $projectTypeId);
         };
+    }
+
+    /**
+     * Same company / project / project-type semantics as {@see getAccountBalances}: use the same
+     * LEFT JOINs + WHERE OR as the balance query so the planner can reuse index-friendly paths
+     * (nested EXISTS per row was very slow on large journal tables).
+     *
+     * @param  Relation  $query  Eager-load callback receives HasMany, not Eloquent Builder.
+     */
+    private function applyMultichannelScopeToJournalEntriesQuery(
+        Relation $query,
+        ?int $projectId,
+        ?int $companyId,
+        ?int $projectTypeId,
+    ): void {
+        if ($projectId === null && $companyId === null && $projectTypeId === null) {
+            return;
+        }
+
+        $this->joinInvoicesBillsProjectsForMultichannelScope($query);
+        $this->applyMultichannelScopeAfterDocumentJoins($query, $projectId, $companyId, $projectTypeId);
+    }
+
+    /**
+     * Invoice / bill / project joins used with {@see applyMultichannelScopeAfterDocumentJoins}.
+     */
+    private function joinInvoicesBillsProjectsForMultichannelScope(Builder | Relation $query): void
+    {
+        $query
+            ->leftJoin('invoices', function ($join) {
+                $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Invoice::class);
+            })
+            ->leftJoin('bills', function ($join) {
+                $join->on('bills.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Bill::class);
+            })
+            ->leftJoin('projects', function ($join) {
+                $join->on('projects.id', '=', DB::raw('COALESCE(invoices.project_id, bills.project_id, transactions.project_id)'));
+            });
+    }
+
+    /**
+     * Restrict rows after invoices, bills, and projects are left-joined (see {@see getAccountBalances}).
+     */
+    private function applyMultichannelScopeAfterDocumentJoins(Builder | Relation $query, ?int $projectId, ?int $companyId, ?int $projectTypeId): void
+    {
+        if ($projectId !== null) {
+            $query->where(function (Builder $q) use ($projectId) {
+                $q->where('invoices.project_id', $projectId)
+                    ->orWhere('bills.project_id', $projectId)
+                    ->orWhere('transactions.project_id', $projectId);
+            });
+        }
+
+        if ($companyId !== null) {
+            $query->where(function (Builder $q) use ($companyId) {
+                $q->where('invoices.company_id', $companyId)
+                    ->orWhere('bills.company_id', $companyId)
+                    ->orWhere('transactions.company_id', $companyId);
+            });
+        }
+
+        if ($projectTypeId !== null) {
+            $query->where('projects.project_type_id', $projectTypeId);
+        }
     }
 
     /**
@@ -288,38 +360,14 @@ class AccountService
 
         // Join invoices & bills for filtering
         if ($projectId !== null || $companyId !== null || $projectTypeId !== null) {
-            $query
-                ->leftJoin('invoices', function ($join) {
-                    $join->on('invoices.id', '=', 'transactions.transactionable_id')
-                        ->where('transactions.transactionable_type', '=', Invoice::class);
-                })
-                ->leftJoin('bills', function ($join) {
-                    $join->on('bills.id', '=', 'transactions.transactionable_id')
-                        ->where('transactions.transactionable_type', '=', Bill::class);
-                })
-                ->leftJoin('projects', function ($join) {
-                    $join->on('projects.id', '=', DB::raw('COALESCE(invoices.project_id, bills.project_id, transactions.project_id)'));
-                });
+            $this->joinInvoicesBillsProjectsForMultichannelScope($query);
 
-            if ($projectId !== null) {
-                $query->where(function (Builder $q) use ($projectId) {
-                    $q->where('invoices.project_id', $projectId)
-                        ->orWhere('bills.project_id', $projectId)
-                        ->orWhere('transactions.project_id', $projectId);
-                });
-            }
-
-            if ($companyId !== null) {
-                $query->where(function (Builder $q) use ($companyId) {
-                    $q->where('invoices.company_id', $companyId)
-                        ->orWhere('bills.company_id', $companyId)
-                        ->orWhere('transactions.company_id', $companyId);
-                });
-            }
-
-            if ($projectTypeId !== null) {
-                $query->where('projects.project_type_id', $projectTypeId);
-            }
+            $this->applyMultichannelScopeAfterDocumentJoins(
+                $query,
+                $projectId !== null && $projectId !== '' ? (int) $projectId : null,
+                $companyId !== null && $companyId !== '' ? (int) $companyId : null,
+                $projectTypeId !== null && $projectTypeId !== '' ? (int) $projectTypeId : null,
+            );
         }
 
         $query->addBinding([$startDate, $startDate, $startDate, $startDate, $startDate, $endDate, $startDate, $endDate], 'select');

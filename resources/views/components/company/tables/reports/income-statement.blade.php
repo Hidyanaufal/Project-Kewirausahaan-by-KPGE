@@ -1,3 +1,8 @@
+@props([
+    'report',
+    'projectId' => null,
+])
+
 <table class="w-full min-w-[50rem] divide-y divide-gray-200 dark:divide-white/5">
     <colgroup>
         @if(array_key_exists('account_code', $report->getHeaders()))
@@ -34,17 +39,23 @@
                                     {{ $categoryAccountCell['name'] }}
                                 </x-filament::link>
                             @elseif(isset($categoryAccountCell['id']) && isset($categoryAccountCell['start_date']) && isset($categoryAccountCell['end_date']))
+                                @php
+                                    $accountTransactionsUrlParams = [
+                                        'startDate' => $categoryAccountCell['start_date'],
+                                        'endDate' => $categoryAccountCell['end_date'],
+                                        'selectedAccount' => $categoryAccountCell['id'],
+                                    ];
+                                    if ($projectId !== null && $projectId !== '') {
+                                        $accountTransactionsUrlParams['project_id'] = $projectId;
+                                    }
+                                @endphp
                                 <x-filament::link
                                     color="primary"
                                     target="_blank"
                                     icon="heroicon-o-arrow-top-right-on-square"
                                     :icon-position="\Filament\Support\Enums\IconPosition::After"
                                     :icon-size="\Filament\Support\Enums\IconSize::Small"
-                                    href="{{ \App\Filament\Company\Pages\Reports\AccountTransactions::getUrl([
-                                            'startDate' => $categoryAccountCell['start_date'],
-                                            'endDate' => $categoryAccountCell['end_date'],
-                                            'selectedAccount' => $categoryAccountCell['id']
-                                        ]) }}"
+                                    href="{{ \App\Filament\Company\Pages\Reports\AccountTransactions::getUrl($accountTransactionsUrlParams) }}"
                                 >
                                     {{ $categoryAccountCell['name'] }}
                                 </x-filament::link>

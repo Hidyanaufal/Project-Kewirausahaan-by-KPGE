@@ -7,6 +7,7 @@ use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Enums\Accounting\AccountCategory;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
+use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Helpers\AuthHelper;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\Transaction;
@@ -110,7 +111,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
     public function filtersForm(Form $form): Form
     {
         return $form
-            ->columns(5)
+            ->columns(6)
             ->schema([
                 Select::make('selectedAccount')
                     ->label('Account')
@@ -124,6 +125,8 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 ])->extraFieldWrapperAttributes([
                     'class' => 'report-hidden-label',
                 ]),
+                ProjectResource::options()
+                    ->required(false),
                 Select::make('selectedPayee')
                     ->label('Payee')
                     ->options($this->getEntityOptions())
@@ -179,13 +182,15 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
 
     protected function buildReport(array $columns): ReportDTO
     {
+        $projectId = $this->getFilterState('project_id');
+
         return $this->reportService->buildAccountTransactionsReport(
             startDate: $this->getFormattedStartDate(),
             endDate: $this->getFormattedEndDate(),
             columns: $columns,
             accountId: $this->getFilterState('selectedAccount'),
             entityId: $this->getFilterState('selectedPayee'),
-            projectId: null,
+            projectId: ($projectId !== null && $projectId !== '') ? (int) $projectId : null,
             companyId: $this->company->id
         );
     }
@@ -222,7 +227,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
      */
     private function mergeExportOverrideWithAppliedFilters(array $override): array
     {
-        foreach (['startDate', 'endDate', 'selectedAccount', 'selectedPayee'] as $key) {
+        foreach (['startDate', 'endDate', 'selectedAccount', 'selectedPayee', 'project_id'] as $key) {
             $value = $override[$key] ?? null;
             if ($value === null || $value === '') {
                 $override[$key] = $this->getFilterState($key);
@@ -236,7 +241,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
      * Resolve export filter: when isActiveExportFiltered, return start/end date and optional account/payee.
      * When $override is provided (e.g. from export form), use those values and normalize dates to avoid timezone/format drift.
      *
-     * @param  array<string, mixed>|null  $override  Optional keys: startDate, endDate, selectedAccount, selectedPayee
+     * @param  array<string, mixed>|null  $override  Optional keys: startDate, endDate, selectedAccount, selectedPayee, project_id
      */
     private function getExportFilterParams(?array $override = null): array
     {
@@ -260,6 +265,8 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             $entityId = isset($payeeRaw) && $payeeRaw !== 'all' && $payeeRaw !== ''
                 ? (int) $payeeRaw
                 : null;
+            $projectIdRaw = $override['project_id'] ?? null;
+            $projectId = ($projectIdRaw !== null && $projectIdRaw !== '') ? (int) $projectIdRaw : null;
 
             return [
                 'filtered' => true,
@@ -267,12 +274,14 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 'endDate' => Carbon::parse($endDate)->endOfDay()->toDateTimeString(),
                 'accountId' => $accountId,
                 'entityId' => $entityId,
+                'projectId' => $projectId,
                 'periodLabel' => Carbon::parse($startDate)->toDefaultDateFormat() . ' - ' . Carbon::parse($endDate)->toDefaultDateFormat(),
             ];
         }
 
         $accountId = $this->getFilterState('selectedAccount');
         $entityId = $this->getFilterState('selectedPayee');
+        $projectIdState = $this->getFilterState('project_id');
         $startDate = $this->getFilterState('startDate');
         $endDate = $this->getFilterState('endDate');
         $startDateNormalized = $startDate ? Carbon::parse($startDate)->toDateString() : null;
@@ -288,6 +297,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             'endDate' => Carbon::parse($endDateNormalized)->endOfDay()->toDateTimeString(),
             'accountId' => $accountId !== 'all' ? (int) $accountId : null,
             'entityId' => $entityId !== 'all' ? $entityId : null,
+            'projectId' => ($projectIdState !== null && $projectIdState !== '') ? (int) $projectIdState : null,
             'periodLabel' => Carbon::parse($startDateNormalized)->toDefaultDateFormat() . ' - ' . Carbon::parse($endDateNormalized)->toDefaultDateFormat(),
         ];
     }
@@ -332,19 +342,21 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             $accountIds = $params['accountId'] ? [(int) $params['accountId']] : [];
             $entityId = $params['entityId'];
             $reportPeriod = $params['periodLabel'];
+            $projectIdForBalances = $params['projectId'] ?? null;
         } else {
             $startDate = $this->accountService->getEarliestTransactionDate();
             $endDate = now()->endOfDay()->format('Y-m-d H:i:s');
             $accountIds = [];
             $entityId = null;
             $reportPeriod = 'As of ' . now()->format('d M Y');
+            $projectIdForBalances = null;
         }
 
         $balanceQueryWithPayee = $this->accountService->getAccountBalances(
             $startDate,
             $endDate,
             $accountIds,
-            null,
+            $projectIdForBalances,
             $companyId,
             null,
             $entityId
@@ -372,7 +384,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 $startDate,
                 $endDate,
                 $accountIdsNonZero,
-                null,
+                $projectIdForBalances,
                 $companyId,
                 null,
                 null
@@ -423,7 +435,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
             $params['filtered'] ? $params['endDate'] : $endDate,
             $accountIdForRunningReport,
             $entityIdForRunningReport,
-            null,
+            $params['filtered'] ? ($params['projectId'] ?? null) : null,
             $companyId,
         );
 
@@ -842,6 +854,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                     Hidden::make('endDate')->default(fn () => $this->getFilterState('endDate')),
                     Hidden::make('selectedAccount')->default(fn () => $this->getFilterState('selectedAccount')),
                     Hidden::make('selectedPayee')->default(fn () => $this->getFilterState('selectedPayee')),
+                    Hidden::make('project_id')->default(fn () => $this->getFilterState('project_id')),
                 ])
                 ->action(function (array $data) {
                     $format = $data['format'];
@@ -852,6 +865,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                         'endDate' => $data['endDate'] ?? null,
                         'selectedAccount' => $data['selectedAccount'] ?? null,
                         'selectedPayee' => $data['selectedPayee'] ?? null,
+                        'project_id' => $data['project_id'] ?? null,
                     ];
 
                     if ($format == 'xlsx') {

@@ -195,7 +195,8 @@ class ReportService
         $projectId,
         $companyId,
     ) {
-        $query = $this->accountService->getAccountBalances($startDate, $endDate, $accountIds, $projectId, $companyId)
+        // Pass entityId so starting_balance / totals match journal lines when Payee filter is applied.
+        $query = $this->accountService->getAccountBalances($startDate, $endDate, $accountIds, $projectId, $companyId, null, $entityId)
             ->orderByRaw('LENGTH(code), code');
 
         return $query->with(['journalEntries' => $this->accountService->getTransactionDetailsSubquery($startDate, $endDate, $entityId, $projectId, $companyId)])->get();
