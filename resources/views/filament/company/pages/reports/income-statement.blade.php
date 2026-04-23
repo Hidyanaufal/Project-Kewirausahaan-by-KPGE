@@ -37,7 +37,10 @@
             @if($activeTab === 'summary')
                 <x-company.tables.reports.income-statement-summary :report="$this->report"/>
             @elseif($activeTab === 'details')
-                <x-company.tables.reports.income-statement :report="$this->report"/>
+                <x-company.tables.reports.income-statement
+                    :report="$this->report"
+                    :project-id="$this->getFilterState('project_id')"
+                />
             @endif
         @endif
     </x-company.tables.container>
