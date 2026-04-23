@@ -675,11 +675,25 @@ class ExportService
                     ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 
                 // ====== FORMAT ANGKA ======
-                foreach (range('B', $highestCol) as $col) {
-                    $sheet->getStyle("{$col}5:{$col}{$highestRow}")
-                        ->getNumberFormat()->setFormatCode('#,##0.00');
-                    $sheet->getStyle("{$col}5:{$col}{$highestRow}")
-                        ->getAlignment()->setHorizontal('right');
+                $numericColumns = $this->data['numeric_columns'] ?? null;
+                if (is_array($numericColumns) && ! empty($numericColumns)) {
+                    foreach ($numericColumns as $col) {
+                        if (! is_string($col) || $col === '') {
+                            continue;
+                        }
+                        $col = strtoupper($col);
+                        $sheet->getStyle("{$col}5:{$col}{$highestRow}")
+                            ->getNumberFormat()->setFormatCode('#,##0.00');
+                        $sheet->getStyle("{$col}5:{$col}{$highestRow}")
+                            ->getAlignment()->setHorizontal('right');
+                    }
+                } else {
+                    foreach (range('B', $highestCol) as $col) {
+                        $sheet->getStyle("{$col}5:{$col}{$highestRow}")
+                            ->getNumberFormat()->setFormatCode('#,##0.00');
+                        $sheet->getStyle("{$col}5:{$col}{$highestRow}")
+                            ->getAlignment()->setHorizontal('right');
+                    }
                 }
 
                 // ====== TEKS RATA KIRI UNTUK KOLOM A ======
