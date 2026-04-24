@@ -320,6 +320,9 @@ class AccountService
                 $join->on('transactions.id', '=', 'journal_entries.transaction_id')
                     ->where('transactions.posted_at', '<=', $endDate);
             })
+            // Keep balance queries consistent with Eloquent models that use SoftDeletes.
+            ->whereNull('journal_entries.deleted_at')
+            ->whereNull('transactions.deleted_at')
             ->groupBy([
                 'accounts.id',
                 'accounts.name',
