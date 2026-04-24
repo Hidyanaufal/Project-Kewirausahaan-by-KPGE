@@ -157,17 +157,11 @@ class ProjectResource extends Resource
             ->modifyQueryUsing(function (Builder $query) {
                 $invoiceSubquery = \App\Models\Accounting\Invoice::query()
                     ->selectRaw('COALESCE(SUM(subtotal + profit_total - COALESCE(discount_total, 0)), 0)')
-                    ->whereColumn('invoices.project_id', 'projects.id')
-                    ->whereIn('status', [
-                        InvoiceStatus::Paid,
-                    ]);
+                    ->whereColumn('invoices.project_id', 'projects.id');
 
                 $billSubquery = \App\Models\Accounting\Bill::query()
                     ->selectRaw('COALESCE(SUM(total), 0)')
-                    ->whereColumn('bills.project_id', 'projects.id')
-                    ->whereIn('status', [
-                        BillStatus::Paid,
-                    ]);
+                    ->whereColumn('bills.project_id', 'projects.id');
 
                 $query
                     ->addSelect([
