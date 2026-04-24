@@ -747,11 +747,12 @@ class OtherReport extends BaseReportPage implements EnhancedReport
 
     public function exportPDF(?string $template = null): StreamedResponse
     {
-        return $this->exportService->exportToPdfEnhanced(
-            data: $this->buildReportEnhanced(
-                template: $template,
-                format: 'pdf'
-            )
+        return $this->exportService->exportToPdf(
+            $this->company,
+            $this->report,
+            $this->getFilterState('startDate'),
+            $this->getFilterState('endDate'),
+            $this->getActiveTab()
         );
     }
 }

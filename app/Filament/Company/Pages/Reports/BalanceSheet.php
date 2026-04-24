@@ -105,6 +105,7 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             AccountType::NonCurrentLiability,
             AccountType::ContraLiability,
             AccountType::Equity,
+            AccountType::ContraEquity, // ← yang benar cuma ini
         ];
     }
 
@@ -129,8 +130,10 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 AccountCategory::Asset,
                 AccountCategory::Liability,
                 AccountCategory::Equity,
+                AccountCategory::Revenue,  // ← tambah
+                AccountCategory::Expense,  // ← tambah
             ])
-            ->get();
+                ->get();
 
         $balanceMap = [];
         foreach ($accountsWithBalance as $account) {
@@ -139,6 +142,15 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             $balanceMap[$account->id] = $endingBalance;
         }
 
+        // Hitung Net Income (Revenue - Expense) untuk Retained Earnings
+        $netIncome = 0;
+        foreach ($accountsWithBalance as $account) {
+            if ($account->category === AccountCategory::Revenue) {
+                $netIncome += $balanceMap[$account->id] ?? 0;
+            } elseif ($account->category === AccountCategory::Expense) {
+                $netIncome -= $balanceMap[$account->id] ?? 0;
+            }
+        }
         $now = Carbon::now()->format('Y-m-d_H-i-s');
         $startFormatted = Carbon::parse($this->getFilterState('asOfDate'))->format('d M Y');
 
@@ -176,7 +188,7 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 AccountCategory::Liability,
                 AccountCategory::Equity,
             ])
-            ->with(['children'])
+            ->with(['children.children.children'])
             ->orderBy('category')
             ->orderBy('type')
             ->orderBy('code')
@@ -277,7 +289,8 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 }
 
                 // subtotal per tipe (hanya tampilkan jika bukan 0)
-                $typeTotal = $accountsByType->sum(fn($a) => $balanceMap[$a->id] ?? 0);
+                // subtotal per tipe (hanya tampilkan jika bukan 0)
+                $typeTotal = $parentAccounts->sum(fn($a) => $subtreeBalance($a));
                 if ($typeTotal != 0) {
                     $rows->push([
                         'data' => [
@@ -296,7 +309,22 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             // subtotal per kategori (hanya tampilkan jika bukan 0)
             $categoryTotal = collect($types)
                 ->flatten()
-                ->sum(fn($a) => $balanceMap[$a->id] ?? 0);
+                ->filter(fn($a) => is_null($a->parent_id))
+                ->sum(fn($a) => $subtreeBalance($a));
+
+            // Inject Retained Earnings sebelum Total Equity
+            if ($category === AccountCategory::Equity && $netIncome != 0) {
+                $rows->push([
+                    'data' => [
+                        'Retained Earnings',
+                        $toNumber($netIncome / 100),
+                    ],
+                    'style' => [
+                        'padding-left' => '30px',
+                    ],
+                ]);
+                $categoryTotal += $netIncome; // ikutkan ke total equity
+            }
 
             if ($categoryTotal != 0) {
                 $rows->push([
