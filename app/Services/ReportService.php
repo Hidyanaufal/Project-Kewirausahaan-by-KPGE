@@ -682,7 +682,7 @@ class ReportService
 
     private function buildOperatingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [
                 AccountType::OperatingRevenue,
                 AccountType::UncategorizedRevenue,
@@ -697,7 +697,7 @@ class ReportService
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $adjustments = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $adjustments = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [
                 AccountType::ContraAsset,
                 AccountType::CurrentLiability,
@@ -711,12 +711,12 @@ class ReportService
 
     private function buildInvestingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [AccountType::NonCurrentAsset])
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $adjustments = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $adjustments = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [AccountType::NonOperatingRevenue])
             ->orderByRaw('LENGTH(code), code')
             ->get();
@@ -726,7 +726,7 @@ class ReportService
 
     private function buildFinancingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->where(function (Builder $query) {
                 $query->whereIn('accounts.type', [
                     AccountType::Equity,
@@ -756,10 +756,6 @@ class ReportService
                 $accountCategory = $entry->type->getCategory();
                 $accountBalances = $this->calculateAccountBalances($entry);
                 $netCashFlow = $accountBalances['net_movement'] ?? 0;
-
-                if ($entry->subtype->inverse_cash_flow) {
-                    $netCashFlow *= -1;
-                }
 
                 // Accumulate totals
                 $sectionTotal += $netCashFlow;
