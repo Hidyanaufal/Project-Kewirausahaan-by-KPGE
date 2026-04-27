@@ -155,13 +155,17 @@ class ProjectResource extends Resource
         return $table
             ->defaultSort('id', 'desc')
             ->modifyQueryUsing(function (Builder $query) {
+                // Subquery Total Invoice — exclude cancelled
                 $invoiceSubquery = \App\Models\Accounting\Invoice::query()
                     ->selectRaw('COALESCE(SUM(subtotal + profit_total - COALESCE(discount_total, 0)), 0)')
-                    ->whereColumn('invoices.project_id', 'projects.id');
+                    ->whereColumn('invoices.project_id', 'projects.id')
+                    ->whereNotIn('status', ['cancelled']);
 
+                // Subquery Total Biaya (Bill) — exclude cancelled
                 $billSubquery = \App\Models\Accounting\Bill::query()
                     ->selectRaw('COALESCE(SUM(total), 0)')
-                    ->whereColumn('bills.project_id', 'projects.id');
+                    ->whereColumn('bills.project_id', 'projects.id')
+                    ->whereNotIn('status', ['cancelled']);
 
                 $query
                     ->addSelect([
