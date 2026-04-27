@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Addons\GenerateYearlyForAsset;
+use App\Actions\Addons\PostInitialAssetRecognition;
 use App\Enums\Accounting\JournalEntryType;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\Transaction;
@@ -44,7 +45,17 @@ it('creates balanced monthly depreciation journals (debit asset, credit contra) 
         'status' => 'active',
     ]);
 
+    expect(Transaction::query()
+        ->where('company_id', $company->id)
+        ->where('description', 'Initial asset recognition for Test Asset')
+        ->count())->toBe(0);
+
     GenerateYearlyForAsset::run(asset: $asset, targetYear: 2026, force: true);
+
+    expect(Transaction::query()
+        ->where('company_id', $company->id)
+        ->where('description', 'Initial asset recognition for Test Asset')
+        ->count())->toBe(0);
 
     $transactions = Transaction::query()
         ->where('type', 'journal')
@@ -83,5 +94,63 @@ it('creates balanced monthly depreciation journals (debit asset, credit contra) 
         ->get();
 
     expect($transactionsAfter)->toHaveCount(12);
+});
+
+it('posts initial recognition only via action and is idempotent', function () {
+    $company = Company::firstOrFail();
+
+    $assetAccount = Account::factory()->create([
+        'company_id' => $company->id,
+        'name' => 'Asset Account - Initial Test',
+    ]);
+
+    $contraAccount = Account::factory()->create([
+        'company_id' => $company->id,
+        'name' => 'Contra Asset Account - Initial Test',
+    ]);
+
+    $group = AssetGroup::create([
+        'company_id' => $company->id,
+        'name' => 'Test Group Initial',
+        'useful_life_months' => 12,
+        'default_method' => 'garis_lurus',
+        'asset_account_id' => $assetAccount->id,
+        'contra_account_id' => $contraAccount->id,
+    ]);
+
+    /** @var Asset $asset */
+    $asset = Asset::create([
+        'company_id' => $company->id,
+        'group_id' => $group->id,
+        'asset_code' => 'AST-INIT-001',
+        'name' => 'Init Journal Asset',
+        'acquisition_date' => '2026-02-01',
+        'acquisition_cost' => 500.00,
+        'salvage_value' => 0,
+        'useful_life_months' => 12,
+        'depreciation_method' => 'garis_lurus',
+        'status' => 'active',
+    ]);
+
+    $first = PostInitialAssetRecognition::run(asset: $asset);
+    expect($first['posted'])->toBeTrue();
+
+    $tx = Transaction::query()
+        ->where('company_id', $company->id)
+        ->where('meta->addon', 'asset_initial_recognition')
+        ->where('meta->asset_id', $asset->id)
+        ->first();
+
+    expect($tx)->not->toBeNull()
+        ->and($tx->description)->toBe('Initial asset recognition for Init Journal Asset');
+
+    $second = PostInitialAssetRecognition::run(asset: $asset);
+    expect($second['posted'])->toBeFalse();
+
+    expect(Transaction::query()
+        ->where('company_id', $company->id)
+        ->where('meta->addon', 'asset_initial_recognition')
+        ->where('meta->asset_id', $asset->id)
+        ->count())->toBe(1);
 });
 
