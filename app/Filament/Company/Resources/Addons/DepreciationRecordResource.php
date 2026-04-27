@@ -5,6 +5,7 @@ namespace App\Filament\Company\Resources\Addons;
 use App\Concerns\HasPermissionCheck;
 use App\Filament\Company\Resources\Addons\DepreciationRecordResource\Pages;
 use App\Helpers\AuthHelper;
+use App\Models\Accounting\Transaction;
 use App\Models\Addons\Asset;
 use App\Models\Addons\DepreciationRecord;
 use App\Models\Company;
@@ -144,6 +145,46 @@ class DepreciationRecordResource extends Resource
                         $rows = collect();
 
                         if ($template === 'detail') {
+                            $assetIds = $records->pluck('asset_id')->filter()->unique()->values()->all();
+                            $fiscalYears = $records->pluck('fiscal_year')->filter()->unique()->values()->all();
+
+                            $monthsByAssetYear = [];
+                            if (! empty($assetIds) && ! empty($fiscalYears)) {
+                                Transaction::query()
+                                    ->where('company_id', $company->id)
+                                    ->where('type', 'journal')
+                                    ->where('meta->addon', 'asset_depreciation')
+                                    ->whereIn('meta->asset_id', $assetIds)
+                                    ->whereIn('meta->fiscal_year', $fiscalYears)
+                                    ->get(['meta'])
+                                    ->each(function (Transaction $t) use (&$monthsByAssetYear): void {
+                                        $meta = (array) ($t->meta ?? []);
+
+                                        $assetId = isset($meta['asset_id']) ? (int) $meta['asset_id'] : null;
+                                        $fiscalYear = isset($meta['fiscal_year']) ? (int) $meta['fiscal_year'] : null;
+                                        $fiscalMonth = isset($meta['fiscal_month']) ? (int) $meta['fiscal_month'] : null;
+
+                                        if (! $assetId || ! $fiscalYear || ! $fiscalMonth) {
+                                            return;
+                                        }
+                                        if ($fiscalMonth < 1 || $fiscalMonth > 12) {
+                                            return;
+                                        }
+
+                                        $monthsByAssetYear[$assetId] ??= [];
+                                        $monthsByAssetYear[$assetId][$fiscalYear] ??= [];
+                                        $monthsByAssetYear[$assetId][$fiscalYear][$fiscalMonth] = true;
+                                    });
+
+                                foreach ($monthsByAssetYear as $assetId => $years) {
+                                    foreach ($years as $year => $monthsMap) {
+                                        $months = array_keys($monthsMap);
+                                        sort($months);
+                                        $monthsByAssetYear[$assetId][$year] = $months;
+                                    }
+                                }
+                            }
+
                             $header = [
                                 'No',
                                 'Tahun',
@@ -178,7 +219,7 @@ class DepreciationRecordResource extends Resource
 
                                 foreach ($groupRecords as $record) {
                                     $monthly = (array) ($record->monthly_breakdown ?? []);
-                                    $months = collect(array_keys($monthly))
+                                    $months = collect($monthsByAssetYear[$record->asset_id][$record->fiscal_year] ?? [])
                                         ->map(fn ($m) => (int) $m)
                                         ->filter(fn ($m) => $m >= 1 && $m <= 12)
                                         ->unique()
@@ -186,7 +227,42 @@ class DepreciationRecordResource extends Resource
                                         ->values();
 
                                     if ($months->isEmpty()) {
-                                        $months = collect(range(1, 12));
+                                        $months = collect(array_keys($monthly))
+                                            ->map(fn ($m) => (int) $m)
+                                            ->filter(fn ($m) => $m >= 1 && $m <= 12)
+                                            ->unique()
+                                            ->sort()
+                                            ->values();
+                                    }
+
+                                    if ($months->isEmpty()) {
+                                        $acq = $record->asset?->acquisition_date;
+                                        $acqDate = $acq instanceof Carbon ? $acq->copy() : ($acq ? Carbon::parse($acq) : null);
+
+                                        if ($acqDate) {
+                                            $deprStartDate = $acqDate->copy()->startOfMonth();
+                                            if ((int) $acqDate->format('d') > 15) {
+                                                $deprStartDate = $deprStartDate->addMonth();
+                                            }
+
+                                            $startYear = (int) $deprStartDate->format('Y');
+                                            $startMonth = (int) $deprStartDate->format('m');
+
+                                            $yearStartMonth = ((int) $record->fiscal_year === $startYear) ? $startMonth : 1;
+                                            $yearEndMonth = 12;
+
+                                            $now = now();
+                                            if ((int) $record->fiscal_year === (int) $now->format('Y')) {
+                                                $maxMonthInCurrentYear = $now->isLastOfMonth()
+                                                    ? (int) $now->format('m')
+                                                    : ((int) $now->format('m') - 1);
+                                                $yearEndMonth = min($yearEndMonth, max(0, $maxMonthInCurrentYear));
+                                            }
+
+                                            if ($yearEndMonth >= $yearStartMonth && $yearEndMonth >= 1) {
+                                                $months = collect(range(max(1, $yearStartMonth), min(12, $yearEndMonth)));
+                                            }
+                                        }
                                     }
 
                                     $runningBook = (float) ($record->opening_fiscal_book_value ?? 0);
