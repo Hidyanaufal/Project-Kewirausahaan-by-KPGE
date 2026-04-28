@@ -56,6 +56,15 @@ class OpeningBalanceImport implements ToModel, WithHeadingRow, WithChunkReading,
             return null;
         }
 
+        // Jangan post saldo untuk account parent (punya children) supaya tidak double dengan saldo anak-anaknya.
+        if ($account->children()->exists()) {
+            Log::info('OpeningBalanceImport - skipped parent account balance to prevent double counting', [
+                'company_id' => $this->companyId,
+                'code' => $account->code,
+            ]);
+            return null;
+        }
+
         $company = Company::query()->find($this->companyId);
         if (! $company) {
             return null;
