@@ -552,7 +552,7 @@ class Invoice extends Document
 
         // tidak ada skema dp: tidak boleh jika sudah punya 1 atau lebih payment
         if ($this->payments()->count() >= 1) {
-            return false;
+            return true;
         }
 
         return ! in_array($this->status, [
