@@ -248,7 +248,7 @@ class PaymentsRelationManager extends RelationManager
                         }
                         $form->fill([
                             'posted_at' => company_today()->toDateString(),
-                            'amount' => $record->actual_total ?? $record->amount_due,
+                            'amount' => max($record->amount_due, 0),
                             'pph23' => $defaultPph23 ?: null,
                             'payment_method'    => PaymentMethod::BankPayment
                         ]);
