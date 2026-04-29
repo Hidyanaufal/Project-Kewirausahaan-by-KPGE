@@ -13,6 +13,7 @@ use App\Models\Banking\BankAccount;
 use App\Models\Setting\Currency;
 use App\Observers\AccountObserver;
 use App\Utilities\Currency\CurrencyAccessor;
+use App\Scopes\CurrentCompanyScope;
 use Database\Factories\Accounting\AccountFactory;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -157,7 +158,14 @@ class Account extends Model
     {
         try {
             // Find AccountDefault by key and company (if provided)
-            $accountDefault = AccountDefault::where('key', $accountDefaultKey)
+            $accountDefaultQuery = AccountDefault::where('key', $accountDefaultKey->value);
+            if ($companyId) {
+                // Saat company_id eksplisit diberikan, pastikan lookup tidak ikut ke-intersect global scope
+                // `CurrentCompanyScope` (yang berbasis session current_company_id).
+                $accountDefaultQuery = $accountDefaultQuery->withoutGlobalScope(CurrentCompanyScope::class);
+            }
+
+            $accountDefault = $accountDefaultQuery
                 ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->first();
 
@@ -169,7 +177,12 @@ class Account extends Model
             }
 
             // Find the Account linked to the AccountDefault
-            $account = self::where('id', $accountDefault->account_id)
+            $accountQuery = self::where('id', $accountDefault->account_id);
+            if ($companyId) {
+                $accountQuery = $accountQuery->withoutGlobalScope(CurrentCompanyScope::class);
+            }
+
+            $account = $accountQuery
                 ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->first();
 

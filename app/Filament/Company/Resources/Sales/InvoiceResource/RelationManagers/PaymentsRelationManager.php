@@ -243,7 +243,8 @@ class PaymentsRelationManager extends RelationManager
                         return $this->getOwnerRecord()->canRecordPayment() && $this->getOwnerRecord()->isFinalized();
                     })
                     ->mountUsing(function (Form $form) {
-                        $record = $this->getOwnerRecord();
+                            /** @var Invoice $record */
+                            $record = $this->getOwnerRecord()->fresh();
                         $trx = Transaction::where('transactionable_type', Invoice::class)
                             ->where('transactionable_id', $record->id)
                             ->first();
