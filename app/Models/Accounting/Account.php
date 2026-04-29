@@ -235,6 +235,11 @@ class Account extends Model
         return self::findAccountByNameOrFail(AccountDefaultKey::PPh23, $companyId);
     }
 
+    public static function getAccountsPPh23Payable(?int $companyId = null): self
+    {
+        return self::findAccountByNameOrFail(AccountDefaultKey::PPh23Payable, $companyId);
+    }
+
     public static function getAccountsPPn(?int $companyId = null): self
     {
         return self::findAccountByNameOrFail(AccountDefaultKey::PPn, $companyId);
