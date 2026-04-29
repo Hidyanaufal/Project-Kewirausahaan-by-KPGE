@@ -254,7 +254,7 @@ class PaymentsRelationManager extends RelationManager
                         $revenueJournals = $journals->whereIn('account_id', $revenueAccounts)->first();
                         $form->fill([
                             'posted_at'         => company_today()->toDateString(),
-                            'amount'            => abs($record->actual_total ?? $record->amount_due),
+                            'amount'            => max($record->amount_due, 0),
                             'pph23'             => abs($revenueJournals->amount * 0.2) / 10,
                             'payment_method'    => PaymentMethod::BankPayment
                         ]);
