@@ -234,7 +234,8 @@ class PaymentsRelationManager extends RelationManager
                         return $this->getOwnerRecord()->canRecordPayment();
                     })
                     ->mountUsing(function (Form $form) {
-                        $record = $this->getOwnerRecord();
+                        /** @var Bill $record */
+                        $record = $this->getOwnerRecord()->fresh();
                         $initialTransaction = $record->initialTransaction;
                         $defaultPph23 = 0;
                         if ($initialTransaction) {
