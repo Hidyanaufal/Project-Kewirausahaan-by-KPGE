@@ -1,35 +1,22 @@
 @php
-    function rupiahToNumber(?string $str, bool $asFloat = false) {
-        // 1) buang semua kecuali digit, minus, koma dan titik
-        $s = trim($str);
-        $s = preg_replace('/[^\d\-\.,]/u', '', $s);
+    function formatMoneyCeiling(?string $formattedMoney)
+    {
+        if (!$formattedMoney) {
+            return null;
+        }
 
-        // 2) catat tanda minus (jika ada)
-        $isNegative = (strpos($s, '-') !== false);
-        $s = str_replace('-', '', $s);
+        // Parse: "Rp12.500,25" -> 12500.25
+        $numeric = str_replace(['Rp', ' '], '', $formattedMoney);
+        $numeric = str_replace('.', '', $numeric); // Remove thousands separator
+        $numeric = str_replace(',', '.', $numeric); // Convert decimal comma to dot
+        $numeric = (float) $numeric;
 
-        // 3) hilangkan separator ribuan (titik)
-        $s = str_replace('.', '', $s);
+        // Apply ceiling (round up)
+        $rounded = ceil($numeric);
 
-        // 4) ubah koma desimal ke titik (standar PHP)
-        $s = str_replace(',', '.', $s);
-
-        // 5) cast sesuai request
-        $value = $asFloat ? (float) $s : (int) round((float) $s);
-
-        return $isNegative ? -$value : $value;
+        // Format back: Rp12.501 (no decimals)
+        return 'Rp' . number_format($rounded, 0, ',', '.');
     }
-
-    function numberToRupiah($number, $withSymbol = true) {
-    // pastiin number valid
-    if (!is_numeric($number)) return null;
-
-    // format: ribuan pakai titik, desimal pakai koma
-    $formatted = number_format($number, 0, ',', '.');
-
-    return $withSymbol ? 'Rp' . $formatted : $formatted;
-}
-
 @endphp
 
 <div class="p-6 text-gray-800 bg-white rounded-md shadow-sm invoice-container">
@@ -47,207 +34,159 @@
 
     {{-- Title --}}
     <div class="my-4 text-center">
-        <h2 class="text-lg font-bold">{{ $document->header }}</h2>
+        <h2 class="text-lg font-bold uppercase">{{ $document->header }}</h2>
         @if ($document->subheader)
-            <p class="text-xs text-gray-600">{{ $document->subheader }}</p>
+            <p class="italic text-sm">{{ $document->subheader }}</p>
         @endif
-        <div class="mt-1 text-xs">No. {{ $document->number }}</div>
     </div>
 
     {{-- Metadata --}}
-    <div class="flex justify-between items-start text-xs mb-6 mt-20">
-        <div class="flex mb-2 gap-5 w-[60%]">
-            <div class="text-xs min-w-[60px] whitespace-nowrap">Kepada :</div>
-            <div class="text-xs max-w-[50ch] break-words">
-                @if ($document->recipientDetails)
-                    <p class="font-semibold">{!! nl2br(e($document->recipientDetails)) !!},</p>
-                @endif
-                <p class="font-semibold">{{ $document->client?->name ?? 'Client Not Found' }}</p>
-                @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
-                    {!! $formattedAddress !!}
-                @endif
-            </div>
+    <div class="flex justify-between text-xs mb-6 mt-20">
+        <div>
+            <p><strong>From: </strong></p>
+            <p class="font-bold">{{ $document->company?->name }}</p>
+            <p>{{ $document->company?->addressLine1 }}</p>
+            <p>{{ $document->company?->addressLine2 }}</p>
+            <p>{{ $document->company?->city }}</p>
         </div>
-        <div class="text-xs w-[40%]">
+        <div class="text-xs">
             <table class="w-full">
                 <tbody>
-                    @if ($document?->detail?->contract_number)
-                        <tr>
-                            <td class="text-right whitespace-nowrap pr-2 w-32">Nomor Kontrak</td>
-                            <td class="text-left w-2">:</td>
-                            <td class="text-left">{{ $document->detail->contract_number }}</td>
-                        </tr>
-                    @endif
-
-                    @if ($document?->detail?->po_reference_number)
-                        <tr>
-                            <td class="text-right whitespace-nowrap pr-2">Ref. Nomor PO</td>
-                            <td class="text-left w-2">:</td>
-                            <td class="text-left">{{ $document->detail->po_reference_number }}</td>
-                        </tr>
-                    @endif
-
-                    @if ($document?->detail?->po_date)
-                        <tr>
-                            <td class="text-right whitespace-nowrap pr-2">Tanggal PO</td>
-                            <td class="text-left w-2">:</td>
-                            <td class="text-left whitespace-nowrap">{{ \Carbon\Carbon::parse($document->detail->po_date)->format('d F Y') }}</td>
-                        </tr>
-                    @endif
-
-                    @if ($document?->detail?->spk_number)
-                        <tr>
-                            <td class="text-right whitespace-nowrap pr-2">SPK No.</td>
-                            <td class="text-left w-2">:</td>
-                            <td class="text-left">{{ $document->detail->spk_number }}</td>
-                        </tr>
-                    @endif
-
-                    @if ($document?->detail?->spk_date)
-                        <tr>
-                            <td class="text-right whitespace-nowrap pr-2">Tanggal SPK</td>
-                            <td class="text-left w-2">:</td>
-                            <td class="text-left whitespace-nowrap">{{ \Carbon\Carbon::parse($document->detail->spk_date)->format('d F Y') }}</td>
-                        </tr>
-                    @endif
+                    <tr>
+                        <td class="text-right whitespace-nowrap pr-2">No.</td>
+                        <td class="text-left w-2">:</td>
+                        <td class="text-left">{{ $document->number ?? '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-right whitespace-nowrap pr-2">Date</td>
+                        <td class="text-left w-2">:</td>
+                        <td class="text-left whitespace-nowrap">
+                            {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
     </div>
 
+    <div class="text-xs mb-6 mt-12 w-[60%] max-w-[50ch] break-words">
+        <p><strong>To: </strong></p>
+        @if ($document->recipientDetails)
+            <p class="font-bold">{!! nl2br(e($document->recipientDetails)) !!},</p>
+        @endif
+        <p class="font-bold">{{ $document->client?->name }}</p>
+        @if ($document->client && ($formattedAddress = $document->client->getFormattedAddressHtml()))
+            {!! $formattedAddress !!}
+        @endif
+        {{-- <p class="mt-6"><strong>UP:</strong></p>
+        <p class="font-bold">{{ $document?->detail?->project?->pic_client_name ?? '-' }}</p> --}}
+    </div>
+
+    <div class="text-xs">
+        Dengan ini kami sampaikan penawaran spesifikasi barang/pekerjaan jasa dan harga yang bapak/ibu butuhkan :
+    </div>
+
     <div class="flex flex-col">
-    {{-- Line Items --}}
-    <div class="mb-2 line-items">
-        <table class="w-full text-xs leading-tight border-1 border-black border-collapse">
-            {{-- <thead> --}}
-                <tr>
-                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Tanggal</th>
-                    <th style="background: {{ $document->accentColor }}" class="w-4/6 px-2 py-1 text-left">Keterangan</th>
-                    <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Jumlah (Rp.)</th>
-                </tr>
-            {{-- </thead> --}}
-            <tbody>
-                @if ($document?->detail?->hide_offering_items)
-                    {{-- Mode: Hide Offering Items - Tampilkan langsung total sejajar dengan project --}}
+        {{-- Line Items --}}
+        <div class="mb-2 line-items">
+            {{-- AWAL --}}
+            <table class="w-full text-xs leading-tight border-1 border-black border-collapse">
+                <tbody>
+                    <!-- HEADER TABEL (HANYA SEKALI) -->
                     <tr>
-                        <td class="px-2 py-1 text-center border border-black align-top">
-                            {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
-                        </td>
-                        <td class="py-1 pl-2 font-semibold text-left border border-black">
+                        <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-left">No.</th>
+                        <th style="background: {{ $document->accentColor }}" class="w-2/6 px-2 py-1 text-left">
+                            Description</th>
+                        <th style="background: {{ $document->accentColor }}" class="px-2 py-1 text-center">Qty</th>
+                        <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Satuan
+                        </th>
+                        <th style="background: {{ $document->accentColor }}" class="w-1/6 px-2 py-1 text-center">Unit
+                            Price</th>
+                        <th style="background: {{ $document->accentColor }}" class="w-3/6 px-2 py-1 text-center">Amount
+                        </th>
+                    </tr>
+
+                    <!-- ROW PROJECT -->
+                    <tr>
+                        <td colspan="6">
                             @isset($document->project)
-                                <div>
+                                <div class="py-1 pl-2 font-semibold text-left">
                                     {{ $document->project }}
-                                    @if ($document?->detail?->project?->description)
-                                        <div class="mt-0.5 text-[10px] text-gray-600 leading-snug">
-                                            {{ $document?->detail?->project?->description }}
-                                        </div>
-                                    @endif
+                                </div>
+                                <div class="py-1 pl-2 text-xs text-left">
+                                    {{ $document?->detail?->project?->description }}
                                 </div>
                             @endisset
                         </td>
-                        <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                            {{ formatMoneyRoundWhole($document->subtotal) }}
-                        </td>
                     </tr>
-                @else
-                    {{-- Mode: Show Offering Items - Tampilkan semua offering items --}}
+                    {{-- akhir --}}
                     @foreach ($document->lineItems as $index => $item)
                         <tr>
-                            @if ($index === 0)
-                                <td class="px-2 py-1 text-center border border-black align-top"
-                                    rowspan="{{ count($document->lineItems) + 1 }}">
-                                    {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
-                                </td>
-                                <td class="py-1 pl-2 font-semibold text-left border border-black" colspan="2">
-                                    @isset($document->project)
-                                        <div>
-                                            {{ $document->project }}
-                                            @if ($document?->detail?->project?->description)
-                                                <div class="mt-0.5 text-[10px] text-gray-600 leading-snug">
-                                                    {{ $document?->detail?->project?->description }}
-                                                </div>
-                                            @endif
-                                        </div>
-                                    @endisset
-                                </td>
+                            <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                                {{ $index + 1 }}.
+                            </td>
+                            <td class="py-1 pl-2 text-left border border-black break-words">
+                                {{ $item->name }}
+                            </td>
+                            <td class="py-1 text-center border border-black whitespace-nowrap">
+                                {{ $item->quantity }}
+                            </td>
+                            <td class="py-1 text-center border border-black whitespace-nowrap">
+                                {{ $item->unit }}
+                            </td>
+                            <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                                {{ formatMoneyCeiling($item->unitPrice) }}
+                            </td>
+                            <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
+                                {{ formatMoneyCeiling($item->subtotal) }}
+                            </td>
+                        </tr>
+                    @endforeach
+
+                    <!-- Jumlah -->
+                    @if ($document->subtotal)
+                        <tr>
+                            <td colspan="5" class="px-2 text-right border-t border-black">Jumlah</td>
+                            <td class="px-2 text-right border-t border-black">
+                                {{ formatMoneyCeiling($document->subtotal) }}
+                            </td>
                         </tr>
                     @endif
-                    <td class="py-1 pl-2 text-left border border-black">
-                        {{ $item->name }}
-                        @if ($item->description)
-                            <div class="text-[10px] text-gray-600 leading-snug break-words ">
-                                {{ $item->description }}
-                            </div>
-                        @endif
-                    </td>
-                    <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
-                        {{ formatMoneyRoundWhole($item->subtotal) }}
-                    </td>
-                    @endforeach
-                @endif
 
+                    <!-- Profit -->
+                    @if ($document->profit)
+                        <tr>
+                            <td colspan="5" class="px-2 text-right">Profit {{ $document->profitPercentage }}%</td>
+                            <td class="px-2 text-right">
+                                {{ formatMoneyCeiling($document->profit) }}
+                            </td>
+                        </tr>
+                    @endif
 
-                <!-- Profit -->
-                <tr>
-                    <td colspan="2" class="px-2 text-right border-t border-black">Profit {{ $document->profitPercentage }}%</td>
-                    <td class="px-2 text-right border-t border-black">
-                        {{ formatMoneyRoundWhole($document->profit) }}
-                    </td>
-                </tr>
+                    @if ($document->discount)
+                    <!-- Discount -->
+                    <tr>
+                        <td colspan="5" class="px-2 text-right">Discount</td>
+                        <td class="px-2 text-right">
+                            {{ formatMoneyCeiling($document->discount) }}
+                        </td>
+                    </tr>
+                    @endif
 
-                <!-- Jumlah -->
-                <tr>
-                    <td colspan="2" class="px-2 text-right border-t border-black">Jumlah</td>
-                    <td class="px-2 text-right border-t border-black">
-                        {{
-                            formatMoneyRoundWhole(
-                                rupiahToNumber($document->subtotal)
-                                + rupiahToNumber($document->profit)
-                            )
-                        }}
-                    </td>
-                </tr>
-
-                @if ($document->discount)
-                <!-- Discount -->
-                <tr>
-                    <td colspan="2" class="px-2 text-right">Discount</td>
-                    <td class="px-2 text-right">
-                        {{ formatMoneyCeiling($document->discount) }}
-                    </td>
-                </tr>
-                @endif
-
-                <!-- PPN -->
-                <tr>
-                    <td colspan="2" class="px-2 text-right">PPN 11%</td>
-                    <td class="px-2 text-right">
-                        {{ formatMoneyRoundWhole($document->tax) }}
-                    </td>
-                </tr>
-
-                <!-- Total -->
-                <tr>
-                    <td colspan="2" class="px-2 font-semibold text-right">Total</td>
-                    <td class="px-2 font-semibold text-right">
-                        {{ formatMoneyRoundWhole($document->total) }}
-                    </td>
-                </tr>
-
-                <!-- Terbilang -->
-                <tr>
-                    <td colspan="3" class="px-2 py-1 text-xs border border-black">
-                        <strong>Terbilang:</strong>
-                        <em>{{ $document->terbilang }}</em>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+                    <!-- Total -->
+                    <tr>
+                        <td colspan="5" class="px-2 font-semibold text-right">Total</td>
+                        <td class="px-2 font-semibold text-right">
+                            {{ formatMoneyCeiling($document->total) }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
-    </div>
+
 
     {{-- Footer Notes --}}
-    <div class="mt-1 text-xs">
+    <div class="mt-2 text-xs footer">
         @if ($document->terms)
             <div class="leading-relaxed">Terms and Condition:</div>
             <div class="prose prose-sm max-w-none text-xs">
@@ -256,32 +195,36 @@
         @endif
 
         @if ($document->footer)
-            <div class="mb-4 text-xs italic">
+            <div class="mb-4 text-xs" style="font-style: italic">
                 {{ $document->footer }}
             </div>
         @endif
+
+
+
     </div>
 
-        {{-- Section Bank Info & Signature sejajar kanan kiri --}}
-        <div class="flex justify-between mt-6 text-xs">
-            {{-- Bank Info --}}
-            <div class="w-1/2">
-                <div class="leading-relaxed">Pembayaran harap dilakukan melalui:</div>
-                <div class="font-semibold mt-1">
-                    {{ $document->bankName }}<br>
-                    A/n. {{ $document->accountName }}<br>
-                    ACCOUNT NO. {{ $document->accountNumber }}
-                </div>
-            </div>
-
-            {{-- Signature --}}
-            <div class="w-2/2 text-left">
-                {{ $document->accountName }}<br>
-                Jakarta, {{ \Carbon\Carbon::parse($document->date)->format('d F Y') }}<br><br><br>
-                <div class="mt-20 font-semibold">{{ $document->beneficiaryName }}</div>
-                <div>{{ $document->beneficiaryTitle }}</div>
+    {{-- Signature --}}
+    <div class="flex justify-between text-xs mt-6">
+        {{-- Left side (Pihak Penerima) --}}
+        <div class="text-center w-1/2">
+            <p>{{ $document->client?->name }}</p>
+            <div class="mt-20">
+                <p>(.................................................)</p>
             </div>
         </div>
+
+        {{-- Right side (Pihak Pengirim) --}}
+        <div class="text-center w-1/2">
+            <p>{{ $document->company->name }}</p>
+            <div class="mt-2">
+                <div class="h-16"></div>
+            </div>
+            <p class="mt-2 font-bold">{{ $document->beneficiaryName }}</p>
+            <p>{{ $document->beneficiaryTitle }}</p>
+        </div>
+    </div>
+
 
 </div>
 
@@ -293,20 +236,26 @@
         background: white;
         margin: 0 auto;
         padding: 1cm 1cm 3cm 1cm;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         display: flex;
         flex-direction: column;
+
     }
+
     @media print {
         @page {
             size: A4;
             margin: 0;
+            /* text-align:left
+             INI TAMBAHAN  */
         }
+
         body {
             margin: 0;
             background: white;
             -webkit-print-color-adjust: exact;
         }
+
         .invoice-container {
             width: 100%;
             height: 100vh;
@@ -328,6 +277,7 @@
     .line-items td {
         padding: 8px;
         border: 1px solid #000;
+
     }
 
     .line-items th {
@@ -372,7 +322,12 @@
         font-style: italic;
     }
 
-    .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+    .prose h1,
+    .prose h2,
+    .prose h3,
+    .prose h4,
+    .prose h5,
+    .prose h6 {
         font-weight: bold;
         margin-top: 12px;
         margin-bottom: 8px;
