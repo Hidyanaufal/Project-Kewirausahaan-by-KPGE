@@ -3,15 +3,29 @@
 namespace App\Filament\Exports\Accounting;
 
 use App\Models\Accounting\JournalEntry;
+use App\Utilities\Currency\CurrencyAccessor;
+use App\Utilities\Currency\CurrencyConverter;
 use Filament\Actions\Exports\ExportColumn;
 use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
-use App\Utilities\Currency\CurrencyAccessor;
-use App\Utilities\Currency\CurrencyConverter;
+use Illuminate\Database\Eloquent\Builder;
 
 class JournalEntryExporter extends Exporter
 {
     protected static ?string $model = JournalEntry::class;
+
+    public static function modifyQuery(Builder $query): Builder
+    {
+        $query = parent::modifyQuery($query);
+
+        return $query->where(function (Builder $q): void {
+            $q->whereNull('journal_entries.description')
+                ->orWhere(function (Builder $q2): void {
+                    $q2->where('journal_entries.description', '!=', 'Auto Import')
+                        ->where('journal_entries.description', 'not like', 'Saldo Awal FY-%');
+                });
+        });
+    }
 
     public static function getColumns(): array
     {
@@ -72,4 +86,3 @@ class JournalEntryExporter extends Exporter
         return $body;
     }
 }
-
