@@ -74,11 +74,11 @@ class VendorResource extends Resource
                                     ->maxLength(10)
                                     ->visible(static fn(Forms\Get $get) => ContractorType::parse($get('contractor_type')) === ContractorType::Business)
                                     ->maxLength(255),
-                                Forms\Components\TextInput::make('account_number')
-                                    ->maxLength(255),
+                                
                                 Forms\Components\TextInput::make('website')
                                     ->maxLength(255),
                                 Forms\Components\Textarea::make('notes')
+                                    ->label('Nomor Rekening / Nama Bank')
                                     ->columnSpanFull(),
                             ]),
                         CustomSection::make('Primary Contact')

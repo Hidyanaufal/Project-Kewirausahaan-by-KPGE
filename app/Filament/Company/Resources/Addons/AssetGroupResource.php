@@ -55,7 +55,7 @@ class AssetGroupResource extends Resource
                     ->helperText('Method to apply by default (can be overridden at the asset level).'),
 
                 CreateAccountSelect::make('asset_account_id')
-                    ->label('Asset Account')
+                    ->label('Depreciation Expense Account')
                     ->required()
                     ->validationMessages([
                         'required' => 'The asset account is required for this asset group.',
@@ -93,7 +93,7 @@ class AssetGroupResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('assetAccount.name')
-                    ->label('Asset Account')
+                    ->label('Depreciation Expense Account')
                     ->description(fn(AssetGroup $model) => $model?->assetAccount?->code),
 
                 Tables\Columns\TextColumn::make('contraAsset.name')

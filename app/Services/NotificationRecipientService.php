@@ -43,6 +43,13 @@ class NotificationRecipientService
         $userIds = $userIds->merge($superAdminIds)->unique()->filter();
 
         if ($userIds->isEmpty()) {
+            $ownerId = Company::query()->whereKey($companyId)->value('user_id');
+            if ($ownerId) {
+                $userIds = collect([$ownerId]);
+            }
+        }
+
+        if ($userIds->isEmpty()) {
             return collect();
         }
 

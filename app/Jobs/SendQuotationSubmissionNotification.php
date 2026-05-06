@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Mail\QuotationSubmissionNotification;
 use App\Models\Accounting\Estimate;
+use App\Models\User;
 use App\Services\NotificationRecipientService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -27,11 +28,18 @@ class SendQuotationSubmissionNotification implements ShouldQueue
             return;
         }
 
+        $requestor = null;
+        if ($estimate->created_by) {
+            $requestor = User::find($estimate->created_by);
+        } elseif ($estimate->updated_by) {
+            $requestor = User::find($estimate->updated_by);
+        }
+
         $admins = $recipientService->getAdminUsersFor($estimate->company_id);
 
         foreach ($admins as $admin) {
             if ($admin->email) {
-                Mail::to($admin->email)->send(new QuotationSubmissionNotification($estimate));
+                Mail::to($admin->email)->send(new QuotationSubmissionNotification($estimate, $requestor));
             }
         }
     }

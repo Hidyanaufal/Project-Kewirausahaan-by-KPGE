@@ -5,6 +5,8 @@ namespace App\Models\Addons;
 use App\Concerns\CompanyOwned;
 use App\Concerns\HasAttacments;
 use App\Enums\Addons\ProjectStatus;
+use App\Enums\Accounting\BillStatus;
+use App\Enums\Accounting\InvoiceStatus;
 use App\Models\Accounting\Bill;
 use App\Models\Accounting\Estimate;
 use App\Models\Accounting\Invoice;
@@ -112,6 +114,68 @@ class Project extends Model
     public function bills(): HasMany
     {
         return $this->hasMany(Bill::class);
+    }
+
+    public function approvedBills(): HasMany
+    {
+        return $this->bills()
+            ->whereIn('status', [
+                BillStatus::Open,
+                BillStatus::Partial,
+                BillStatus::Overdue,
+                BillStatus::Paid,
+            ]);
+    }
+
+    public function getTotalInvoiceWithoutPpnAttribute(): int
+    {
+        $key = 'approved_invoice_total_without_ppn_sum';
+        if (array_key_exists($key, $this->attributes)) {
+            $raw = $this->attributes[$key];
+            // Jangan pakai agregat SQL bila nilainya null/kosong: itu sering berarti kolom
+            // subquery tidak ikut ter-hydrate (mis. export queue), bukan total 0.
+            if ($raw !== null && $raw !== '') {
+                return (int) $raw;
+            }
+        }
+
+        if (array_key_exists('total_invoice_without_ppn', $this->financialAggregateMemo)) {
+            return $this->financialAggregateMemo['total_invoice_without_ppn'];
+        }
+
+        $value = (int) $this->approvedInvoices()
+            ->selectRaw('COALESCE(SUM(subtotal + profit_total - COALESCE(discount_total, 0)), 0) as aggregate')
+            ->value('aggregate');
+
+        $this->financialAggregateMemo['total_invoice_without_ppn'] = $value;
+
+        return $value;
+    }
+
+    public function getTotalBiayaAttribute(): int
+    {
+        $key = 'approved_bill_total_sum';
+        if (array_key_exists($key, $this->attributes)) {
+            $raw = $this->attributes[$key];
+            if ($raw !== null && $raw !== '') {
+                return (int) $raw;
+            }
+        }
+
+        if (array_key_exists('total_biaya', $this->financialAggregateMemo)) {
+            return $this->financialAggregateMemo['total_biaya'];
+        }
+
+        $value = (int) $this->approvedBills()->sum('total');
+
+        $this->financialAggregateMemo['total_biaya'] = $value;
+
+        return $value;
+    }
+
+    public function getNetEarningAttribute(): int
+    {
+        return (int) ($this->total_invoice_without_ppn - $this->total_biaya);
     }
 
     public static function generateProjectNumber(int $projectTypeId): string

@@ -75,7 +75,13 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
 
     protected function buildReport(array $columns): ReportDTO
     {
-        return $this->reportService->buildCashFlowStatementReport($this->getFormattedStartDate(), $this->getFormattedEndDate(), $columns);
+        return $this->reportService->buildCashFlowStatementReport(
+            $this->getFormattedStartDate(),
+            $this->getFormattedEndDate(),
+            $columns,
+            projectId: null,
+            companyId: $this->company->id
+        );
     }
 
     protected function getTransformer(ReportDTO $reportDTO): ExportableReport

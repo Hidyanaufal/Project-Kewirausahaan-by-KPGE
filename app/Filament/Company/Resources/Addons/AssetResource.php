@@ -3,6 +3,7 @@
 namespace App\Filament\Company\Resources\Addons;
 
 use App\Actions\Addons\GenerateYearlyForAsset;
+use App\Actions\Addons\PostInitialAssetRecognition;
 use App\Concerns\HasPermissionCheck;
 use App\Enums\Addons\AssetStatus;
 use App\Enums\Addons\DepreciationMethod;
@@ -111,6 +112,31 @@ class AssetResource extends Resource
                     ->options(collect(AssetStatus::cases())->mapWithKeys(fn($s) => [$s->value => method_exists($s, 'label') ? $s->label() : ucfirst($s->value)])->toArray()),
             ])
             ->actions([
+                // Tables\Actions\Action::make('postInitialRecognition')
+                //     ->label('Post initial recognition')
+                //     ->icon('heroicon-o-document-plus')
+                //     ->color('gray')
+                //     ->requiresConfirmation()
+                //     ->visible(fn (Asset $record): bool => (bool) ($record->group?->assetAccount))
+                //     ->action(function (Asset $record): void {
+                //         $result = PostInitialAssetRecognition::run(asset: $record);
+
+                //         if ($result['posted']) {
+                //             Notification::make()
+                //                 ->success()
+                //                 ->title($result['message'])
+                //                 ->send();
+
+                //             return;
+                //         }
+
+                //         Notification::make()
+                //             ->warning()
+                //             ->title('Not posted')
+                //             ->body($result['message'])
+                //             ->send();
+                //     }),
+
                 Tables\Actions\EditAction::make()
                     ->slideOver()
                     ->modalWidth(\Filament\Support\Enums\MaxWidth::ThreeExtraLarge),

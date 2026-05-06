@@ -5,6 +5,8 @@ namespace App\Filament\Company\Resources\Addons;
 use App\Concerns\HasOptions;
 use App\Concerns\HasPermissionCheck;
 use App\Enums\Addons\ProjectStatus;
+use App\Enums\Accounting\BillStatus;
+use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Company\Resources\Addons\ProjectResource\Pages;
 use App\Filament\Exports\Addons\ProjectExporter;
 use App\Models\Addons\Project;
@@ -18,6 +20,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Rmsramos\Activitylog\Actions\ActivityLogTimelineTableAction;
 
 class ProjectResource extends Resource
@@ -151,6 +154,25 @@ class ProjectResource extends Resource
     {
         return $table
             ->defaultSort('id', 'desc')
+            ->modifyQueryUsing(function (Builder $query) {
+                // Subquery Total Invoice — exclude cancelled
+                $invoiceSubquery = \App\Models\Accounting\Invoice::query()
+                    ->selectRaw('COALESCE(SUM(subtotal + profit_total - COALESCE(discount_total, 0)), 0)')
+                    ->whereColumn('invoices.project_id', 'projects.id')
+                    ->whereNotIn('status', ['cancelled']);
+
+                // Subquery Total Biaya (Bill) — exclude cancelled
+                $billSubquery = \App\Models\Accounting\Bill::query()
+                    ->selectRaw('COALESCE(SUM(total), 0)')
+                    ->whereColumn('bills.project_id', 'projects.id')
+                    ->whereNotIn('status', ['cancelled']);
+
+                $query
+                    ->addSelect([
+                        'approved_invoice_total_without_ppn_sum' => $invoiceSubquery,
+                        'approved_bill_total_sum' => $billSubquery,
+                    ]);
+            })
             ->columns([
                 Tables\Columns\TextColumn::make('number')
                     ->sortable()
@@ -202,6 +224,28 @@ class ProjectResource extends Resource
                     ->label('End Date')
                     ->date()
                     ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('approved_invoice_total_without_ppn_sum')
+                    ->label('Total Invoice (Tanpa PPN)')
+                    ->money('idr')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('approved_bill_total_sum')
+                    ->label('Total Biaya')
+                    ->money('idr')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('net_earning')
+                    ->label('Net Earning')
+                    ->money('idr')
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        return $query->orderByRaw(
+                            '(COALESCE(approved_invoice_total_without_ppn_sum, 0) - COALESCE(approved_bill_total_sum, 0)) ' . $direction
+                        );
+                    })
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([

@@ -11,6 +11,7 @@ use App\Filament\Company\Pages\Concerns\HasReportTabs;
 use App\Filament\Forms\Components\DateRangeSelect;
 use App\Helpers\AuthHelper;
 use App\Models\Company;
+use App\Services\AccountService;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
@@ -31,10 +32,13 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
 
     protected ExportService $exportService;
 
-    public function boot(ReportService $reportService, ExportService $exportService): void
+    protected AccountService $accountService;
+
+    public function boot(ReportService $reportService, ExportService $exportService, AccountService $accountService): void
     {
         $this->reportService = $reportService;
         $this->exportService = $exportService;
+        $this->accountService = $accountService;
     }
 
     public function getTable(): array
@@ -101,6 +105,7 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             AccountType::NonCurrentLiability,
             AccountType::ContraLiability,
             AccountType::Equity,
+            AccountType::ContraEquity, // ← yang benar cuma ini
         ];
     }
 
@@ -109,14 +114,62 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
         string $format = 'pdf',
     ): array {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+        $companyId = $company->id;
 
+        $asOfDate = $this->getFormattedAsOfDate();
+        $startDate = $this->reportService->getEarliestTransactionDate();
+
+        $accountsWithBalance = $this->accountService->getAccountBalances(
+            $startDate,
+            $asOfDate,
+            [],
+            null,
+            $companyId
+        )
+            ->whereIn('category', [
+                AccountCategory::Asset,
+                AccountCategory::Liability,
+                AccountCategory::Equity,
+                AccountCategory::Revenue,  // ← tambah
+                AccountCategory::Expense,  // ← tambah
+            ])
+                ->get();
+
+        $balanceMap = [];
+        foreach ($accountsWithBalance as $account) {
+            $accountBalances = $this->reportService->calculateAccountBalances($account);
+            $endingBalance = $accountBalances['ending_balance'] ?? $accountBalances['net_movement'] ?? 0;
+            $balanceMap[$account->id] = $endingBalance;
+        }
+
+        // Hitung Net Income (Revenue - Expense) untuk Retained Earnings
+        $netIncome = 0;
+        foreach ($accountsWithBalance as $account) {
+            if ($account->category === AccountCategory::Revenue) {
+                $netIncome += $balanceMap[$account->id] ?? 0;
+            } elseif ($account->category === AccountCategory::Expense) {
+                $netIncome -= $balanceMap[$account->id] ?? 0;
+            }
+        }
         $now = Carbon::now()->format('Y-m-d_H-i-s');
+        $startFormatted = Carbon::parse($this->getFilterState('asOfDate'))->format('d M Y');
 
-        $startFormatted = now()->format('d M Y');
-
-        $toNumber = fn($v) => is_null($v)
-            ? 0
-            : (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $v));
+        // Nilai balance siap export: numerik/Money dipakai langsung (termasuk tanda negatif); string di-parse format Indonesia
+        $toNumber = function ($v) {
+            if (is_null($v)) {
+                return 0.0;
+            }
+            if (is_int($v) || is_float($v)) {
+                return (float) $v;
+            }
+            if ($v instanceof \App\ValueObjects\Money) {
+                return (float) $v->getValue();
+            }
+            $str = (string) $v;
+            $negative = str_starts_with($str, '-');
+            $parsed = (float) str_replace(',', '.', preg_replace('/[^\d,]/', '', $str));
+            return $negative ? -abs($parsed) : $parsed;
+        };
 
         $data = [
             'filename'      => "{$company->name} Balance Sheet {$now}.pdf",
@@ -129,13 +182,13 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
 
         $rows = collect();
 
-        $accounts = \App\Models\Accounting\Account::where('company_id', $company->id)
+        $accounts = \App\Models\Accounting\Account::where('company_id', $companyId)
             ->whereIn('category', [
                 AccountCategory::Asset,
                 AccountCategory::Liability,
                 AccountCategory::Equity,
             ])
-            ->with(['children'])
+            ->with(['children.children.children'])
             ->orderBy('category')
             ->orderBy('type')
             ->orderBy('code')
@@ -143,12 +196,12 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             ->groupBy(['category', 'type']);
 
         // Recursive walker untuk hierarki akun
-        $appendAccountRows = function ($accounts, $level = 1) use (&$appendAccountRows, &$rows, $toNumber) {
+        $appendAccountRows = function ($accounts, $level = 1) use (&$appendAccountRows, &$rows, $toNumber, $balanceMap) {
             $padding = $level * 15;
 
             foreach ($accounts as $account) {
+                $balance = $balanceMap[$account->id] ?? 0;
                 // Skip account jika balance = 0
-                $balance = $account->ending_balance->getValue();
                 if ($balance == 0) {
                     // Tetap process children jika ada (mungkin ada child dengan balance != 0)
                     if ($account->children->isNotEmpty()) {
@@ -160,7 +213,7 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 $rows->push([
                     'data' => [
                         $account->code . ' ' . $account->name,
-                        $toNumber($account->ending_balance),
+                        $toNumber($balance / 100),
                     ],
                     'style' => [
                         'padding-left' => "{$padding}px",
@@ -171,6 +224,11 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                     $appendAccountRows($account->children, $level + 1);
                 }
             }
+        };
+
+        $subtreeBalance = function ($account) use (&$subtreeBalance, $balanceMap): float {
+            $balance = $balanceMap[$account->id] ?? 0;
+            return $balance + $account->children->sum(fn($a) => $subtreeBalance($a));
         };
 
         // Loop kategori dengan urutan eksplisit: ASSET → LIABILITY → EQUITY
@@ -212,37 +270,73 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 ]);
 
                 $parentAccounts = $accountsByType->whereNull('parent_id');
-                $appendAccountRows($parentAccounts, 2);
+                foreach ($parentAccounts as $parent) {
+                    $appendAccountRows(collect([$parent]), 2);
+                    $groupTotal = $subtreeBalance($parent);
+                    if ($groupTotal != 0) {
+                        $rows->push([
+                            'data' => [
+                                'Total ' . $parent->name,
+                                $toNumber($groupTotal / 100),
+                            ],
+                            'style' => [
+                                'font-weight'   => 'bold',
+                                'padding-left'  => '30px',
+                                'color'         => 'rgb(6, 6, 174)',
+                            ],
+                        ]);
+                    }
+                }
 
-                // subtotal per tipe
-                $typeTotal = $accountsByType->sum(fn($a) => $a->ending_balance->getValue());
+                // subtotal per tipe (hanya tampilkan jika bukan 0)
+                // subtotal per tipe (hanya tampilkan jika bukan 0)
+                $typeTotal = $parentAccounts->sum(fn($a) => $subtreeBalance($a));
+                if ($typeTotal != 0) {
+                    $rows->push([
+                        'data' => [
+                            "Total " . str_replace('_', ' ', ucwords(strtolower($type))),
+                            $toNumber($typeTotal / 100),
+                        ],
+                        'style' => [
+                            'font-weight'   => 'bold',
+                            'padding-left'  => '10px',
+                            'color'         => 'rgb(6, 6, 174)',
+                        ],
+                    ]);
+                }
+            }
+
+            // subtotal per kategori (hanya tampilkan jika bukan 0)
+            $categoryTotal = collect($types)
+                ->flatten()
+                ->filter(fn($a) => is_null($a->parent_id))
+                ->sum(fn($a) => $subtreeBalance($a));
+
+            // Inject Retained Earnings sebelum Total Equity
+            if ($category === AccountCategory::Equity && $netIncome != 0) {
                 $rows->push([
                     'data' => [
-                        "Total " . str_replace('_', ' ', ucwords(strtolower($type))),
-                        $toNumber($typeTotal),
+                        'Retained Earnings',
+                        $toNumber($netIncome / 100),
                     ],
                     'style' => [
-                        'font-weight'   => 'bold',
-                        'padding-left'  => '10px',
-                        'color'         => 'rgb(6, 6, 174)',
+                        'padding-left' => '30px',
+                    ],
+                ]);
+                $categoryTotal += $netIncome; // ikutkan ke total equity
+            }
+
+            if ($categoryTotal != 0) {
+                $rows->push([
+                    'data' => [
+                        "Total " . strtoupper($categoryValue),
+                        $toNumber($categoryTotal / 100),
+                    ],
+                    'style' => [
+                        'font-weight' => 'bold',
                     ],
                 ]);
             }
-
-            // subtotal per kategori
-            $categoryTotal = collect($types)
-                ->flatten()
-                ->sum(fn($a) => $a->ending_balance->getValue());
-
-            $rows->push([
-                'data' => [
-                    "Total " . strtoupper($categoryValue),
-                    $toNumber($categoryTotal),
-                ],
-                'style' => [
-                    'font-weight' => 'bold',
-                ],
-            ]);
         }
 
         $data['rows'] = $rows->toArray();

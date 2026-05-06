@@ -104,7 +104,13 @@ class Bill extends Document
             $record->actual_total = $record->total - ($record->pph23 ?? 0);
 
             if ($record->isDirty('status') && $record->status === BillStatus::Paid && $record->pph23) {
-                $accountPPh23 = Account::getAccountsPPh23($record->company_id);
+                // Bill: PPh23 saat pelunasan dicatat sebagai Hutang PPh23 (liability).
+                // Fallback ke perilaku lama bila default belum dikonfigurasi.
+                try {
+                    $accountPPh23 = Account::getAccountsPPh23Payable($record->company_id);
+                } catch (\Throwable) {
+                    $accountPPh23 = Account::getAccountsPPh23($record->company_id);
+                }
                 $accountPayable = Account::getAccountsPayableAccount($record->company_id);
 
                 $latestTransaction = Transaction::query()

@@ -136,7 +136,7 @@
                         <tr>
                             <td colspan="5" class="px-2 text-right">Profit {{ $document->profitPercentage }}%</td>
                             <td class="px-2 text-right">
-                                {{ formatMoneyRoundWhole($document->profit) }}
+                                {{ formatMoneyCeiling($document->profit) }}
                             </td>
                         </tr>
                     @endif
@@ -146,7 +146,7 @@
                     <tr>
                         <td colspan="5" class="px-2 text-right">Discount</td>
                         <td class="px-2 text-right">
-                            {{ formatMoneyRoundWhole($document->discount) }}
+                            {{ formatMoneyCeiling($document->discount) }}
                         </td>
                     </tr>
                     @endif

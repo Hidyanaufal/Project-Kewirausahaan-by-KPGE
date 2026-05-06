@@ -15,6 +15,7 @@ use App\Utilities\Currency\CurrencyAccessor;
 use App\ValueObjects\Money;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\DB;
 
@@ -25,12 +26,8 @@ class AccountService
     ) {}
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getDebitBalance(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
@@ -40,12 +37,8 @@ class AccountService
     }
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getCreditBalance(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
@@ -55,12 +48,8 @@ class AccountService
     }
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getNetMovement(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
@@ -76,12 +65,8 @@ class AccountService
     }
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param bool $override
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money|null
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getStartingBalance(Account $account, string $startDate, bool $override = false, $projectId = null, $companyId = null): ?Money
     {
@@ -95,12 +80,8 @@ class AccountService
     }
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money|null
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getEndingBalance(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): ?Money
     {
@@ -131,12 +112,8 @@ class AccountService
     }
 
     /**
-     * @param Account $account
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return array
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getBalances(Account $account, string $startDate, string $endDate, $projectId = null, $companyId = null): array
     {
@@ -161,24 +138,31 @@ class AccountService
         ];
 
         // Return balances, filtering out any null values
-        return array_filter($balances, static fn($value) => $value !== null);
+        return array_filter($balances, static fn ($value) => $value !== null);
     }
 
     /**
      * Transaction details subquery for eager loading.
      *
-     * Added optional projectId & companyId filters to restrict transactions if provided.
+     * Company / project / project-type scoping matches {@see getAccountBalances} (invoice, bill, or transaction paths).
      *
-     * @param string $startDate
-     * @param string $endDate
-     * @param string|null $entityId
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Closure
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
+     * @param  int|null  $projectTypeId
      */
-    public function getTransactionDetailsSubquery(string $startDate, string $endDate, ?string $entityId = null, $projectId = null, $companyId = null): Closure
-    {
-        return static function ($query) use ($startDate, $endDate, $entityId, $projectId, $companyId) {
+    public function getTransactionDetailsSubquery(
+        string $startDate,
+        string $endDate,
+        ?string $entityId = null,
+        $projectId = null,
+        $companyId = null,
+        $projectTypeId = null,
+    ): Closure {
+        $projectId = $projectId !== null && $projectId !== '' ? (int) $projectId : null;
+        $companyId = $companyId !== null && $companyId !== '' ? (int) $companyId : null;
+        $projectTypeId = $projectTypeId !== null && $projectTypeId !== '' ? (int) $projectTypeId : null;
+
+        return function ($query) use ($startDate, $endDate, $entityId, $projectId, $companyId, $projectTypeId) {
             $query->select(
                 'journal_entries.id',
                 'journal_entries.account_id',
@@ -208,25 +192,83 @@ class AccountService
                 }
             }
 
-            if ($projectId !== null) {
-                $query->where('transactions.project_id', $projectId);
-            }
-
-            if ($companyId !== null) {
-                $query->where('transactions.company_id', $companyId);
-            }
+            $this->applyMultichannelScopeToJournalEntriesQuery($query, $projectId, $companyId, $projectTypeId);
         };
+    }
+
+    /**
+     * Same company / project / project-type semantics as {@see getAccountBalances}: use the same
+     * LEFT JOINs + WHERE OR as the balance query so the planner can reuse index-friendly paths
+     * (nested EXISTS per row was very slow on large journal tables).
+     *
+     * @param  Relation  $query  Eager-load callback receives HasMany, not Eloquent Builder.
+     */
+    private function applyMultichannelScopeToJournalEntriesQuery(
+        Relation $query,
+        ?int $projectId,
+        ?int $companyId,
+        ?int $projectTypeId,
+    ): void {
+        if ($projectId === null && $companyId === null && $projectTypeId === null) {
+            return;
+        }
+
+        $this->joinInvoicesBillsProjectsForMultichannelScope($query);
+        $this->applyMultichannelScopeAfterDocumentJoins($query, $projectId, $companyId, $projectTypeId);
+    }
+
+    /**
+     * Invoice / bill / project joins used with {@see applyMultichannelScopeAfterDocumentJoins}.
+     */
+    private function joinInvoicesBillsProjectsForMultichannelScope(Builder | Relation $query): void
+    {
+        $query
+            ->leftJoin('invoices', function ($join) {
+                $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Invoice::class);
+            })
+            ->leftJoin('bills', function ($join) {
+                $join->on('bills.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Bill::class);
+            })
+            ->leftJoin('projects', function ($join) {
+                $join->on('projects.id', '=', DB::raw('COALESCE(invoices.project_id, bills.project_id, transactions.project_id)'));
+            });
+    }
+
+    /**
+     * Restrict rows after invoices, bills, and projects are left-joined (see {@see getAccountBalances}).
+     */
+    private function applyMultichannelScopeAfterDocumentJoins(Builder | Relation $query, ?int $projectId, ?int $companyId, ?int $projectTypeId): void
+    {
+        if ($projectId !== null) {
+            $query->where(function (Builder $q) use ($projectId) {
+                $q->where('invoices.project_id', $projectId)
+                    ->orWhere('bills.project_id', $projectId)
+                    ->orWhere('transactions.project_id', $projectId);
+            });
+        }
+
+        if ($companyId !== null) {
+            $query->where(function (Builder $q) use ($companyId) {
+                $q->where('invoices.company_id', $companyId)
+                    ->orWhere('bills.company_id', $companyId)
+                    ->orWhere('transactions.company_id', $companyId);
+            });
+        }
+
+        if ($projectTypeId !== null) {
+            $query->where('projects.project_type_id', $projectTypeId);
+        }
     }
 
     /**
      * Main query for account balances.
      *
-     * @param string $startDate
-     * @param string $endDate
-     * @param array $accountIds
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Builder
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
+     * @param  int|null  $projectTypeId
+     * @param  int|string|null  $entityId  Payee filter: positive = Client id, negative = Vendor id
      */
     public function getAccountBalances(
         string $startDate,
@@ -235,6 +277,7 @@ class AccountService
         $projectId = null,
         $companyId = null,
         $projectTypeId = null,
+        $entityId = null,
     ): Builder {
         $accountIds = array_map('intval', $accountIds);
 
@@ -277,6 +320,9 @@ class AccountService
                 $join->on('transactions.id', '=', 'journal_entries.transaction_id')
                     ->where('transactions.posted_at', '<=', $endDate);
             })
+            // Keep balance queries consistent with Eloquent models that use SoftDeletes.
+            ->whereNull('journal_entries.deleted_at')
+            ->whereNull('transactions.deleted_at')
             ->groupBy([
                 'accounts.id',
                 'accounts.name',
@@ -296,7 +342,7 @@ class AccountService
             $query->where('accounts.company_id', $companyId);
         }
 
-        if (!empty($accountIds)) {
+        if (! empty($accountIds)) {
             $query->whereIn('accounts.id', $accountIds);
         }
 
@@ -304,40 +350,27 @@ class AccountService
             $query->where('accounts.company_id', $companyId);
         }
 
+        if ($entityId !== null) {
+            $entityId = (int) $entityId;
+            if ($entityId < 0) {
+                $query->where('transactions.payeeable_type', Vendor::class)
+                    ->where('transactions.payeeable_id', abs($entityId));
+            } else {
+                $query->where('transactions.payeeable_type', Client::class)
+                    ->where('transactions.payeeable_id', $entityId);
+            }
+        }
+
         // Join invoices & bills for filtering
         if ($projectId !== null || $companyId !== null || $projectTypeId !== null) {
-            $query
-                ->leftJoin('invoices', function ($join) {
-                    $join->on('invoices.id', '=', 'transactions.transactionable_id')
-                        ->where('transactions.transactionable_type', '=', Invoice::class);
-                })
-                ->leftJoin('bills', function ($join) {
-                    $join->on('bills.id', '=', 'transactions.transactionable_id')
-                        ->where('transactions.transactionable_type', '=', Bill::class);
-                })
-                ->leftJoin('projects', function ($join) {
-                    $join->on('projects.id', '=', DB::raw("COALESCE(invoices.project_id, bills.project_id, transactions.project_id)"));
-                });
+            $this->joinInvoicesBillsProjectsForMultichannelScope($query);
 
-            if ($projectId !== null) {
-                $query->where(function (Builder $q) use ($projectId) {
-                    $q->where('invoices.project_id', $projectId)
-                        ->orWhere('bills.project_id', $projectId)
-                        ->orWhere('transactions.project_id', $projectId);
-                });
-            }
-
-            if ($companyId !== null) {
-                $query->where(function (Builder $q) use ($companyId) {
-                    $q->where('invoices.company_id', $companyId)
-                        ->orWhere('bills.company_id', $companyId)
-                        ->orWhere('transactions.company_id', $companyId);
-                });
-            }
-
-            if ($projectTypeId !== null) {
-                $query->where('projects.project_type_id', $projectTypeId);
-            }
+            $this->applyMultichannelScopeAfterDocumentJoins(
+                $query,
+                $projectId !== null && $projectId !== '' ? (int) $projectId : null,
+                $companyId !== null && $companyId !== '' ? (int) $companyId : null,
+                $projectTypeId !== null && $projectTypeId !== '' ? (int) $projectTypeId : null,
+            );
         }
 
         $query->addBinding([$startDate, $startDate, $startDate, $startDate, $startDate, $endDate, $startDate, $endDate], 'select');
@@ -345,16 +378,11 @@ class AccountService
         return $query;
     }
 
-
     /**
      * Cash flow specific account balances (only accounts linked to bank accounts).
      *
-     * @param string $startDate
-     * @param string $endDate
-     * @param array $accountIds
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Builder
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getCashFlowAccountBalances(string $startDate, string $endDate, array $accountIds = [], $projectId = null, $companyId = null): Builder
     {
@@ -375,11 +403,8 @@ class AccountService
     /**
      * Total balance for all bank accounts (with optional project/company filters).
      *
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getTotalBalanceForAllBankAccounts(string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
@@ -453,10 +478,8 @@ class AccountService
     /**
      * Starting balance for all bank accounts (with optional filters).
      *
-     * @param string $startDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Money
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getStartingBalanceForAllBankAccounts(string $startDate, $projectId = null, $companyId = null): Money
     {
@@ -519,11 +542,8 @@ class AccountService
     /**
      * Bank account balances helper (uses getAccountBalances).
      *
-     * @param string $startDate
-     * @param string $endDate
-     * @param int|null $projectId
-     * @param int|null $companyId
-     * @return Builder|array
+     * @param  int|null  $projectId
+     * @param  int|null  $companyId
      */
     public function getBankAccountBalances(string $startDate, string $endDate, $projectId = null, $companyId = null): Builder | array
     {
@@ -545,7 +565,7 @@ class AccountService
         return $earliestDate ?? company_today()->toDateTimeString();
     }
 
-    public function getUnpaidClientInvoices(?string $asOfDate = null): Builder
+    public function getUnpaidClientInvoices(?string $asOfDate = null, $companyId = null): Builder
     {
         $asOfDate = $asOfDate ?? company_today()->toDateString();
         $driver = DB::getDriverName();
@@ -553,16 +573,19 @@ class AccountService
         switch ($driver) {
             case 'pgsql':
                 $datediff = '(?::date - invoices.due_date::date)';
+
                 break;
             case 'sqlite':
                 $datediff = 'JULIANDAY(?) - JULIANDAY(invoices.due_date)';
+
                 break;
             default:
                 $datediff = 'DATEDIFF(?, invoices.due_date)';
+
                 break;
         }
 
-        return Invoice::query()
+        $query = Invoice::query()
             ->select([
                 'invoices.id',
                 'invoices.client_id',
@@ -570,6 +593,8 @@ class AccountService
                 'invoices.date',
                 'invoices.due_date',
                 'invoices.total',
+                'invoices.actual_total',
+                'invoices.amount_paid',
                 'invoices.tax_total',
                 'invoices.amount_due',
                 'invoices.currency_code',
@@ -578,9 +603,15 @@ class AccountService
             ->addBinding([$asOfDate], 'select')
             ->unpaid()
             ->where('amount_due', '>', 0);
+
+        if ($companyId !== null) {
+            $query->where('invoices.company_id', $companyId);
+        }
+
+        return $query;
     }
 
-    public function getUnpaidVendorBills(?string $asOfDate = null): Builder
+    public function getUnpaidVendorBills(?string $asOfDate = null, $companyId = null): Builder
     {
         $asOfDate = $asOfDate ?? company_today()->toDateString();
         $driver = DB::getDriverName();
@@ -588,16 +619,19 @@ class AccountService
         switch ($driver) {
             case 'pgsql':
                 $datediff = '(?::date - bills.due_date::date)';
+
                 break;
             case 'sqlite':
                 $datediff = 'JULIANDAY(?) - JULIANDAY(bills.due_date)';
+
                 break;
             default:
                 $datediff = 'DATEDIFF(?, bills.due_date)';
+
                 break;
         }
 
-        return Bill::query()
+        $query = Bill::query()
             ->select([
                 'bills.id',
                 'bills.bill_number as code',
@@ -611,5 +645,11 @@ class AccountService
             ->addBinding([$asOfDate], 'select')
             ->unpaid()
             ->where('amount_due', '>', 0);
+
+        if ($companyId !== null) {
+            $query->where('bills.company_id', $companyId);
+        }
+
+        return $query;
     }
 }

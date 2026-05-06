@@ -79,7 +79,7 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
         // 🔹 Ambil dari report service khusus payable
         $data = $this->reportService->buildOutstandingReportBillLevel(
             $this->getFormattedAsOfDate(),
-            $this->getEntityType()
+            $this->company->id
         );
 
         $columns = array_filter($data['columns'], fn($col) => strtolower($col) !== 'bill');
@@ -160,7 +160,8 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
             $this->getFormattedAsOfDate(),
             $this->getEntityType(),
             $daysPerPeriod,
-            $numberOfPeriods
+            $numberOfPeriods,
+            $this->company->id
         );
 
         $columns = $dataDetail['columns'];
@@ -268,6 +269,24 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
                 ]);
             }
         }
+        $totalRowData = [];
+
+        foreach ($columns as $colKey) {
+            if ($colKey === 'entity_name') {
+                $totalRowData[] = 'Total';
+            } else {
+                $totalRowData[] = $overallTotal[$colKey] ?? 0;
+            }
+        }
+
+        $rows->push([
+            'data' => $totalRowData,
+            'style' => [
+                'font-weight' => 'bold',
+                'color' => 'rgb(150, 50, 50)',
+            ],
+        ]);
+
 
         return [
             'filename' => "{$company->name} Aging Payable Summary {$now}.pdf",

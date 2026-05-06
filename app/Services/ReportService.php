@@ -37,6 +37,11 @@ class ReportService
         protected AccountService $accountService,
     ) {}
 
+    public function getEarliestTransactionDate(): string
+    {
+        return $this->accountService->getEarliestTransactionDate();
+    }
+
     /**
      * @template T of BalanceFormattable
      *
@@ -66,7 +71,7 @@ class ReportService
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $columnNameKeys = array_map(fn(Column $column) => $column->getName(), $columns);
+        $columnNameKeys = array_map(fn (Column $column) => $column->getName(), $columns);
 
         $accountCategories = [];
         $reportTotalBalances = [];
@@ -176,6 +181,82 @@ class ReportService
         return new Money($retainedEarnings, CurrencyAccessor::getDefaultCurrency());
     }
 
+    /**
+     * Accounts with journal lines for the Account Transactions report (same query + eager load as {@see buildAccountTransactionsReport}).
+     *
+     * @param  array<int|string>  $accountIds
+     * @return \Illuminate\Database\Eloquent\Collection<int, Account>
+     */
+    private function loadAccountsForAccountTransactionReport(
+        string $startDate,
+        string $endDate,
+        array $accountIds,
+        ?string $entityId,
+        $projectId,
+        $companyId,
+    ) {
+        // Pass entityId so starting_balance / totals match journal lines when Payee filter is applied.
+        $query = $this->accountService->getAccountBalances($startDate, $endDate, $accountIds, $projectId, $companyId, null, $entityId)
+            ->orderByRaw('LENGTH(code), code');
+
+        return $query->with(['journalEntries' => $this->accountService->getTransactionDetailsSubquery($startDate, $endDate, $entityId, $projectId, $companyId)])->get();
+    }
+
+    /**
+     * Ending running balance (minor units) after walking journal lines the same way as the Account Transactions screen.
+     */
+    private function computeTransactionReportEndingBalanceMinor(Account $account): int
+    {
+        $currentBalance = $account->starting_balance;
+        foreach ($account->journalEntries as $journalEntry) {
+            $signedAmount = $journalEntry->signed_amount;
+            if ($account->category->isNormalDebitBalance()) {
+                $currentBalance += $signedAmount;
+            } else {
+                $currentBalance -= $signedAmount;
+            }
+        }
+
+        return (int) $currentBalance;
+    }
+
+    /**
+     * Per-account ending balance from the same walk as the Account Transactions UI (minor units, e.g. cents).
+     * Only accounts with at least one journal line in the filtered range appear in the map.
+     *
+     * @return array<int, int>
+     */
+    public function getAccountTransactionEndingBalancesMinor(
+        string $startDate,
+        string $endDate,
+        ?string $accountId = 'all',
+        ?string $entityId = 'all',
+        $projectId = null,
+        $companyId = null,
+    ): array {
+        $accountIds = $accountId !== 'all' ? [$accountId] : [];
+        $entityIdResolved = $entityId !== 'all' ? $entityId : null;
+
+        $accounts = $this->loadAccountsForAccountTransactionReport(
+            $startDate,
+            $endDate,
+            $accountIds,
+            $entityIdResolved,
+            $projectId,
+            $companyId,
+        );
+
+        $balances = [];
+        foreach ($accounts as $account) {
+            if ($account->journalEntries->isEmpty()) {
+                continue;
+            }
+            $balances[(int) $account->id] = $this->computeTransactionReportEndingBalanceMinor($account);
+        }
+
+        return $balances;
+    }
+
     public function buildAccountTransactionsReport(string $startDate, string $endDate, ?array $columns = null, ?string $accountId = 'all', ?string $entityId = 'all', $projectId = null, $companyId = null): ReportDTO
     {
         $columns ??= [];
@@ -185,10 +266,14 @@ class ReportService
 
         $entityId = $entityId !== 'all' ? $entityId : null;
 
-        $query = $this->accountService->getAccountBalances($startDate, $endDate, $accountIds, $projectId, $companyId)
-            ->orderByRaw('LENGTH(code), code');
-
-        $accounts = $query->with(['journalEntries' => $this->accountService->getTransactionDetailsSubquery($startDate, $endDate, $entityId, $projectId, $companyId)])->get();
+        $accounts = $this->loadAccountsForAccountTransactionReport(
+            $startDate,
+            $endDate,
+            $accountIds,
+            $entityId,
+            $projectId,
+            $companyId,
+        );
 
         $reportCategories = [];
 
@@ -286,7 +371,7 @@ class ReportService
         $isPostClosingTrialBalance = $trialBalanceType === 'postClosing';
 
         $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
-            ->when($isPostClosingTrialBalance, fn(Builder $query) => $query->whereNotIn('category', [AccountCategory::Revenue, AccountCategory::Expense]))
+            ->when($isPostClosingTrialBalance, fn (Builder $query) => $query->whereNotIn('category', [AccountCategory::Revenue, AccountCategory::Expense]))
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
@@ -597,7 +682,7 @@ class ReportService
 
     private function buildOperatingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [
                 AccountType::OperatingRevenue,
                 AccountType::UncategorizedRevenue,
@@ -612,7 +697,7 @@ class ReportService
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $adjustments = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $adjustments = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [
                 AccountType::ContraAsset,
                 AccountType::CurrentLiability,
@@ -626,12 +711,12 @@ class ReportService
 
     private function buildInvestingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [AccountType::NonCurrentAsset])
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $adjustments = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $adjustments = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [AccountType::NonOperatingRevenue])
             ->orderByRaw('LENGTH(code), code')
             ->get();
@@ -641,7 +726,7 @@ class ReportService
 
     private function buildFinancingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->where(function (Builder $query) {
                 $query->whereIn('accounts.type', [
                     AccountType::Equity,
@@ -671,10 +756,6 @@ class ReportService
                 $accountCategory = $entry->type->getCategory();
                 $accountBalances = $this->calculateAccountBalances($entry);
                 $netCashFlow = $accountBalances['net_movement'] ?? 0;
-
-                if ($entry->subtype->inverse_cash_flow) {
-                    $netCashFlow *= -1;
-                }
 
                 // Accumulate totals
                 $sectionTotal += $netCashFlow;
@@ -721,7 +802,7 @@ class ReportService
         $asOfDateCarbon = Carbon::parse($asOfDate);
         $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate());
 
-        $orderedCategories = array_filter(AccountCategory::getOrderedCategories(), fn(AccountCategory $category) => $category->isReal());
+        $orderedCategories = array_filter(AccountCategory::getOrderedCategories(), fn (AccountCategory $category) => $category->isReal());
 
         $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
             ->whereIn('category', $orderedCategories)
@@ -831,13 +912,14 @@ class ReportService
         DocumentEntityType $entityType,
         array $columns = [],
         int $daysPerPeriod = 30,
-        int $numberOfPeriods = 4
+        int $numberOfPeriods = 4,
+        $companyId = null
     ): ReportDTO {
         $asOfDateCarbon = Carbon::parse($asOfDate);
 
         $documents = $entityType === DocumentEntityType::Client
-            ? $this->accountService->getUnpaidClientInvoices($asOfDate)->with(['client:id,name'])->get()->groupBy('client_id')
-            : $this->accountService->getUnpaidVendorBills($asOfDate)->with(['vendor:id,name'])->get()->groupBy('vendor_id');
+            ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)->with(['client:id,name'])->get()->groupBy('client_id')
+            : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)->with(['vendor:id,name'])->get()->groupBy('vendor_id');
 
         $categories = [];
         $totalAging = [
@@ -853,7 +935,7 @@ class ReportService
         foreach ($documents as $entityId => $entityDocuments) {
             $aging = [
                 'current' => $entityDocuments
-                    ->filter(static fn($doc) => ($doc->days_overdue ?? 0) <= 0)
+                    ->filter(static fn ($doc) => ($doc->days_overdue ?? 0) <= 0)
                     ->sumMoneyInDefaultCurrency('amount_due'),
             ];
 
@@ -870,7 +952,7 @@ class ReportService
             }
 
             $aging['over_periods'] = $entityDocuments
-                ->filter(static fn($doc) => ($doc->days_overdue ?? 0) > ($numberOfPeriods * $daysPerPeriod))
+                ->filter(static fn ($doc) => ($doc->days_overdue ?? 0) > ($numberOfPeriods * $daysPerPeriod))
                 ->sumMoneyInDefaultCurrency('amount_due');
 
             $aging['total'] = array_sum($aging);
@@ -902,17 +984,18 @@ class ReportService
         string $asOfDate,
         DocumentEntityType $entityType,
         int $daysPerPeriod = 30,
-        int $numberOfPeriods = 4
+        int $numberOfPeriods = 4,
+        $companyId = null
     ): array {
         $asOfDateCarbon = Carbon::parse($asOfDate);
 
         $documents = $entityType === DocumentEntityType::Client
-            ? $this->accountService->getUnpaidClientInvoices($asOfDate)
-            ->with(['client:id,name'])
-            ->get()
-            : $this->accountService->getUnpaidVendorBills($asOfDate)
-            ->with(['vendor:id,name'])
-            ->get();
+            ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)
+                ->with(['client:id,name'])
+                ->get()
+            : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
+                ->with(['vendor:id,name'])
+                ->get();
 
         $agingColumns = ['not_yet_due' => 'Not Yet'];
 
@@ -922,7 +1005,7 @@ class ReportService
             $agingColumns["period_{$i}"] = "{$min}-{$max}";
         }
 
-        $agingColumns['over_periods'] = "> " . ($numberOfPeriods * $daysPerPeriod);
+        $agingColumns['over_periods'] = '> ' . ($numberOfPeriods * $daysPerPeriod);
 
         $rows = [];
 
@@ -937,6 +1020,7 @@ class ReportService
                     $max = $i * $daysPerPeriod;
                     if ($days > $min && $days <= $max) {
                         $bucket = "period_{$i}";
+
                         break;
                     }
                 }
@@ -971,12 +1055,13 @@ class ReportService
         string $asOfDate,
         DocumentEntityType $entityType,
         int $daysPerPeriod = 30,
-        int $numberOfPeriods = 4
+        int $numberOfPeriods = 4,
+        $companyId = null
     ): array {
         $asOfDateCarbon = Carbon::parse($asOfDate);
 
         // Ambil semua vendor bills yang belum dibayar sampai tanggal tertentu
-        $bills = $this->accountService->getUnpaidVendorBills($asOfDate)
+        $bills = $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
             ->with(['vendor:id,name'])
             ->get();
 
@@ -989,7 +1074,7 @@ class ReportService
             $agingColumns["period_{$i}"] = "{$min}-{$max}";
         }
 
-        $agingColumns['over_periods'] = "> " . ($numberOfPeriods * $daysPerPeriod);
+        $agingColumns['over_periods'] = '> ' . ($numberOfPeriods * $daysPerPeriod);
 
         $rows = [];
 
@@ -1005,6 +1090,7 @@ class ReportService
                     $max = $i * $daysPerPeriod;
                     if ($days > $min && $days <= $max) {
                         $bucket = "period_{$i}";
+
                         break;
                     }
                 }
@@ -1020,9 +1106,9 @@ class ReportService
             $rows[] = [
                 'vendor_name' => $vendor->name ?? '-',
                 'bill_number' => $bill->code ?? '-',
-                'bill_date'   => optional($bill->date)->format('d M Y'),
-                'total_base'  => $bill->amount_due,
-                'aging'       => $agingData,
+                'bill_date' => optional($bill->date)->format('d M Y'),
+                'total_base' => $bill->amount_due,
+                'aging' => $agingData,
             ];
         }
 
@@ -1039,16 +1125,17 @@ class ReportService
     public function buildOutstandingReportInvoiceLevel(
         string $asOfDate,
         DocumentEntityType $entityType,
+        $companyId = null
     ): array {
         $asOfDateCarbon = Carbon::parse($asOfDate);
 
         $documents = $entityType === DocumentEntityType::Client
-            ? $this->accountService->getUnpaidClientInvoices($asOfDate)
-            ->with(['client:id,name'])
-            ->get()
-            : $this->accountService->getUnpaidVendorBills($asOfDate)
-            ->with(['vendor:id,name'])
-            ->get();
+            ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)
+                ->with(['client:id,name'])
+                ->get()
+            : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
+                ->with(['vendor:id,name'])
+                ->get();
 
         $rows = [];
 
@@ -1056,7 +1143,7 @@ class ReportService
             $entity = $entityType === DocumentEntityType::Client ? $doc->client : $doc->vendor;
 
             $invoiceAmount = $doc->total ?? 0;
-            $primeOwing = ($doc->amount_due - $doc->tax_total) ?? 0;
+            $primeOwing = $doc->amount_due ?? 0;
             $taxOwing = $doc->tax_total ?? 0;
 
             $dueDate = optional($doc->due_date)->format('d M Y');
@@ -1069,14 +1156,14 @@ class ReportService
             }
 
             $rows[] = [
-                'customer_name'   => $entity->name ?? '-',
-                'invoice_number'  => $doc->code ?? '-',
-                'invoice_date'    => $invoiceDate,
-                'due_date'        => $dueDate,
-                'invoice_amount'  => $invoiceAmount,
-                'prime_owing'     => $primeOwing,
-                'tax_owing'       => $taxOwing,
-                'age_from_due'    => $ageFromDue > 0 ? floor($ageFromDue) . ' Day' : 0,
+                'customer_name' => $entity->name ?? '-',
+                'invoice_number' => $doc->code ?? '-',
+                'invoice_date' => $invoiceDate,
+                'due_date' => $dueDate,
+                'invoice_amount' => $invoiceAmount,
+                'prime_owing' => $primeOwing,
+                'tax_owing' => $taxOwing,
+                'age_from_due' => $ageFromDue > 0 ? floor($ageFromDue) . ' Day' : 0,
             ];
         }
 
@@ -1098,11 +1185,12 @@ class ReportService
 
     public function buildOutstandingReportBillLevel(
         string $asOfDate,
+        $companyId = null
     ): array {
         $asOfDateCarbon = Carbon::parse($asOfDate);
 
         // Ambil semua vendor bills yang belum dibayar hingga tanggal tertentu
-        $bills = $this->accountService->getUnpaidVendorBills($asOfDate)
+        $bills = $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
             ->with(['vendor:id,name'])
             ->get();
 
@@ -1125,14 +1213,14 @@ class ReportService
             }
 
             $rows[] = [
-                'vendor_name'   => $vendor->name ?? '-',
-                'bill_number'   => $bill->code ?? '-',
-                'bill_date'     => $billDate,
-                'due_date'      => $dueDate,
-                'bill_amount'   => $billAmount,
-                'base_owing'   => $primeOwing,
-                'tax_owing'     => $taxOwing,
-                'age_from_due'  => $ageFromDue > 0 ? floor($ageFromDue) . ' Day' : 0,
+                'vendor_name' => $vendor->name ?? '-',
+                'bill_number' => $bill->code ?? '-',
+                'bill_date' => $billDate,
+                'due_date' => $dueDate,
+                'bill_amount' => $billAmount,
+                'base_owing' => $primeOwing,
+                'tax_owing' => $taxOwing,
+                'age_from_due' => $ageFromDue > 0 ? floor($ageFromDue) . ' Day' : 0,
             ];
         }
 
@@ -1152,10 +1240,11 @@ class ReportService
         ];
     }
 
-    public function buildEntityBalanceSummaryReport(string $startDate, string $endDate, DocumentEntityType $entityType, array $columns = []): ReportDTO
+    public function buildEntityBalanceSummaryReport(string $startDate, string $endDate, DocumentEntityType $entityType, array $columns = [], $companyId = null): ReportDTO
     {
         $documents = match ($entityType) {
             DocumentEntityType::Client => Invoice::query()
+                ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
                 ->whereBetween('date', [$startDate, $endDate])
                 ->whereNotIn('status', [
                     InvoiceStatus::Draft,
@@ -1166,6 +1255,7 @@ class ReportService
                 ->get()
                 ->groupBy('client_id'),
             DocumentEntityType::Vendor => Bill::query()
+                ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
                 ->whereBetween('date', [$startDate, $endDate])
                 ->whereNot('status', BillStatus::Void)
                 ->with(['vendor:id,name'])
@@ -1229,10 +1319,12 @@ class ReportService
         string $startDate,
         string $endDate,
         DocumentEntityType $entityType,
-        array $columns = []
+        array $columns = [],
+        $companyId = null
     ): ReportDTO {
         $documents = match ($entityType) {
             DocumentEntityType::Client => Invoice::query()
+                ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
                 ->whereBetween('date', [$startDate, $endDate])
                 ->whereNotIn('status', [InvoiceStatus::Draft, InvoiceStatus::Void])
                 ->whereNotNull('approved_at')
@@ -1242,6 +1334,7 @@ class ReportService
                 ->get()
                 ->groupBy('client_id'),
             DocumentEntityType::Vendor => Bill::query()
+                ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
                 ->whereBetween('date', [$startDate, $endDate])
                 ->whereNotIn('status', [BillStatus::Void])
                 ->whereNotNull('paid_at')
@@ -1262,19 +1355,19 @@ class ReportService
         foreach ($documents as $entityId => $entityDocuments) {
             $entity = $entityDocuments->first()->{$entityType->value};
 
-            $onTimeDocs = $entityDocuments->filter(fn(Invoice | Bill $doc) => $doc->paid_at->lte($doc->due_date));
+            $onTimeDocs = $entityDocuments->filter(fn (Invoice | Bill $doc) => $doc->paid_at->lte($doc->due_date));
             $onTimeCount = $onTimeDocs->count();
 
-            $lateDocs = $entityDocuments->filter(fn(Invoice | Bill $doc) => $doc->paid_at->gt($doc->due_date));
+            $lateDocs = $entityDocuments->filter(fn (Invoice | Bill $doc) => $doc->paid_at->gt($doc->due_date));
             $lateCount = $lateDocs->count();
 
             $avgDaysToPay = $entityDocuments->avg(
-                fn(Invoice | Bill $doc) => $doc instanceof Invoice
+                fn (Invoice | Bill $doc) => $doc instanceof Invoice
                     ? $doc->approved_at->diffInDays($doc->paid_at)
                     : $doc->date->diffInDays($doc->paid_at)
             ) ?? 0;
 
-            $avgDaysLate = $lateDocs->avg(fn(Invoice | Bill $doc) => $doc->due_date->diffInDays($doc->paid_at)) ?? 0;
+            $avgDaysLate = $lateDocs->avg(fn (Invoice | Bill $doc) => $doc->due_date->diffInDays($doc->paid_at)) ?? 0;
 
             $onTimeRate = $entityDocuments->isNotEmpty()
                 ? ($onTimeCount / $entityDocuments->count() * 100)
@@ -1309,7 +1402,7 @@ class ReportService
         }
 
         $categories = collect($categories)
-            ->sortByDesc(static fn(EntityReportDTO $category) => $category->paymentMetrics->onTimePaymentRate, SORT_NATURAL)
+            ->sortByDesc(static fn (EntityReportDTO $category) => $category->paymentMetrics->onTimePaymentRate, SORT_NATURAL)
             ->values()
             ->all();
 

@@ -112,7 +112,8 @@ abstract class BaseAgingReportPage extends BaseReportPage
             $this->getEntityType(),
             $columns,
             $this->getFilterState('days_per_period'),
-            $this->getFilterState('number_of_periods')
+            $this->getFilterState('number_of_periods'),
+            $this->company->id
         );
     }
 

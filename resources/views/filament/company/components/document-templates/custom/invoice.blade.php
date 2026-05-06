@@ -213,7 +213,7 @@
                 <tr>
                     <td colspan="2" class="px-2 text-right">Discount</td>
                     <td class="px-2 text-right">
-                        {{ formatMoneyRoundWhole($document->discount) }}
+                        {{ formatMoneyCeiling($document->discount) }}
                     </td>
                 </tr>
                 @endif

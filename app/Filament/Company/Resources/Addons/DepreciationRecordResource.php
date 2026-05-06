@@ -5,6 +5,7 @@ namespace App\Filament\Company\Resources\Addons;
 use App\Concerns\HasPermissionCheck;
 use App\Filament\Company\Resources\Addons\DepreciationRecordResource\Pages;
 use App\Helpers\AuthHelper;
+use App\Models\Accounting\Transaction;
 use App\Models\Addons\Asset;
 use App\Models\Addons\DepreciationRecord;
 use App\Models\Company;
@@ -20,6 +21,24 @@ class DepreciationRecordResource extends Resource
     use HasPermissionCheck;
 
     protected static ?string $model = DepreciationRecord::class;
+
+    /**
+     * @return array<int, string>
+     */
+    private static function fiscalYearOptions(): array
+    {
+        return collect(range((int) now()->year, (int) now()->year - 10))
+            ->mapWithKeys(fn ($y) => [$y => (string) $y])
+            ->toArray();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function monthLabels(): array
+    {
+        return ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    }
 
     public static function form(Forms\Form $form): Forms\Form
     {
@@ -90,11 +109,7 @@ class DepreciationRecordResource extends Resource
                 Tables\Filters\SelectFilter::make('fiscal_year')
                     ->label('Fiscal Year')
                     ->searchable()
-                    ->options(
-                        collect(range((int) now()->year, (int) now()->year - 10))
-                            ->mapWithKeys(fn($y) => [$y => (string) $y])
-                            ->toArray()
-                    ),
+                    ->options(self::fiscalYearOptions()),
                 Tables\Filters\SelectFilter::make('asset_id')
                     ->searchable()
                     ->label('Asset')
@@ -104,103 +119,334 @@ class DepreciationRecordResource extends Resource
                 Tables\Actions\Action::make('exportExcel')
                     ->label('Export XLSX')
                     ->icon('heroicon-o-document-arrow-down')
-                    ->action(function () {
+                    ->form([
+                        Forms\Components\Select::make('template')
+                            ->label('Template')
+                            ->options([
+                                'summary' => 'Summary',
+                                'detail' => 'Detail (Per Bulan, Per Baris)',
+                            ])
+                            ->default('summary')
+                            ->required(),
+                    ])
+                    ->action(function (array $data) {
                         $company = Company::find(AuthHelper::currentCompany());
+
+                        $template = (string) ($data['template'] ?? 'summary');
 
                         $records = \App\Models\Addons\DepreciationRecord::with('asset.group')
                             ->where('company_id', $company->id)
                             ->orderBy('fiscal_year', 'desc')
+                            ->orderBy('asset_id')
                             ->get();
 
                         $now = now()->format('Y-m-d_H-i-s');
 
-                        $header = [
-                            'No',
-                            'Kelompok / Jenis Harta',
-                            'Bulan / Tahun Perolehan',
-                            'Harga Perolehan (Rp)',
-                            'Nilai Sisa Buku Fiskal Awal Tahun (Rp)',
-                            'Metode Komersial',
-                            'Metode Fiskal',
-                            'Penyusutan / Amortisasi Fiskal Tahun Ini (Rp)',
-                            'Catatan (Nilai Sisa Buku)',
-                        ];
-
                         $rows = collect();
 
-                        $rowNumber = 1;
+                        if ($template === 'detail') {
+                            $assetIds = $records->pluck('asset_id')->filter()->unique()->values()->all();
+                            $fiscalYears = $records->pluck('fiscal_year')->filter()->unique()->values()->all();
 
-                        $grouped = $records->groupBy(fn($r) => $r->asset->group->name ?? 'Lain-lain');
+                            $monthsByAssetYear = [];
+                            if (! empty($assetIds) && ! empty($fiscalYears)) {
+                                Transaction::query()
+                                    ->where('company_id', $company->id)
+                                    ->where('type', 'journal')
+                                    ->where('meta->addon', 'asset_depreciation')
+                                    ->whereIn('meta->asset_id', $assetIds)
+                                    ->whereIn('meta->fiscal_year', $fiscalYears)
+                                    ->get(['meta'])
+                                    ->each(function (Transaction $t) use (&$monthsByAssetYear): void {
+                                        $meta = (array) ($t->meta ?? []);
 
-                        foreach ($grouped as $groupName => $groupRecords) {
-                            // Urutkan berdasarkan asset id
-                            $groupRecords = $groupRecords->sortBy(fn($r) => $r->asset->id);
+                                        $assetId = isset($meta['asset_id']) ? (int) $meta['asset_id'] : null;
+                                        $fiscalYear = isset($meta['fiscal_year']) ? (int) $meta['fiscal_year'] : null;
+                                        $fiscalMonth = isset($meta['fiscal_month']) ? (int) $meta['fiscal_month'] : null;
 
-                            // Header per kategori
-                            $rows->push([
-                                'data' => [$groupName],
-                                'style' => [
-                                    'bold' => true,
-                                    'underline' => true,
-                                ],
-                            ]);
+                                        if (! $assetId || ! $fiscalYear || ! $fiscalMonth) {
+                                            return;
+                                        }
+                                        if ($fiscalMonth < 1 || $fiscalMonth > 12) {
+                                            return;
+                                        }
 
-                            // Detail tiap record
-                            foreach ($groupRecords as $i => $record) {
+                                        $monthsByAssetYear[$assetId] ??= [];
+                                        $monthsByAssetYear[$assetId][$fiscalYear] ??= [];
+                                        $monthsByAssetYear[$assetId][$fiscalYear][$fiscalMonth] = true;
+                                    });
+
+                                foreach ($monthsByAssetYear as $assetId => $years) {
+                                    foreach ($years as $year => $monthsMap) {
+                                        $months = array_keys($monthsMap);
+                                        sort($months);
+                                        $monthsByAssetYear[$assetId][$year] = $months;
+                                    }
+                                }
+                            }
+
+                            $header = [
+                                'No',
+                                'Tahun',
+                                'Bulan',
+                                'Kelompok / Jenis Harta',
+                                'Bulan / Tahun Perolehan',
+                                'Harga Perolehan (Rp)',
+                                'Nilai Sisa Buku Fiskal Awal Tahun (Rp)',
+                                'Metode Komersial',
+                                'Metode Fiskal',
+                                'Penyusutan / Amortisasi Fiskal (Rp)',
+                                'Nilai Sisa Buku Fiskal (Rp)',
+                            ];
+
+                            $rowNumber = 1;
+                            $grouped = $records->groupBy(fn ($r) => $r->asset->group->name ?? 'Lain-lain');
+
+                            $grandTotal = 0.0;
+
+                            foreach ($grouped as $groupName => $groupRecords) {
+                                $groupRecords = $groupRecords->sortBy(fn ($r) => $r->asset->id);
+
+                                $rows->push([
+                                    'data' => [$groupName],
+                                    'style' => [
+                                        'bold' => true,
+                                        'underline' => true,
+                                    ],
+                                ]);
+
+                                $groupTotal = 0.0;
+
+                                foreach ($groupRecords as $record) {
+                                    $monthly = (array) ($record->monthly_breakdown ?? []);
+                                    $months = collect($monthsByAssetYear[$record->asset_id][$record->fiscal_year] ?? [])
+                                        ->map(fn ($m) => (int) $m)
+                                        ->filter(fn ($m) => $m >= 1 && $m <= 12)
+                                        ->unique()
+                                        ->sort()
+                                        ->values();
+
+                                    if ($months->isEmpty()) {
+                                        $months = collect(array_keys($monthly))
+                                            ->map(fn ($m) => (int) $m)
+                                            ->filter(fn ($m) => $m >= 1 && $m <= 12)
+                                            ->unique()
+                                            ->sort()
+                                            ->values();
+                                    }
+
+                                    if ($months->isEmpty()) {
+                                        $acq = $record->asset?->acquisition_date;
+                                        $acqDate = $acq instanceof Carbon ? $acq->copy() : ($acq ? Carbon::parse($acq) : null);
+
+                                        if ($acqDate) {
+                                            $deprStartDate = $acqDate->copy()->startOfMonth();
+                                            if ((int) $acqDate->format('d') > 15) {
+                                                $deprStartDate = $deprStartDate->addMonth();
+                                            }
+
+                                            $startYear = (int) $deprStartDate->format('Y');
+                                            $startMonth = (int) $deprStartDate->format('m');
+
+                                            $yearStartMonth = ((int) $record->fiscal_year === $startYear) ? $startMonth : 1;
+                                            $yearEndMonth = 12;
+
+                                            $now = now();
+                                            if ((int) $record->fiscal_year === (int) $now->format('Y')) {
+                                                $maxMonthInCurrentYear = $now->isLastOfMonth()
+                                                    ? (int) $now->format('m')
+                                                    : ((int) $now->format('m') - 1);
+                                                $yearEndMonth = min($yearEndMonth, max(0, $maxMonthInCurrentYear));
+                                            }
+
+                                            if ($yearEndMonth >= $yearStartMonth && $yearEndMonth >= 1) {
+                                                $months = collect(range(max(1, $yearStartMonth), min(12, $yearEndMonth)));
+                                            }
+                                        }
+                                    }
+
+                                    $runningBook = (float) ($record->opening_fiscal_book_value ?? 0);
+                                    $assetTotal = 0.0;
+                                    $yearPrinted = false;
+
+                                    foreach ($months as $m) {
+                                        $amt = (float) ($monthly[$m] ?? $monthly[(string) $m] ?? 0);
+                                        $runningBook = (float) $runningBook - $amt;
+
+                                        $amtRp = $amt / 100;
+                                        $bookRp = $runningBook / 100;
+
+                                        $groupTotal += $amtRp;
+                                        $grandTotal += $amtRp;
+                                        $assetTotal += $amtRp;
+
+                                        $rows->push([
+                                            'data' => [
+                                                $rowNumber++,
+                                                $yearPrinted ? '' : ((string) $record->fiscal_year . ' '),
+                                                Carbon::create($record->fiscal_year, (int) $m, 1)->format('M'),
+                                                $record->asset->name ?? '-',
+                                                optional($record->asset->acquisition_date)->format('d M Y') ?? '-',
+                                                ($record->asset->acquisition_cost ?? 0) / 100,
+                                                ($record->opening_fiscal_book_value ?? 0) / 100,
+                                                $record->commercial_method?->getLabel() ?? '-',
+                                                $record->fiscal_method?->getLabel() ?? '-',
+                                                $amtRp,
+                                                $bookRp,
+                                            ],
+                                            'style' => [],
+                                        ]);
+
+                                        $yearPrinted = true;
+                                    }
+
+                                    // Total per nama harta + 1 baris spacer
+                                    $rows->push([
+                                        'data' => [
+                                            '',
+                                            '',
+                                            '',
+                                            'Total ' . ($record->asset->name ?? '-'),
+                                            '',
+                                            '',
+                                            '',
+                                            '',
+                                            '',
+                                            $assetTotal,
+                                            ($record->closing_fiscal_book_value ?? 0) / 100,
+                                        ],
+                                        'style' => ['bold' => true],
+                                    ]);
+                                    $rows->push([
+                                        'data' => [''],
+                                        'style' => [],
+                                    ]);
+                                }
+
                                 $rows->push([
                                     'data' => [
-                                        $rowNumber++,
-                                        $record->asset->name ?? '-',
-                                        optional($record->asset->acquisition_date)->format('d M Y') ?? '-',
-                                        $record->asset->acquisition_cost / 100,
-                                        $record->opening_fiscal_book_value / 100,
-                                        $record->commercial_method?->getLabel() ?? '-',
-                                        $record->fiscal_method?->getLabel() ?? '-',
-                                        $record->depreciation_expense / 100,
-                                        $record->closing_fiscal_book_value / 100,
+                                        '',
+                                        '',
+                                        '',
+                                        "Subtotal {$groupName}",
+                                        '',
+                                        '',
+                                        '',
+                                        '',
+                                        '',
+                                        $groupTotal,
+                                        '',
                                     ],
+                                    'style' => ['bold' => true],
+                                ]);
+
+                                $rows->push([
+                                    'data' => [''],
+                                    'style' => [],
+                                ]);
+                                $rows->push([
+                                    'data' => [''],
                                     'style' => [],
                                 ]);
                             }
 
-                            // Subtotal per kategori
                             $rows->push([
                                 'data' => [
                                     '',
-                                    "Subtotal {$groupName}",
+                                    '',
+                                    '',
+                                    'JUMLAH PENYUSUTAN FISKAL',
                                     '',
                                     '',
                                     '',
                                     '',
                                     '',
-                                    $groupRecords->sum('depreciation_expense') / 100,
+                                    '',
+                                    $grandTotal,
                                     '',
                                 ],
-                                'style' => ['bold' => true],
+                                'style' => ['bold' => true, 'border-top' => true],
                             ]);
+                        } else {
+                            $header = [
+                                'No',
+                                'Kelompok / Jenis Harta',
+                                'Bulan / Tahun Perolehan',
+                                'Harga Perolehan (Rp)',
+                                'Nilai Sisa Buku Fiskal Awal Tahun (Rp)',
+                                'Metode Komersial',
+                                'Metode Fiskal',
+                                'Penyusutan / Amortisasi Fiskal Tahun Ini (Rp)',
+                                'Catatan (Nilai Sisa Buku)',
+                            ];
 
-                            // Spacer kosong antar grup
+                            $rowNumber = 1;
+                            $grouped = $records->groupBy(fn ($r) => $r->asset->group->name ?? 'Lain-lain');
+
+                            foreach ($grouped as $groupName => $groupRecords) {
+                                $groupRecords = $groupRecords->sortBy(fn ($r) => $r->asset->id);
+
+                                $rows->push([
+                                    'data' => [$groupName],
+                                    'style' => [
+                                        'bold' => true,
+                                        'underline' => true,
+                                    ],
+                                ]);
+
+                                foreach ($groupRecords as $record) {
+                                    $rows->push([
+                                        'data' => [
+                                            $rowNumber++,
+                                            $record->asset->name ?? '-',
+                                            optional($record->asset->acquisition_date)->format('d M Y') ?? '-',
+                                            ($record->asset->acquisition_cost ?? 0) / 100,
+                                            ($record->opening_fiscal_book_value ?? 0) / 100,
+                                            $record->commercial_method?->getLabel() ?? '-',
+                                            $record->fiscal_method?->getLabel() ?? '-',
+                                            ($record->depreciation_expense ?? 0) / 100,
+                                            ($record->closing_fiscal_book_value ?? 0) / 100,
+                                        ],
+                                        'style' => [],
+                                    ]);
+                                }
+
+                                $rows->push([
+                                    'data' => [
+                                        '',
+                                        "Subtotal {$groupName}",
+                                        '',
+                                        '',
+                                        '',
+                                        '',
+                                        '',
+                                        $groupRecords->sum('depreciation_expense') / 100,
+                                        '',
+                                    ],
+                                    'style' => ['bold' => true],
+                                ]);
+
+                                $rows->push([
+                                    'data' => [''],
+                                    'style' => [],
+                                ]);
+                            }
+
                             $rows->push([
-                                'data' => [''],
-                                'style' => [],
+                                'data' => [
+                                    '',
+                                    'JUMLAH PENYUSUTAN FISKAL',
+                                    '',
+                                    '',
+                                    '',
+                                    '',
+                                    '',
+                                    $records->sum('depreciation_expense') / 100,
+                                    '',
+                                ],
+                                'style' => ['bold' => true, 'border-top' => true],
                             ]);
                         }
-
-                        // Grand total
-                        $rows->push([
-                            'data' => [
-                                '',
-                                'JUMLAH PENYUSUTAN FISKAL',
-                                '',
-                                '',
-                                '',
-                                '',
-                                '',
-                                $records->sum('depreciation_expense') / 100,
-                                '',
-                            ],
-                            'style' => ['bold' => true, 'border-top' => true],
-                        ]);
 
                         $data = [
                             'filename'      => "{$company->name} Daftar Penyusutan {$now}.xlsx",
@@ -209,6 +455,10 @@ class DepreciationRecordResource extends Resource
                             'report_period' => 'As of ' . now()->format('d M Y'),
                             'columns'       => $header,
                             'rows'          => $rows->toArray(),
+                            // Format angka hanya untuk kolom nominal (biar kolom Tahun/Bulan tidak jadi 2.021,00)
+                            'numeric_columns' => $template === 'detail'
+                                ? ['F', 'G', 'J', 'K'] // Harga, Opening, Penyusutan, Nilai Sisa
+                                : ['D', 'E', 'H', 'I'], // Summary: Harga, Opening, Penyusutan, Catatan (Nilai Sisa)
                         ];
 
                         $exportService = new \App\Services\ExportService();
@@ -219,16 +469,32 @@ class DepreciationRecordResource extends Resource
                     ->label('Export PDF')
                     ->color('danger')
                     ->icon('heroicon-o-document-arrow-down')
-                    ->action(function () {
+                    ->form([
+                        Forms\Components\Select::make('template')
+                            ->label('Template')
+                            ->options([
+                                'summary' => 'Summary',
+                                'detail' => 'Detail (Per Bulan, Per Baris)',
+                            ])
+                            ->default('summary')
+                            ->required(),
+                    ])
+                    ->action(function (array $data) {
                         $companyId = AuthHelper::currentCompany();
                         $company = Company::find($companyId);
-                        $records = \App\Models\Addons\DepreciationRecord::with('asset')
+                        $template = (string) ($data['template'] ?? 'summary');
+
+                        $records = \App\Models\Addons\DepreciationRecord::with('asset.group')
                             ->where('company_id', $companyId)
+                            ->orderBy('fiscal_year', 'desc')
+                            ->orderBy('asset_id')
                             ->get();
 
                         $now = Carbon::now()->format('Y-m-d_H-i-s');
                         $filename = "{$company->name} Daftar Penyusutan {$now}.pdf";
-                        $view = 'pdf.depreciation-records';
+                        $view = $template === 'detail'
+                            ? 'pdf.depreciation-records-detail'
+                            : 'pdf.depreciation-records';
 
                         $pdf = SnappyPdf::loadView($view, [
                             'company' => $company,

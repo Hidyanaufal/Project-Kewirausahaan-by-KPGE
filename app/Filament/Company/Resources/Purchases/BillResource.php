@@ -372,6 +372,7 @@ class BillResource extends Resource
                         DocumentTotals::make()
                             ->type(DocumentType::Bill),
                         Forms\Components\Textarea::make('terms')
+                        ->label('Notes Bill')
                     ]),
             ]);
     }
@@ -461,6 +462,7 @@ class BillResource extends Resource
                                 return $record->canRecordPayment();
                             })
                             ->mountUsing(function (Bill $record, Form $form) {
+                                $record = $record->fresh();
                                 $form->fill([
                                     'posted_at' => company_today()->toDateString(),
                                     'amount' => $record->amount_due,
