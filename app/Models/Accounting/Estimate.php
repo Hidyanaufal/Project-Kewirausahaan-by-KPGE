@@ -14,6 +14,7 @@ use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Company\Resources\Sales\EstimateResource;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Helpers\AuthHelper;
+use App\Jobs\SendQuotationApprovedNotification;
 use App\Models\Addons\Project;
 use App\Models\Common\Client;
 use App\Models\Company;
@@ -324,6 +325,8 @@ class Estimate extends Document
             'approved_at' => $approvedAt,
             'status' => EstimateStatus::Unsent,
         ]);
+
+        SendQuotationApprovedNotification::dispatch($this->id);
     }
 
     public static function getApproveDraftAction(string $action = Action::class): MountableAction

@@ -15,6 +15,7 @@ use App\Enums\Accounting\JournalEntryType;
 use App\Enums\Accounting\TransactionType;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Helpers\AuthHelper;
+use App\Jobs\SendInvoiceApprovedNotification;
 use App\Models\Addons\Project;
 use App\Models\Banking\BankAccount;
 use App\Models\Common\Client;
@@ -773,6 +774,8 @@ class Invoice extends Document
                 'approved_at' => $approvedAt,
                 'status' => InvoiceStatus::Unsent,
             ]);
+
+            SendInvoiceApprovedNotification::dispatch($this->id);
         }
     }
 
