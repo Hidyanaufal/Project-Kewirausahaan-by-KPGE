@@ -2,6 +2,7 @@
     'reportLoaded' => false,
     'summaryData' => [],
     'targetLabel' => null,
+    'operators' => null,
 ])
 
 @php
@@ -41,7 +42,7 @@
                     @if(! $loop->last)
                         <div class="flex items-center justify-center">
                             <strong class="text-lg">
-                                {{ $loop->remaining === 1 ? '=' : '-' }}
+                                {{ is_array($operators) ? ($operators[$loop->index] ?? '-') : ($loop->remaining === 1 ? '=' : '-') }}
                             </strong>
                         </div>
                     @endif
