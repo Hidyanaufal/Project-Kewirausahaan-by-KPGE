@@ -1131,16 +1131,17 @@ class ReportService
 
         $documents = $entityType === DocumentEntityType::Client
             ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)
-                ->with(['client:id,name'])
+                ->with(['client:id,name', 'project:id,name'])
                 ->get()
             : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
-                ->with(['vendor:id,name'])
+                ->with(['vendor:id,name', 'project:id,name'])
                 ->get();
 
         $rows = [];
 
         foreach ($documents as $doc) {
             $entity = $entityType === DocumentEntityType::Client ? $doc->client : $doc->vendor;
+            $projectName = $doc->project?->name ?? null;
 
             $invoiceAmount = $doc->total ?? 0;
             $primeOwing = $doc->amount_due ?? 0;
@@ -1158,6 +1159,7 @@ class ReportService
             $rows[] = [
                 'customer_name' => $entity->name ?? '-',
                 'invoice_number' => $doc->code ?? '-',
+                'project_name' => $projectName,
                 'invoice_date' => $invoiceDate,
                 'due_date' => $dueDate,
                 'invoice_amount' => $invoiceAmount,
@@ -1171,6 +1173,7 @@ class ReportService
             'columns' => [
                 'Invoice',
                 'No. Invoice',
+                'Project',
                 'Date',
                 'Due Date',
                 'Invoice Amount',
@@ -1191,13 +1194,14 @@ class ReportService
 
         // Ambil semua vendor bills yang belum dibayar hingga tanggal tertentu
         $bills = $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
-            ->with(['vendor:id,name'])
+            ->with(['vendor:id,name', 'project:id,name'])
             ->get();
 
         $rows = [];
 
         foreach ($bills as $bill) {
             $vendor = $bill->vendor;
+            $projectName = $bill->project?->name ?? null;
 
             $billAmount = $bill->amount ?? 0;
             $primeOwing = $bill->total ?? 0;
@@ -1215,6 +1219,7 @@ class ReportService
             $rows[] = [
                 'vendor_name' => $vendor->name ?? '-',
                 'bill_number' => $bill->code ?? '-',
+                'project_name' => $projectName,
                 'bill_date' => $billDate,
                 'due_date' => $dueDate,
                 'bill_amount' => $billAmount,
@@ -1228,6 +1233,7 @@ class ReportService
             'columns' => [
                 'Vendor',
                 'No. Bill',
+                'Project',
                 'Date',
                 'Due Date',
                 'Bill Amount',
