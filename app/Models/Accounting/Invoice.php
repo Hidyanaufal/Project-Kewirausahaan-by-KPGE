@@ -1253,9 +1253,22 @@ class Invoice extends Document
                 return $record->status !== InvoiceStatus::Cancelled;
             })
             ->requiresConfirmation()
-            ->modalHeading('Cancel Invoice')
-            ->modalDescription('This will cancel the current invoice and create a new draft invoice with the same invoice number. The original invoice will be marked as Cancelled. Are you sure you want to proceed?')
-            ->modalSubmitActionLabel('Cancel Invoice')
+            ->modalHeading(function (self $record) {
+                return $record->hasPayments()
+                    ? 'Peringatan: Invoice sudah ada pembayaran'
+                    : 'Cancel Invoice';
+            })
+            ->modalDescription(function (self $record) {
+                if ($record->hasPayments()) {
+                    return new HtmlString(
+                        "<p class='text-sm mb-2'>Invoice ini sudah memiliki pembayaran. Membatalkan invoice dapat mempengaruhi rekonsiliasi dan laporan.</p>" .
+                        "<p class='text-sm'>Apakah Anda yakin ingin membatalkan invoice ini?</p>"
+                    );
+                }
+
+                return 'Invoice akan dibatalkan (status diubah menjadi Cancelled). Apakah Anda yakin ingin melanjutkan?';
+            })
+            ->modalSubmitActionLabel('Batalkan Invoice')
             ->databaseTransaction()
             ->successNotificationTitle('Invoice cancelled successfully')
             ->failureNotificationTitle('Failed to cancel invoice')
@@ -1269,39 +1282,6 @@ class Invoice extends Document
                     $action->cancel();
                     return;
                 }
-
-                // Store original invoice number and ID for redirect
-                $originalInvoiceNumber = $record->invoice_number;
-                $originalId = $record->id;
-
-                // Create replica with same invoice number
-                $replica = $record->replicate([
-                    'status',
-                    'amount_paid',
-                    'amount_due',
-                    'created_by',
-                    'updated_by',
-                    'created_at',
-                    'updated_at',
-                    'approved_at',
-                    'paid_at',
-                    'last_sent_at',
-                    'last_viewed_at',
-                ]);
-
-                // Set replica properties
-                $replica->status = InvoiceStatus::Draft;
-                $replica->invoice_number = $originalInvoiceNumber; // Same invoice number
-                $replica->date = company_today();
-                $replica->due_date = company_today()->addDays($record->company->defaultInvoice->payment_terms->getDays());
-                $replica->amount_paid = 0;
-                // amount_due is a generated column, will be calculated automatically by the database
-                $replica->save();
-
-                // Replicate line items
-                $record->replicateLineItems($replica);
-
-                // Mark original invoice as Cancelled
                 $record->update([
                     'status' => InvoiceStatus::Cancelled,
                 ]);
@@ -1309,18 +1289,7 @@ class Invoice extends Document
                 $action->success();
             })
             ->successRedirectUrl(function (self $record) {
-                // Find the newly created replica invoice (Draft status with same invoice number, different ID)
-                $replica = self::where('invoice_number', $record->invoice_number)
-                    ->where('status', InvoiceStatus::Draft)
-                    ->where('id', '!=', $record->id)
-                    ->latest('id')
-                    ->first();
-
-                if ($replica) {
-                    return InvoiceResource::getUrl('edit', ['record' => $replica]);
-                }
-
-                return InvoiceResource::getUrl('index');
+                return InvoiceResource::getUrl('view', ['record' => $record]);
             });
     }
 
