@@ -270,18 +270,9 @@ class BalanceSheetReportTransformer extends SummaryReportTransformer
     public function getSummary(): array
     {
         return [
-            [
-                'label' => 'Total Assets',
-                'value' => $this->totalAssets,
-            ],
-            [
-                'label' => 'Total Liabilities',
-                'value' => $this->totalLiabilities,
-            ],
-            [
-                'label' => 'Net Assets',
-                'value' => $this->report->overallTotal->endingBalance ?? '',
-            ],
+            ['label' => 'Total Assets', 'value' => $this->totalAssets],
+            ['label' => 'Total Liabilities', 'value' => $this->totalLiabilities],
+            ['label' => 'Total Equity', 'value' => $this->totalEquity],
         ];
     }
 }
