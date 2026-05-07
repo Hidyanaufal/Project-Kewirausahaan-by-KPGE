@@ -6,9 +6,11 @@ use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Enums\Accounting\AccountType;
+use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Forms\Components\DateRangeSelect;
 use App\Helpers\AuthHelper;
 use App\Models\Accounting\Account;
+use App\Models\Accounting\Invoice;
 use App\Models\Company;
 use App\Services\ExportService;
 use App\Services\ReportService;
@@ -212,10 +214,15 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
 
         $accountIds = $accounts->pluck('id')->toArray();
         $scale = 100; // ubah ke 1 jika amount sudah dalam rupiah
+        $cancelled = InvoiceStatus::Cancelled->value;
 
         // Opening balance: semua transaksi sebelum tanggal start
         $opening = DB::table('journal_entries')
             ->join('transactions', 'journal_entries.transaction_id', '=', 'transactions.id')
+            ->leftJoin('invoices', function ($join) {
+                $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Invoice::class);
+            })
             ->select(
                 'journal_entries.account_id',
                 DB::raw("SUM(CASE WHEN journal_entries.type = 'debit' THEN journal_entries.amount ELSE 0 END) as opening_debit"),
@@ -224,12 +231,21 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
             ->where('journal_entries.company_id', $company->id)
             ->whereIn('journal_entries.account_id', $accountIds)
             ->where('transactions.posted_at', '<', $start->toDateString())
+            ->where(function ($q) use ($cancelled) {
+                $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                    ->orWhereNull('invoices.id')
+                    ->orWhere('invoices.status', '!=', $cancelled);
+            })
             ->groupBy('journal_entries.account_id')
             ->pluck('opening_debit', 'journal_entries.account_id')
             ->toArray();
 
         $openingCredit = DB::table('journal_entries')
             ->join('transactions', 'journal_entries.transaction_id', '=', 'transactions.id')
+            ->leftJoin('invoices', function ($join) {
+                $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Invoice::class);
+            })
             ->select(
                 'journal_entries.account_id',
                 DB::raw("SUM(CASE WHEN journal_entries.type = 'credit' THEN journal_entries.amount ELSE 0 END) as opening_credit")
@@ -237,6 +253,11 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
             ->where('journal_entries.company_id', $company->id)
             ->whereIn('journal_entries.account_id', $accountIds)
             ->where('transactions.posted_at', '<', $start->toDateString())
+            ->where(function ($q) use ($cancelled) {
+                $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                    ->orWhereNull('invoices.id')
+                    ->orWhere('invoices.status', '!=', $cancelled);
+            })
             ->groupBy('journal_entries.account_id')
             ->pluck('opening_credit', 'journal_entries.account_id')
             ->toArray();
@@ -244,6 +265,10 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         // Mutasi selama periode (Change)
         $period = DB::table('journal_entries')
             ->join('transactions', 'journal_entries.transaction_id', '=', 'transactions.id')
+            ->leftJoin('invoices', function ($join) {
+                $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                    ->where('transactions.transactionable_type', '=', Invoice::class);
+            })
             ->select(
                 'journal_entries.account_id',
                 DB::raw("SUM(CASE WHEN journal_entries.type = 'debit' THEN journal_entries.amount ELSE 0 END) as period_debit"),
@@ -252,6 +277,11 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
             ->where('journal_entries.company_id', $company->id)
             ->whereIn('journal_entries.account_id', $accountIds)
             ->whereBetween('transactions.posted_at', [$start->toDateString(), $end->toDateString()])
+            ->where(function ($q) use ($cancelled) {
+                $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                    ->orWhereNull('invoices.id')
+                    ->orWhere('invoices.status', '!=', $cancelled);
+            })
             ->groupBy('journal_entries.account_id')
             ->get()
             ->keyBy('account_id');

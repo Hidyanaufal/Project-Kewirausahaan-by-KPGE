@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\Accounting\AccountCategory;
+use App\Enums\Accounting\InvoiceStatus;
 use App\Helpers\AuthHelper;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\Bill;
@@ -365,12 +366,27 @@ class AccountService
         if ($projectId !== null || $companyId !== null || $projectTypeId !== null) {
             $this->joinInvoicesBillsProjectsForMultichannelScope($query);
 
+            // Exclude invoice journals when invoice is cancelled (keep data for audit, exclude from reports).
+            $query->where(function (Builder $q) {
+                $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                    ->orWhereNull('invoices.id')
+                    ->orWhere('invoices.status', '!=', InvoiceStatus::Cancelled->value);
+            });
+
             $this->applyMultichannelScopeAfterDocumentJoins(
                 $query,
                 $projectId !== null && $projectId !== '' ? (int) $projectId : null,
                 $companyId !== null && $companyId !== '' ? (int) $companyId : null,
                 $projectTypeId !== null && $projectTypeId !== '' ? (int) $projectTypeId : null,
             );
+        } else {
+            // Still exclude cancelled invoices even when no multichannel filters are applied.
+            $this->joinInvoicesBillsProjectsForMultichannelScope($query);
+            $query->where(function (Builder $q) {
+                $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                    ->orWhereNull('invoices.id')
+                    ->orWhere('invoices.status', '!=', InvoiceStatus::Cancelled->value);
+            });
         }
 
         $query->addBinding([$startDate, $startDate, $startDate, $startDate, $startDate, $endDate, $startDate, $endDate], 'select');
@@ -442,15 +458,21 @@ class AccountService
                 $endDate,
             ]);
 
-        if ($projectId !== null || $companyId !== null) {
-            $query->leftJoin('invoices', function ($join) {
-                $join->on('invoices.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Invoice::class);
-            })->leftJoin('bills', function ($join) {
-                $join->on('bills.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Bill::class);
-            });
+        $query->leftJoin('invoices', function ($join) {
+            $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                ->where('transactions.transactionable_type', '=', Invoice::class);
+        })->leftJoin('bills', function ($join) {
+            $join->on('bills.id', '=', 'transactions.transactionable_id')
+                ->where('transactions.transactionable_type', '=', Bill::class);
+        });
 
+        $query->where(function ($q) {
+            $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                ->orWhereNull('invoices.id')
+                ->orWhere('invoices.status', '!=', InvoiceStatus::Cancelled->value);
+        });
+
+        if ($projectId !== null || $companyId !== null) {
             if ($projectId !== null) {
                 $query->where(function ($q) use ($projectId) {
                     $q->where('invoices.project_id', $projectId)
@@ -508,15 +530,21 @@ class AccountService
                 $startDate,
             ]);
 
-        if ($projectId !== null || $companyId !== null) {
-            $query->leftJoin('invoices', function ($join) {
-                $join->on('invoices.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Invoice::class);
-            })->leftJoin('bills', function ($join) {
-                $join->on('bills.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Bill::class);
-            });
+        $query->leftJoin('invoices', function ($join) {
+            $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                ->where('transactions.transactionable_type', '=', Invoice::class);
+        })->leftJoin('bills', function ($join) {
+            $join->on('bills.id', '=', 'transactions.transactionable_id')
+                ->where('transactions.transactionable_type', '=', Bill::class);
+        });
 
+        $query->where(function ($q) {
+            $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                ->orWhereNull('invoices.id')
+                ->orWhere('invoices.status', '!=', InvoiceStatus::Cancelled->value);
+        });
+
+        if ($projectId !== null || $companyId !== null) {
             if ($projectId !== null) {
                 $query->where(function ($q) use ($projectId) {
                     $q->where('invoices.project_id', $projectId)
