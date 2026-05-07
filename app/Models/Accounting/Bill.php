@@ -594,10 +594,12 @@ class Bill extends Document
             })
             ->requiresConfirmation()
             ->databaseTransaction()
-            ->successNotificationTitle('Invoice approved')
+            ->successNotificationTitle('Bill approved')
             ->action(function (self $record, MountableAction $action) {
                 $record->status = BillStatus::Open;
                 $record->save();
+
+                \App\Jobs\SendBillApprovedNotification::dispatch($record->id);
             });
     }
 
