@@ -2,12 +2,12 @@
 
 namespace App\Filament\Exports\Addons;
 
+use App\Filament\Exports\BaseExporter;
 use App\Models\Addons\Project;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
 
-class ProjectExporter extends Exporter
+class ProjectExporter extends BaseExporter
 {
     protected static ?string $model = Project::class;
 
@@ -16,7 +16,8 @@ class ProjectExporter extends Exporter
         return [
             ExportColumn::make('number'),
             ExportColumn::make('name')
-                ->label('Project Name'),
+                ->label('Project Name')
+                ->formatStateUsing(static fn (?string $state) => $state ? preg_replace("/\s+/", ' ', trim($state)) : $state),
             ExportColumn::make('type.name')
                 ->label('Type'),
             ExportColumn::make('client.name')
@@ -30,7 +31,7 @@ class ProjectExporter extends Exporter
                 ->enum(),
             ExportColumn::make('project_value')
                 ->label('Value')
-                ->money(),
+                ->state(fn (Project $record) => self::excelMoney($record->project_value)),
             ExportColumn::make('start_date')
                 ->label('Start Date')
                 ->date(),
@@ -38,26 +39,31 @@ class ProjectExporter extends Exporter
                 ->label('End Date')
                 ->date(),
             ExportColumn::make('description')
-                ->enabledByDefault(false),
+                ->enabledByDefault(false)
+                ->formatStateUsing(static fn (?string $state) => $state ? preg_replace("/\s+/", ' ', trim($state)) : $state)
+                ->words(12),
             ExportColumn::make('work_basis')
                 ->label('Basis of Work (Work Order/Contract)')
-                ->enabledByDefault(false),
+                ->enabledByDefault(false)
+                ->formatStateUsing(static fn (?string $state) => $state ? preg_replace("/\s+/", ' ', trim($state)) : $state)
+                ->words(12),
             ExportColumn::make('pic_client_name')
                 ->label('PIC Client')
-                ->enabledByDefault(false),
+                ->enabledByDefault(false)
+                ->formatStateUsing(static fn (?string $state) => $state ? preg_replace("/\s+/", ' ', trim($state)) : $state),
 
             ExportColumn::make('approved_invoice_total_without_ppn_sum')
                 ->label('Total Invoice (Tanpa PPN)')
                 ->getStateUsing(static fn (Project $record): int => $record->total_invoice_without_ppn)
-                ->money('idr'),
+                ->state(fn (Project $record) => self::excelMoney($record->total_invoice_without_ppn)),
             ExportColumn::make('approved_bill_total_sum')
                 ->label('Total Biaya')
                 ->getStateUsing(static fn (Project $record): int => $record->total_biaya)
-                ->money('idr'),
+                ->state(fn (Project $record) => self::excelMoney($record->total_biaya)),
             ExportColumn::make('net_earning')
                 ->label('Net Earning')
                 ->getStateUsing(static fn (Project $record): int => $record->net_earning)
-                ->money('idr'),
+                ->state(fn (Project $record) => self::excelMoney($record->net_earning)),
         ];
     }
 

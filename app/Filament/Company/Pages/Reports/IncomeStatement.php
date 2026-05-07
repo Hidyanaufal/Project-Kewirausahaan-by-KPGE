@@ -133,6 +133,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
             'report_title' => $report->getTitle(),
             'report_period' => "From {$startFormatted} to {$endFormatted}",
             'columns' => [
+                'account_number',
                 'Description',
                 "{$startShort} - {$endShort}",
             ],
@@ -144,7 +145,7 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
         foreach ($report->getCategories() as $cat) {
             $headerName = strtoupper($cat->header['account_name'] ?? 'UNKNOWN');
             $rows->push([
-                'data' => [$headerName],
+                'data' => ['', $headerName],
                 'style' => ['font-weight' => 'bold'],
             ]);
 
@@ -157,15 +158,17 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
                 $name = is_array($item['account_name'])
                     ? ($item['account_name']['name'] ?? '')
                     : $item['account_name'];
+                $code = $item['account_code'] ?? '';
 
                 $rows->push([
-                    'data' => [$name, $num],
+                    'data' => ['__str' . $code, $name, $num],
                     'style' => ['padding-left' => '8px'],
                 ]);
             }
 
             $rows->push([
                 'data' => [
+                    '',
                     "Total Cost of {$headerName}",
                     $toNumber($cat->summary['net_movement'] ?? 0),
                 ],
@@ -174,19 +177,19 @@ class IncomeStatement extends BaseReportPage implements EnhancedReport
 
             if ($headerName === 'COST OF GOODS SOLD') {
                 $rows->push([
-                    'data' => ['GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement'])],
+                    'data' => ['', 'GROSS PROFIT', $toNumber($report->getGrossProfit()['net_movement'])],
                     'style' => ['font-weight' => 'bold'],
                 ]);
             }
         }
 
         $rows->push([
-            'data' => ['NET PROFIT/LOSS (Before Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
+            'data' => ['', 'NET PROFIT/LOSS (Before Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
             'style' => ['font-weight' => 'bold'],
         ]);
 
         $rows->push([
-            'data' => ['NET PROFIT/LOSS (After Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
+            'data' => ['', 'NET PROFIT/LOSS (After Tax)', $toNumber($report->getOverallTotals()['net_movement'])],
             'style' => ['font-weight' => 'bold'],
         ]);
 

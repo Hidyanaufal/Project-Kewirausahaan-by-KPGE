@@ -279,6 +279,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
             'Source Type',
             'Source No.',
             'Account No.',
+            'account_number',
             'Account Name',
             'Description',
             'Debit Amount',
@@ -305,6 +306,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
                         $trx->posted_at?->format('d/m/Y'),
                         strtoupper($trx->type->value ?? '-'),
                         $trx->transaction_code,
+                        '__str' . $entry->account->code,
                         '__str' . $entry->account->code,
                         $entry->account->name ?? '',
                         \Illuminate\Support\Str::limit($trx->description, 20),
@@ -335,6 +337,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
         $header = [
             'JV Date',
             'GL Account No.',
+            'account_number',
             'GL Account Name',
             'Description',
             'Debit',
@@ -367,6 +370,7 @@ class OtherReport extends BaseReportPage implements EnhancedReport
                 $rows->push([
                     'data' => [
                         $trx->posted_at?->format('d/m/Y'),
+                        '__str' . $entry->account->code,
                         '__str' . $entry->account->code,
                         $entry->account->name ?? '',
                         $entry->description ?? $trx->description,

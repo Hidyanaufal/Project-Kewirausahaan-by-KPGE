@@ -2,13 +2,13 @@
 
 namespace App\Filament\Exports\Accounting;
 
+use App\Filament\Exports\BaseExporter;
 use App\Models\Accounting\RecurringInvoice;
 use Carbon\Carbon;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
 
-class RecurringInvoiceExporter extends Exporter
+class RecurringInvoiceExporter extends BaseExporter
 {
     protected static ?string $model = RecurringInvoice::class;
 
@@ -28,13 +28,13 @@ class RecurringInvoiceExporter extends Exporter
                     return $record->getTimelineDescription();
                 }),
             ExportColumn::make('total')
-                ->money(),
+                ->state(fn (RecurringInvoice $record) => self::excelMoney($record->total)),
             ExportColumn::make('subtotal')
-                ->money(),
+                ->state(fn (RecurringInvoice $record) => self::excelMoney($record->subtotal)),
             ExportColumn::make('tax_total')
-                ->money(),
+                ->state(fn (RecurringInvoice $record) => self::excelMoney($record->tax_total)),
             ExportColumn::make('discount_total')
-                ->money(),
+                ->state(fn (RecurringInvoice $record) => self::excelMoney($record->discount_total)),
             ExportColumn::make('discount_rate'),
             ExportColumn::make('currency_code'),
             ExportColumn::make('payment_terms')

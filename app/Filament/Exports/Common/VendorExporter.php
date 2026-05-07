@@ -2,13 +2,13 @@
 
 namespace App\Filament\Exports\Common;
 
+use App\Filament\Exports\BaseExporter;
 use App\Enums\Accounting\BillStatus;
 use App\Models\Common\Vendor;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
 
-class VendorExporter extends Exporter
+class VendorExporter extends BaseExporter
 {
     protected static ?string $model = Vendor::class;
 
@@ -30,20 +30,20 @@ class VendorExporter extends Exporter
             ExportColumn::make('currency_code'),
             ExportColumn::make('balance')
                 ->state(function (Vendor $record) {
-                    return $record->bills()
+                    $amount = $record->bills()
                         ->unpaid()
                         ->get()
                         ->sumMoneyInDefaultCurrency('amount_due');
+                    return self::excelMoney($amount);
                 })
-                ->money(),
             ExportColumn::make('overdue_amount')
                 ->state(function (Vendor $record) {
-                    return $record->bills()
+                    $amount = $record->bills()
                         ->where('status', BillStatus::Overdue)
                         ->get()
                         ->sumMoneyInDefaultCurrency('amount_due');
+                    return self::excelMoney($amount);
                 })
-                ->money(),
             ExportColumn::make('address.address_string')
                 ->label('Address')
                 ->enabledByDefault(false),

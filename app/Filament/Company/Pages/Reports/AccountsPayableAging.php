@@ -13,6 +13,7 @@ use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Str;
 
 class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
 {
@@ -65,12 +66,12 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
     {
         return match ($template) {
             'detail' => $this->__buildReportDetail(),
-            // 'outstanding' => $this->__buildReportOutstanding(),
+            // 'outstanding' => $this->__buildReportOutstanding($format),
             default => $this->__buildReportDefault(),
         };
     }
 
-    protected function __buildReportOutstanding(): array
+    protected function __buildReportOutstanding(string $format = 'pdf'): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $asOfDate = $this->report->getStartDate();
@@ -87,6 +88,11 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
 
         $rows = collect();
         $grouped = collect($data['rows'])->groupBy('vendor_name');
+        $grand = [
+            'bill_amount' => 0,
+            'base_owing' => 0,
+            'tax_owing' => 0,
+        ];
 
         foreach ($grouped as $vendorName => $bills) {
             $headerRow = array_fill(0, count($columns), null);
@@ -104,8 +110,15 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
             ];
 
             foreach ($bills as $bill) {
+                $project = $bill['project_name'] ?? '';
+                if ($format === 'pdf') {
+                    $project = $project ? preg_replace("/\s+/", ' ', trim((string) $project)) : '';
+                    // Keep PDF compact: avoid wrapping by truncating more aggressively.
+                    $project = $project ? Str::words($project, 4, '…') : '';
+                }
                 $rowData = [
                     $bill['bill_number'],
+                    $project,
                     $bill['bill_date'],
                     $bill['due_date'],
                     number_format($bill['bill_amount'] / 100, 2, ',', '.'),
@@ -117,11 +130,15 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
                 $subtotal['bill_amount'] += $bill['bill_amount'];
                 $subtotal['base_owing'] += $bill['base_owing'];
                 $subtotal['tax_owing'] += $bill['tax_owing'];
+                $grand['bill_amount'] += $bill['bill_amount'];
+                $grand['base_owing'] += $bill['base_owing'];
+                $grand['tax_owing'] += $bill['tax_owing'];
 
                 $rows->push(['data' => $rowData]);
             }
 
             $subtotalRow = [
+                'Total ' . $vendorName,
                 '',
                 '',
                 '',
@@ -136,6 +153,22 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
                 'style' => ['font-weight' => 'bold', 'color' => 'rgb(150, 50, 50)'],
             ]);
         }
+
+        // Grand total across all vendors (matches UI total).
+        $grandRow = [
+            'Total',
+            '',
+            '',
+            '',
+            number_format($grand['bill_amount'] / 100, 2, ',', '.'),
+            number_format($grand['base_owing'] / 100, 2, ',', '.'),
+            number_format($grand['tax_owing'] / 100, 2, ',', '.'),
+            '',
+        ];
+        $rows->push([
+            'data' => $grandRow,
+            'style' => ['font-weight' => 'bold', 'color' => 'rgb(6, 6, 174)'],
+        ]);
 
         return [
             'filename' => "{$company->name} Outstanding Bill {$now}.pdf",
@@ -167,6 +200,7 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
         $columns = $dataDetail['columns'];
         $rows = collect();
         $grouped = collect($dataDetail['rows'])->groupBy('vendor_name');
+        $grand = ['total_base' => 0];
 
         foreach ($grouped as $vendorName => $bills) {
             $vendorHeader = array_fill(0, count($columns), null);
@@ -179,6 +213,7 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
 
             foreach ($agingKeys as $key) {
                 $subtotal[$key] = 0;
+                $grand[$key] = $grand[$key] ?? 0;
             }
 
             foreach ($bills as $r) {
@@ -196,11 +231,15 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
                 foreach ($r['aging'] as $key => $value) {
                     $subtotal[$key] += $value;
                 }
+                $grand['total_base'] += $r['total_base'];
+                foreach ($r['aging'] as $key => $value) {
+                    $grand[$key] += $value;
+                }
 
                 $rows->push(['data' => $rowData]);
             }
 
-            $subtotalRow = ['', '', number_format($subtotal['total_base'] / 100, 2, ',', '.')];
+            $subtotalRow = ['Total ' . $vendorName, '', number_format($subtotal['total_base'] / 100, 2, ',', '.')];
             foreach ($agingKeys as $key) {
                 $subtotalRow[] = number_format($subtotal[$key] / 100, 2, ',', '.');
             }
@@ -208,6 +247,22 @@ class AccountsPayableAging extends BaseAgingReportPage implements EnhancedReport
             $rows->push([
                 'data' => $subtotalRow,
                 'style' => ['font-weight' => 'bold', 'color' => 'rgb(150, 50, 50)'],
+            ]);
+        }
+
+        // Grand total at the end (matches UI total across all vendors).
+        if (! empty($grand)) {
+            $agingKeys = array_keys(array_filter($grand, fn ($k) => str_starts_with((string) $k, 'period_'), ARRAY_FILTER_USE_KEY));
+            sort($agingKeys);
+
+            $grandRow = ['Total', '', number_format(($grand['total_base'] ?? 0) / 100, 2, ',', '.')];
+            foreach ($agingKeys as $key) {
+                $grandRow[] = number_format(($grand[$key] ?? 0) / 100, 2, ',', '.');
+            }
+
+            $rows->push([
+                'data' => $grandRow,
+                'style' => ['font-weight' => 'bold', 'color' => 'rgb(6, 6, 174)'],
             ]);
         }
 
