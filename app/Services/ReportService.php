@@ -1203,9 +1203,9 @@ class ReportService
             $vendor = $bill->vendor;
             $projectName = $bill->project?->name ?? null;
 
-            $billAmount = $bill->amount ?? 0;
-            $primeOwing = $bill->total ?? 0;
-            $taxOwing = $bill->tax_amount ?? 0;
+            $billAmount = $bill->total ?? 0;
+            $primeOwing = $bill->amount_due ?? 0;
+            $taxOwing = $bill->tax_total ?? 0;
 
             $dueDate = optional($bill->due_date)->format('d M Y');
             $billDate = optional($bill->date)->format('d M Y');
