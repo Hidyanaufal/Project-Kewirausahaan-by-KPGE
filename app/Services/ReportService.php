@@ -682,7 +682,7 @@ class ReportService
 
     private function buildOperatingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [
                 AccountType::OperatingRevenue,
                 AccountType::UncategorizedRevenue,
@@ -697,7 +697,7 @@ class ReportService
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $adjustments = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $adjustments = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [
                 AccountType::ContraAsset,
                 AccountType::CurrentLiability,
@@ -711,12 +711,12 @@ class ReportService
 
     private function buildInvestingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [AccountType::NonCurrentAsset])
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $adjustments = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $adjustments = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->whereIn('accounts.type', [AccountType::NonOperatingRevenue])
             ->orderByRaw('LENGTH(code), code')
             ->get();
@@ -726,7 +726,7 @@ class ReportService
 
     private function buildFinancingActivities(string $startDate, string $endDate, $projectId = null, $companyId = null): AccountCategoryDTO
     {
-        $accounts = $this->accountService->getCashFlowAccountBalances($startDate, $endDate, [], $projectId, $companyId)
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)
             ->where(function (Builder $query) {
                 $query->whereIn('accounts.type', [
                     AccountType::Equity,
@@ -756,10 +756,6 @@ class ReportService
                 $accountCategory = $entry->type->getCategory();
                 $accountBalances = $this->calculateAccountBalances($entry);
                 $netCashFlow = $accountBalances['net_movement'] ?? 0;
-
-                if ($entry->subtype->inverse_cash_flow) {
-                    $netCashFlow *= -1;
-                }
 
                 // Accumulate totals
                 $sectionTotal += $netCashFlow;
@@ -1135,16 +1131,17 @@ class ReportService
 
         $documents = $entityType === DocumentEntityType::Client
             ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)
-                ->with(['client:id,name'])
+                ->with(['client:id,name', 'project:id,name'])
                 ->get()
             : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
-                ->with(['vendor:id,name'])
+                ->with(['vendor:id,name', 'project:id,name'])
                 ->get();
 
         $rows = [];
 
         foreach ($documents as $doc) {
             $entity = $entityType === DocumentEntityType::Client ? $doc->client : $doc->vendor;
+            $projectName = $doc->project?->name ?? null;
 
             $invoiceAmount = $doc->total ?? 0;
             $primeOwing = $doc->amount_due ?? 0;
@@ -1162,6 +1159,7 @@ class ReportService
             $rows[] = [
                 'customer_name' => $entity->name ?? '-',
                 'invoice_number' => $doc->code ?? '-',
+                'project_name' => $projectName,
                 'invoice_date' => $invoiceDate,
                 'due_date' => $dueDate,
                 'invoice_amount' => $invoiceAmount,
@@ -1175,6 +1173,7 @@ class ReportService
             'columns' => [
                 'Invoice',
                 'No. Invoice',
+                'Project',
                 'Date',
                 'Due Date',
                 'Invoice Amount',
@@ -1195,13 +1194,14 @@ class ReportService
 
         // Ambil semua vendor bills yang belum dibayar hingga tanggal tertentu
         $bills = $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
-            ->with(['vendor:id,name'])
+            ->with(['vendor:id,name', 'project:id,name'])
             ->get();
 
         $rows = [];
 
         foreach ($bills as $bill) {
             $vendor = $bill->vendor;
+            $projectName = $bill->project?->name ?? null;
 
             $billAmount = $bill->amount ?? 0;
             $primeOwing = $bill->total ?? 0;
@@ -1219,6 +1219,7 @@ class ReportService
             $rows[] = [
                 'vendor_name' => $vendor->name ?? '-',
                 'bill_number' => $bill->code ?? '-',
+                'project_name' => $projectName,
                 'bill_date' => $billDate,
                 'due_date' => $dueDate,
                 'bill_amount' => $billAmount,
@@ -1232,6 +1233,7 @@ class ReportService
             'columns' => [
                 'Vendor',
                 'No. Bill',
+                'Project',
                 'Date',
                 'Due Date',
                 'Bill Amount',

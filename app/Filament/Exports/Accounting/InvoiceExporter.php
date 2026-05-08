@@ -2,12 +2,12 @@
 
 namespace App\Filament\Exports\Accounting;
 
+use App\Filament\Exports\BaseExporter;
 use App\Models\Accounting\Invoice;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
 
-class InvoiceExporter extends Exporter
+class InvoiceExporter extends BaseExporter
 {
     protected static ?string $model = Invoice::class;
 
@@ -26,20 +26,20 @@ class InvoiceExporter extends Exporter
             ExportColumn::make('status')
                 ->enum(),
             ExportColumn::make('total')
-                ->money(),
+                ->state(fn (Invoice $record) => self::excelMoney($record->total)),
             ExportColumn::make('amount_paid')
-                ->money(),
+                ->state(fn (Invoice $record) => self::excelMoney($record->amount_paid)),
             ExportColumn::make('amount_due')
-                ->money(),
+                ->state(fn (Invoice $record) => self::excelMoney($record->amount_due)),
             ExportColumn::make('profit_total')
                 ->label('Profit')
-                ->money(),
+                ->state(fn (Invoice $record) => self::excelMoney($record->profit_total)),
             ExportColumn::make('subtotal')
-                ->money(),
+                ->state(fn (Invoice $record) => self::excelMoney($record->subtotal)),
             ExportColumn::make('tax_total')
-                ->money(),
+                ->state(fn (Invoice $record) => self::excelMoney($record->tax_total)),
             ExportColumn::make('discount_total')
-                ->money(),
+                ->state(fn (Invoice $record) => self::excelMoney($record->discount_total)),
             ExportColumn::make('discount_rate'),
             ExportColumn::make('currency_code'),
             ExportColumn::make('order_number'),

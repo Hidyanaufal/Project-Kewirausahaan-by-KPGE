@@ -15,6 +15,7 @@ use App\Enums\Accounting\JournalEntryType;
 use App\Enums\Accounting\TransactionType;
 use App\Filament\Company\Resources\Sales\InvoiceResource;
 use App\Helpers\AuthHelper;
+use App\Jobs\SendInvoiceApprovedNotification;
 use App\Models\Addons\Project;
 use App\Models\Banking\BankAccount;
 use App\Models\Common\Client;
@@ -154,9 +155,10 @@ class Invoice extends Document
             if ($record->isDirty('status')) {
                 if ($record->status === InvoiceStatus::Paid) {
                     // Membaca akun coa default
-                    $accountWapu            = Account::getAccountsWapu();
-                    $accountPPn             = Account::getAccountsPPn();
-                    $accountPPh23           = Account::getAccountsPPh23();
+                        $accountWapu            = Account::getAccountsWapu($record->company_id);
+                        $accountPPn             = Account::getAccountsPPn($record->company_id);
+                        $accountPPh23           = Account::getAccountsPPh23($record->company_id);
+                        $receivableAccount     = Account::getAccountsReceivableAccount($record->company_id);
 
                     // Membaca data jurnal ketika approval invoice
                     $latestTransaction = Transaction::query()
@@ -179,11 +181,40 @@ class Invoice extends Document
                             'transaction_id' => $approvalTransaction->id,
                         ])
                         ->get();
+
                     $journalAmountTotal = 0;
-                    $journalReceivable = $approvalJournalEntries
-                        ->where('account_id', Account::getAccountsReceivableAccount()->id)
-                        ->first();
-                    $totalReceivable = $journalReceivable->amount ?? 0;
+                    $pph23CreatedAmountTotal = 0;
+
+                        $journalReceivable = $approvalJournalEntries
+                            ->where('account_id', $receivableAccount->id)
+                            ->first();
+                        $totalReceivable = $journalReceivable->amount ?? 0;
+
+                        // Hitung sisa receivable (remaining) berdasarkan akumulasi net receivable dari payment-pembayaran sebelumnya.
+                        // Tujuannya agar journal pada partial payment ke-2 tidak lagi "di-overwrite" menjadi full invoice.
+                        $previousPaymentTransactionIds = Transaction::query()
+                            ->where([
+                                'transactionable_type' => Invoice::class,
+                                'transactionable_id'   => $record->id,
+                                'is_payment'           => true,
+                            ])
+                            ->where('id', '<', $latestTransaction->id)
+                            ->pluck('id');
+
+                        $previousReceivableCredits = JournalEntry::query()
+                            ->whereIn('transaction_id', $previousPaymentTransactionIds)
+                            ->where('account_id', $receivableAccount->id)
+                            ->where('type', JournalEntryType::Credit)
+                            ->sum('amount');
+
+                        $previousReceivableDebits = JournalEntry::query()
+                            ->whereIn('transaction_id', $previousPaymentTransactionIds)
+                            ->where('account_id', $receivableAccount->id)
+                            ->where('type', JournalEntryType::Debit)
+                            ->sum('amount');
+
+                        $previousNetReceivable = (int) $previousReceivableCredits - (int) $previousReceivableDebits;
+                        $remainingReceivable = (int) $totalReceivable - $previousNetReceivable;
 
                     foreach ($approvalJournalEntries as $journal) {
                         // PPN WAPU
@@ -219,12 +250,19 @@ class Invoice extends Document
                                 'amount'         => $journal->amount * 0.02,
                                 'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
                             ]);
+                            $pph23CreatedAmountTotal += $journalEntry->amount;
                             $journalAmountTotal += $journalEntry->amount;
                         }
                     }
 
+                    // Di hook merge jurnal, nilai PPh23 ditetapkan memakai nilai final `$record->pph23` (bukan akumulasi `journal->amount * 0.02`).
+                    // Agar perhitungan kas/receivable tetap balance, selaraskan `journalAmountTotal` sebelum menghitung `$bankAmount`.
+                    if ($record->pph23) {
+                        $journalAmountTotal = $journalAmountTotal - $pph23CreatedAmountTotal + (int) $record->pph23;
+                    }
+
                     // Penyesuaian uang yang diterima oleh kas
-                    $bankAmount = $totalReceivable - $journalAmountTotal;
+                        $bankAmount = $remainingReceivable - $journalAmountTotal;
 
                     JournalEntry::query()
                         ->where([
@@ -253,7 +291,7 @@ class Invoice extends Document
                         'transaction_id' => $latestTransaction->id,
                         'account_id'     => $journalReceivable->account_id,
                         'type'           => JournalEntryType::Credit,
-                        'amount'         => $record->total,
+                            'amount'         => $remainingReceivable,
                         'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
                     ]);
                 }
@@ -265,9 +303,9 @@ class Invoice extends Document
              */
             DB::transaction(function () use ($record) {
                 // Definisikan akun pajak
-                $pph23Account = Account::getAccountsPPh23();
-                $ppnAccount   = Account::getAccountsPPn();
-                $wapuAccount  = Account::getAccountsWapu();
+                $pph23Account = Account::getAccountsPPh23($record->company_id);
+                $ppnAccount   = Account::getAccountsPPn($record->company_id);
+                $wapuAccount  = Account::getAccountsWapu($record->company_id);
 
                 $taxAccounts = [
                     $pph23Account->id,
@@ -754,6 +792,8 @@ class Invoice extends Document
         $this->update([
             'finalized_at' => $finalizedAt,
         ]);
+
+        SendInvoiceApprovedNotification::dispatch($this->id);
     }
 
     public function createApprovalTransaction(): void
@@ -1213,9 +1253,22 @@ class Invoice extends Document
                 return $record->status !== InvoiceStatus::Cancelled;
             })
             ->requiresConfirmation()
-            ->modalHeading('Cancel Invoice')
-            ->modalDescription('This will cancel the current invoice and create a new draft invoice with the same invoice number. The original invoice will be marked as Cancelled. Are you sure you want to proceed?')
-            ->modalSubmitActionLabel('Cancel Invoice')
+            ->modalHeading(function (self $record) {
+                return $record->hasPayments()
+                    ? 'Peringatan: Invoice sudah ada pembayaran'
+                    : 'Cancel Invoice';
+            })
+            ->modalDescription(function (self $record) {
+                if ($record->hasPayments()) {
+                    return new HtmlString(
+                        "<p class='text-sm mb-2'>Invoice ini sudah memiliki pembayaran. Membatalkan invoice dapat mempengaruhi rekonsiliasi dan laporan.</p>" .
+                        "<p class='text-sm'>Apakah Anda yakin ingin membatalkan invoice ini?</p>"
+                    );
+                }
+
+                return 'Invoice akan dibatalkan (status diubah menjadi Cancelled). Apakah Anda yakin ingin melanjutkan?';
+            })
+            ->modalSubmitActionLabel('Batalkan Invoice')
             ->databaseTransaction()
             ->successNotificationTitle('Invoice cancelled successfully')
             ->failureNotificationTitle('Failed to cancel invoice')
@@ -1229,39 +1282,6 @@ class Invoice extends Document
                     $action->cancel();
                     return;
                 }
-
-                // Store original invoice number and ID for redirect
-                $originalInvoiceNumber = $record->invoice_number;
-                $originalId = $record->id;
-
-                // Create replica with same invoice number
-                $replica = $record->replicate([
-                    'status',
-                    'amount_paid',
-                    'amount_due',
-                    'created_by',
-                    'updated_by',
-                    'created_at',
-                    'updated_at',
-                    'approved_at',
-                    'paid_at',
-                    'last_sent_at',
-                    'last_viewed_at',
-                ]);
-
-                // Set replica properties
-                $replica->status = InvoiceStatus::Draft;
-                $replica->invoice_number = $originalInvoiceNumber; // Same invoice number
-                $replica->date = company_today();
-                $replica->due_date = company_today()->addDays($record->company->defaultInvoice->payment_terms->getDays());
-                $replica->amount_paid = 0;
-                // amount_due is a generated column, will be calculated automatically by the database
-                $replica->save();
-
-                // Replicate line items
-                $record->replicateLineItems($replica);
-
-                // Mark original invoice as Cancelled
                 $record->update([
                     'status' => InvoiceStatus::Cancelled,
                 ]);
@@ -1269,18 +1289,7 @@ class Invoice extends Document
                 $action->success();
             })
             ->successRedirectUrl(function (self $record) {
-                // Find the newly created replica invoice (Draft status with same invoice number, different ID)
-                $replica = self::where('invoice_number', $record->invoice_number)
-                    ->where('status', InvoiceStatus::Draft)
-                    ->where('id', '!=', $record->id)
-                    ->latest('id')
-                    ->first();
-
-                if ($replica) {
-                    return InvoiceResource::getUrl('edit', ['record' => $replica]);
-                }
-
-                return InvoiceResource::getUrl('index');
+                return InvoiceResource::getUrl('view', ['record' => $record]);
             });
     }
 

@@ -2,12 +2,12 @@
 
 namespace App\Filament\Exports\Accounting;
 
+use App\Filament\Exports\BaseExporter;
 use App\Models\Accounting\Transaction;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
 
-class TransactionExporter extends Exporter
+class TransactionExporter extends BaseExporter
 {
     protected static ?string $model = Transaction::class;
 
@@ -18,7 +18,7 @@ class TransactionExporter extends Exporter
                 ->date(),
             ExportColumn::make('description'),
             ExportColumn::make('amount')
-                ->money(),
+                ->state(fn (Transaction $record) => self::excelMoney($record->amount)),
             ExportColumn::make('account.name')
                 ->label('Category'),
             ExportColumn::make('bankAccount.account.name')

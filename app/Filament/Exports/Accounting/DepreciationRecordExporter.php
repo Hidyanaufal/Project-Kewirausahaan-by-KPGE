@@ -2,12 +2,12 @@
 
 namespace App\Filament\Exports\Accounting;
 
+use App\Filament\Exports\BaseExporter;
 use App\Models\Addons\DepreciationRecord;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
 
-class DepreciationRecordExporter extends Exporter
+class DepreciationRecordExporter extends BaseExporter
 {
     protected static ?string $model = DepreciationRecord::class;
 
@@ -20,13 +20,13 @@ class DepreciationRecordExporter extends Exporter
                 ->label('Fiscal Year'),
             ExportColumn::make('opening_fiscal_book_value')
                 ->label('Opening Book Value')
-                ->money(),
+                ->state(fn (DepreciationRecord $record) => self::excelMoney($record->opening_fiscal_book_value)),
             ExportColumn::make('depreciation_expense')
                 ->label('Depreciation Expense')
-                ->money(),
+                ->state(fn (DepreciationRecord $record) => self::excelMoney($record->depreciation_expense)),
             ExportColumn::make('closing_fiscal_book_value')
                 ->label('Closing Book Value')
-                ->money(),
+                ->state(fn (DepreciationRecord $record) => self::excelMoney($record->closing_fiscal_book_value)),
             ExportColumn::make('fiscal_method')
                 ->label('Fiscal Method'),
             ExportColumn::make('company.name')

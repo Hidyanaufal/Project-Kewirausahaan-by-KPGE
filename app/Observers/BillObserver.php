@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Enums\Accounting\BillStatus;
+use App\Jobs\SendBillSubmissionNotification;
 use App\Models\Accounting\Bill;
 use App\Models\Accounting\DocumentLineItem;
 use App\Models\Accounting\Transaction;
@@ -12,7 +13,9 @@ class BillObserver
 {
     public function created(Bill $bill): void
     {
-        // $bill->createInitialTransaction();
+        if ($bill->status === BillStatus::Draft) {
+            SendBillSubmissionNotification::dispatch($bill->id);
+        }
     }
 
     public function saving(Bill $bill): void

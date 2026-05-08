@@ -27,7 +27,8 @@
     <x-report-summary-section
         :report-loaded="$this->reportLoaded"
         :summary-data="$this->report?->getSummary()"
-        target-label="Net Assets"
+        target-label="Total Assets"
+        :operators="['=', '+']"
     />
 
     <x-report-tabs :active-tab="$activeTab" :tabs="$this->getTabs()"/>

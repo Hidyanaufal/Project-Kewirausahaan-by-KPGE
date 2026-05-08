@@ -234,7 +234,8 @@ class PaymentsRelationManager extends RelationManager
                         return $this->getOwnerRecord()->canRecordPayment();
                     })
                     ->mountUsing(function (Form $form) {
-                        $record = $this->getOwnerRecord();
+                        /** @var Bill $record */
+                        $record = $this->getOwnerRecord()->fresh();
                         $initialTransaction = $record->initialTransaction;
                         $defaultPph23 = 0;
                         if ($initialTransaction) {
@@ -248,7 +249,7 @@ class PaymentsRelationManager extends RelationManager
                         }
                         $form->fill([
                             'posted_at' => company_today()->toDateString(),
-                            'amount' => $record->actual_total ?? $record->amount_due,
+                            'amount' => max($record->amount_due, 0),
                             'pph23' => $defaultPph23 ?: null,
                             'payment_method'    => PaymentMethod::BankPayment
                         ]);

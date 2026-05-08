@@ -5,6 +5,7 @@ namespace App\Filament\Company\Resources\Accounting;
 use App\Concerns\HasPermissionCheck;
 use App\Filament\Company\Resources\Accounting\JournalEntryResource\Pages;
 use App\Filament\Company\Resources\Accounting\TransactionResource\Pages\ViewTransaction;
+use App\Filament\Exports\Accounting\JournalEntryExporter;
 use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Account;
 use App\Models\Addons\Member;
@@ -35,7 +36,7 @@ class JournalEntryResource extends Resource
         return $table
             ->modifyQueryUsing(function (Builder $query) {
                 $query
-                    ->with(['account', 'transaction'])
+                    ->with(['account', 'transaction', 'transaction.transactionable', 'transaction.member'])
                     ->join('transactions', 'transactions.id', '=', 'journal_entries.transaction_id')
                     ->select('journal_entries.*', 'transactions.transaction_code', 'transactions.posted_at');
             })
@@ -110,6 +111,10 @@ class JournalEntryResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('id', 'desc')
+            ->headerActions([
+                Tables\Actions\ExportAction::make()
+                    ->exporter(JournalEntryExporter::class),
+            ])
             ->groups([
                 Tables\Grouping\Group::make('transaction.transaction_code')
                     ->label('Transaction')

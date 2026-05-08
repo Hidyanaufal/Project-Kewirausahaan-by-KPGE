@@ -2,12 +2,12 @@
 
 namespace App\Filament\Exports\Accounting;
 
+use App\Filament\Exports\BaseExporter;
 use App\Models\Accounting\Estimate;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
 
-class EstimateExporter extends Exporter
+class EstimateExporter extends BaseExporter
 {
     protected static ?string $model = Estimate::class;
 
@@ -23,13 +23,13 @@ class EstimateExporter extends Exporter
             ExportColumn::make('status')
                 ->enum(),
             ExportColumn::make('total')
-                ->money(),
+                ->state(fn (Estimate $record) => self::excelMoney($record->total)),
             ExportColumn::make('subtotal')
-                ->money(),
+                ->state(fn (Estimate $record) => self::excelMoney($record->subtotal)),
             ExportColumn::make('tax_total')
-                ->money(),
+                ->state(fn (Estimate $record) => self::excelMoney($record->tax_total)),
             ExportColumn::make('discount_total')
-                ->money(),
+                ->state(fn (Estimate $record) => self::excelMoney($record->discount_total)),
             ExportColumn::make('discount_rate'),
             ExportColumn::make('currency_code'),
             ExportColumn::make('reference_number'),
