@@ -231,19 +231,19 @@ class RecordPayments extends ListRecords
                             ->extraAlpineAttributes([
                                 'x-on:keydown.enter.prevent' => '$refs.allocate.click()',
                             ])
-                            ->suffixAction(
-                                Forms\Components\Actions\Action::make('allocate')
-                                    ->icon('heroicon-m-calculator')
-                                    ->extraAttributes([
-                                        'x-ref' => 'allocate',
-                                    ])
-                                    ->action(function ($state) {
-                                        $this->allocationAmount = CurrencyConverter::convertToCents($state, 'USD');
-                                        if ($this->allocationAmount && $this->hasSelectedClient()) {
-                                            $this->allocateOldestFirst($this->getTableRecords(), $this->allocationAmount);
-                                        }
-                                    }),
-                            ),
+                            // ->suffixAction(
+                            //     Forms\Components\Actions\Action::make('allocate')
+                            //         ->icon('heroicon-m-calculator')
+                            //         ->extraAttributes([
+                            //             'x-ref' => 'allocate',
+                            //         ])
+                            //         ->action(function ($state) {
+                            //             $this->allocationAmount = CurrencyConverter::convertToCents($state, 'USD');
+                            //             if ($this->allocationAmount && $this->hasSelectedClient()) {
+                            //                 $this->allocateOldestFirst($this->getTableRecords(), $this->allocationAmount);
+                            //             }
+                            //         }),
+                            // ),
                     ]),
             ])->statePath('data');
     }
