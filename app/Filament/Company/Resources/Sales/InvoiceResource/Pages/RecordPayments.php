@@ -203,7 +203,7 @@ class RecordPayments extends ListRecords
             ->schema([
                 Forms\Components\TextInput::make('transaction_code')
                     ->default(fn() => Transaction::getNextDocumentNumber()),
-                Forms\Components\Grid::make(2) // Changed from 3 to 4
+                Forms\Components\Grid::make(3) // Changed from 3 to 4
                     ->schema([
                         Forms\Components\Select::make('bank_account_id')
                             ->label('Account')
@@ -224,13 +224,13 @@ class RecordPayments extends ListRecords
                             ->options(PaymentMethod::class)
                             ->default(PaymentMethod::BankPayment)
                             ->softRequired(),
-                        Forms\Components\TextInput::make('allocation_amount')
-                            ->label('Allocate Payment Amount')
-                            ->default(array_sum($this->paymentAmounts))
-                            ->money($this->getTableFilterState('currency_code')['value'])
-                            ->extraAlpineAttributes([
-                                'x-on:keydown.enter.prevent' => '$refs.allocate.click()',
-                            ])
+                        // Forms\Components\TextInput::make('allocation_amount')
+                        //     ->label('Allocate Payment Amount')
+                        //     ->default(array_sum($this->paymentAmounts))
+                        //     ->money($this->getTableFilterState('currency_code')['value'])
+                        //     ->extraAlpineAttributes([
+                        //         'x-on:keydown.enter.prevent' => '$refs.allocate.click()',
+                        //     ])
                             // ->suffixAction(
                             //     Forms\Components\Actions\Action::make('allocate')
                             //         ->icon('heroicon-m-calculator')
