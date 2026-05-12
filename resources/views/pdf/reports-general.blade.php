@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>{{ $data['company_name'] }} - {{ $data['report_title'] }}</title>
     <style>
-          @font-face {
+        @font-face {
             font-family: 'Roboto';
             src: url('file:///usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Regular.ttf') format('truetype'),
                  url('file:///usr/share/fonts/truetype/roboto/Roboto-Regular.ttf') format('truetype');
@@ -36,7 +36,7 @@
         }
         h1 {
             color: rgb(179, 2, 2);
-            font-size: 20px
+            font-size: 20px;
         }
         h3 {
             font-size: 15px;
@@ -47,17 +47,12 @@
             margin-top: 30px;
         }
         table th, table td {
-            padding: 0;
+            padding: 2px 6px;
+            text-align: left;
         }
         table th {
             border-bottom: 1px solid #000;
-            text-align: center;
             font-weight: normal;
-        }
-        /* Hanya header "Description" (th pertama) rata kiri + padding */
-        table th:first-child {
-            text-align: left;
-            padding-left: 6px;
         }
     </style>
 </head>
@@ -109,7 +104,7 @@
                                     ->map(fn ($v, $k) => "{$k}: {$v}")
                                     ->join('; ');
                             @endphp
-                            <td style="text-align: {{ !$isMarkedString && is_numeric($cell) ? 'right' : 'left' }}">
+                            <td>
                                 <p style="{{ $style }}">
                                     {{ (!$isMarkedString && is_numeric($cell))
                                         ? number_format($cell, 2, ',', '.')
@@ -118,7 +113,6 @@
                             </td>
                         @endforeach
                     </tr>
-
                 @endforeach
             </tbody>
         </table>

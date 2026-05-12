@@ -38,12 +38,12 @@ class ViewBill extends ViewRecord
         $canCreate = BillResource::canCreate();
 
         $editBillAction = Actions\Action::make('editBill')
-            ->label('Edit bill')
-            ->outlined()
-            ->url($createBillWithProjectUrl)
-            ->visible(function () use ($showEdit, $canCreate): bool {
-                return $canCreate && $showEdit;
-            });
+        ->label('Edit bill')
+        ->outlined()
+        ->url(fn (): string => BillResource::getUrl('edit', ['record' => $this->record]))
+        ->visible(function () use ($showEdit, $canCreate): bool {
+            return $canCreate && $showEdit;
+        });
 
         $addBillsAction = Actions\Action::make('addBills')
             ->label('Add bills')
