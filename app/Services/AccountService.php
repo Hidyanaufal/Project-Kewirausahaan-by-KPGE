@@ -668,10 +668,9 @@ class AccountService
                 'bills.project_id',
                 'bills.date',
                 'bills.due_date',
-              
-                
+                // 'bills.amount',
                 'bills.total',
-                'bills.tax_amount',
+                // 'bills.tax_amount',
                 'bills.amount_due',
                 'bills.currency_code',
                 DB::raw("{$datediff} as days_overdue"),
