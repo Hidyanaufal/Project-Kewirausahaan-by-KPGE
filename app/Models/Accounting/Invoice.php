@@ -774,8 +774,6 @@ class Invoice extends Document
                 'approved_at' => $approvedAt,
                 'status' => InvoiceStatus::Unsent,
             ]);
-
-            SendInvoiceApprovedNotification::dispatch($this->id);
         }
     }
 
@@ -794,6 +792,8 @@ class Invoice extends Document
         $this->update([
             'finalized_at' => $finalizedAt,
         ]);
+
+        SendInvoiceApprovedNotification::dispatch($this->id);
     }
 
     public function createApprovalTransaction(): void
