@@ -74,6 +74,14 @@ class Adjustment extends Model
         return $this->morphedByMany(Offering::class, 'adjustmentable', 'adjustmentables');
     }
 
+    public static function findPpnWapuForCompany(int $companyId): ?self
+    {
+        return static::query()
+            ->where('company_id', $companyId)
+            ->where('name', 'PPN WAPU')
+            ->first();
+    }
+
     public function isSalesTax(): bool
     {
         return $this->category->isTax() && $this->type->isSales();
