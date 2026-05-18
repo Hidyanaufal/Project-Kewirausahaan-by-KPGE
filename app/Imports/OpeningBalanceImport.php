@@ -18,7 +18,7 @@ use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 
-class OpeningBalanceImport implements ToModel, WithHeadingRow, WithChunkReading, ShouldQueue
+class OpeningBalanceImport implements ShouldQueue, ToModel, WithChunkReading, WithHeadingRow
 {
     public function __construct(
         protected int $companyId,
@@ -53,6 +53,7 @@ class OpeningBalanceImport implements ToModel, WithHeadingRow, WithChunkReading,
                 'code' => $code,
                 'row' => $row,
             ]);
+
             return null;
         }
 
@@ -64,6 +65,7 @@ class OpeningBalanceImport implements ToModel, WithHeadingRow, WithChunkReading,
                 'company_id' => $this->companyId,
                 'code' => $account->code,
             ]);
+
             return null;
         }
 
@@ -202,7 +204,7 @@ class OpeningBalanceImport implements ToModel, WithHeadingRow, WithChunkReading,
         return $baseStart->subYears($currentYear - $year)->startOfDay();
     }
 
-    private function parseBalanceToMinor(string|float|int $raw, string $currency): int
+    private function parseBalanceToMinor(string | float | int $raw, string $currency): int
     {
         if (is_string($raw)) {
             $raw = trim($raw);
@@ -219,7 +221,7 @@ class OpeningBalanceImport implements ToModel, WithHeadingRow, WithChunkReading,
      */
     private function determineEntryTypes(Account $account, int $diff): array
     {
-        $normalDebit = $account->category->isNormalDebitBalance();
+        $normalDebit = $account->type->isNormalDebitBalance();
 
         if ($normalDebit) {
             $accountType = $diff > 0 ? JournalEntryType::Debit : JournalEntryType::Credit;
@@ -232,4 +234,3 @@ class OpeningBalanceImport implements ToModel, WithHeadingRow, WithChunkReading,
         return [$accountType, $equityType];
     }
 }
-

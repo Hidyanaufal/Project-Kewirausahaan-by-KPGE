@@ -138,13 +138,12 @@ class ReportService
 
     public function calculateAccountBalances(Account $account): array
     {
-        $category = $account->category;
         $balances = [
             'debit_balance' => $account->total_debit ?? 0,
             'credit_balance' => $account->total_credit ?? 0,
         ];
 
-        if ($category->isNormalDebitBalance()) {
+        if ($account->type->isNormalDebitBalance()) {
             $balances['net_movement'] = $balances['debit_balance'] - $balances['credit_balance'];
         } else {
             $balances['net_movement'] = $balances['credit_balance'] - $balances['debit_balance'];
@@ -168,12 +167,12 @@ class ReportService
 
         foreach ($revenueAccounts as $account) {
             $revenueBalances = $this->calculateAccountBalances($account);
-            $revenueTotal += $revenueBalances['net_movement'];
+            $revenueTotal += $revenueBalances['ending_balance'] ?? $revenueBalances['net_movement'];
         }
 
         foreach ($expenseAccounts as $account) {
             $expenseBalances = $this->calculateAccountBalances($account);
-            $expenseTotal += $expenseBalances['net_movement'];
+            $expenseTotal += $expenseBalances['ending_balance'] ?? $expenseBalances['net_movement'];
         }
 
         $retainedEarnings = $revenueTotal - $expenseTotal;
@@ -210,7 +209,7 @@ class ReportService
         $currentBalance = $account->starting_balance;
         foreach ($account->journalEntries as $journalEntry) {
             $signedAmount = $journalEntry->signed_amount;
-            if ($account->category->isNormalDebitBalance()) {
+            if ($account->type->isNormalDebitBalance()) {
                 $currentBalance += $signedAmount;
             } else {
                 $currentBalance -= $signedAmount;
@@ -309,7 +308,7 @@ class ReportService
                     $periodCreditTotal += $amount;
                 }
 
-                if ($account->category->isNormalDebitBalance()) {
+                if ($account->type->isNormalDebitBalance()) {
                     $currentBalance += $signedAmount;
                 } else {
                     $currentBalance -= $signedAmount;
@@ -393,7 +392,7 @@ class ReportService
 
                 $endingBalance = $accountBalances['ending_balance'] ?? $accountBalances['net_movement'];
 
-                $trialBalance = $this->calculateTrialBalances($account->category, $endingBalance);
+                $trialBalance = $this->calculateTrialBalancesForAccount($account, $endingBalance);
 
                 foreach ($trialBalance as $balanceType => $balance) {
                     $categorySummaryBalances[$balanceType] += $balance;
@@ -463,7 +462,17 @@ class ReportService
 
     public function calculateTrialBalances(AccountCategory $category, int $endingBalance): array
     {
-        if ($category->isNormalDebitBalance()) {
+        return $this->calculateTrialBalancesByNormalDebit($category->isNormalDebitBalance(), $endingBalance);
+    }
+
+    public function calculateTrialBalancesForAccount(Account $account, int $endingBalance): array
+    {
+        return $this->calculateTrialBalancesByNormalDebit($account->type->isNormalDebitBalance(), $endingBalance);
+    }
+
+    private function calculateTrialBalancesByNormalDebit(bool $isNormalDebitBalance, int $endingBalance): array
+    {
+        if ($isNormalDebitBalance) {
             if ($endingBalance >= 0) {
                 return ['debit_balance' => $endingBalance, 'credit_balance' => 0];
             }
@@ -822,6 +831,8 @@ class ReportService
             $categoryAccountsByType = [];
             $categoryAccounts = [];
             $subCategoryTotals = [];
+            $retainedEarningsAmount = 0;
+            $retainedEarningsDTO = null;
 
             /** @var Account $account */
             foreach ($accounts as $account) {
@@ -842,13 +853,9 @@ class ReportService
                         endDate: $asOfDateCarbon->toDateString(),
                     );
 
-                    if ($category === AccountCategory::Equity && $account->type === AccountType::Equity) {
-                        $categoryAccounts[] = $accountDTO;
-                    } else {
-                        $accountType = $account->type->getPluralLabel();
-                        $categoryAccountsByType[$accountType][] = $accountDTO;
-                        $subCategoryTotals[$accountType] = ($subCategoryTotals[$accountType] ?? 0) + $endingBalance;
-                    }
+                    $accountType = $account->type->getPluralLabel();
+                    $categoryAccountsByType[$accountType][] = $accountDTO;
+                    $subCategoryTotals[$accountType] = ($subCategoryTotals[$accountType] ?? 0) + $endingBalance;
                 }
             }
 
@@ -865,8 +872,6 @@ class ReportService
                     startDate: $startDateCarbon->toDateString(),
                     endDate: $asOfDateCarbon->toDateString(),
                 );
-
-                $categoryAccounts[] = $retainedEarningsDTO;
             }
 
             $subCategories = [];
@@ -878,6 +883,13 @@ class ReportService
                 $subCategories[$accountType] = new AccountTypeDTO(
                     accounts: $accountsInType,
                     summary: $subCategorySummary
+                );
+            }
+
+            if ($category === AccountCategory::Equity && $retainedEarningsAmount != 0 && $retainedEarningsDTO !== null) {
+                $subCategories['Retained Earnings'] = new AccountTypeDTO(
+                    accounts: [$retainedEarningsDTO],
+                    summary: $this->formatBalances(['ending_balance' => $retainedEarningsAmount]),
                 );
             }
 
