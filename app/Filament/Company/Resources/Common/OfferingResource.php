@@ -27,6 +27,48 @@ class OfferingResource extends Resource
 
     protected static ?string $model = Offering::class;
 
+    /**
+     * @return list<string>
+     */
+    public static function normalizeAttributeChoices(mixed $state): array
+    {
+        if (is_array($state)) {
+            return $state;
+        }
+
+        if ($state === true) {
+            return ['Sellable', 'Purchasable'];
+        }
+
+        return [];
+    }
+
+    public static function hasSellableAttribute(mixed $state): bool
+    {
+        return in_array('Sellable', static::normalizeAttributeChoices($state), true);
+    }
+
+    public static function hasPurchasableAttribute(mixed $state): bool
+    {
+        return in_array('Purchasable', static::normalizeAttributeChoices($state), true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function applyAttributeChoices(array $data): array
+    {
+        $choices = array_flip(static::normalizeAttributeChoices($data['attributes'] ?? []));
+
+        $data['sellable'] = isset($choices['Sellable']);
+        $data['purchasable'] = isset($choices['Purchasable']);
+
+        unset($data['attributes']);
+
+        return $data;
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -91,7 +133,11 @@ class OfferingResource extends Resource
                     ->hiddenLabel()
                     ->required()
                     ->live()
-                    ->bulkToggleable()
+                    ->afterStateUpdated(function (Forms\Set $set, mixed $state): void {
+                        if (! is_array($state)) {
+                            $set('attributes', static::normalizeAttributeChoices($state));
+                        }
+                    })
                     ->validationMessages([
                         'required' => 'The offering must be either sellable or purchasable.',
                     ]),
@@ -122,7 +168,7 @@ class OfferingResource extends Resource
                     ->multiple(),
             ])
             ->columns(1)
-            ->visible(static fn(Forms\Get $get) => in_array('Sellable', $get('attributes') ?? []));
+            ->visible(static fn(Forms\Get $get) => static::hasSellableAttribute($get('attributes')));
     }
 
     public static function getPurchasableSection(): Forms\Components\Section
@@ -149,7 +195,7 @@ class OfferingResource extends Resource
                     ->multiple(),
             ])
             ->columns(1)
-            ->visible(static fn(Forms\Get $get) => in_array('Purchasable', $get('attributes') ?? []));
+            ->visible(static fn(Forms\Get $get) => static::hasPurchasableAttribute($get('attributes')));
     }
 
     public static function table(Table $table): Table
