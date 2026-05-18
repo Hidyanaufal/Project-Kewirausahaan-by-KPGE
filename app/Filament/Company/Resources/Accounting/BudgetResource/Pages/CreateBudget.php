@@ -250,8 +250,8 @@ class CreateBudget extends CreateRecord
 
                                         if ($balance && $hasActuals) {
                                             // Calculate net movement
-                                            $netMovement = Accounting::calculateNetMovementByCategory(
-                                                $balance->category,
+                                            $netMovement = Accounting::calculateNetMovementByAccountType(
+                                                $balance->type,
                                                 $balance->total_debit ?? 0,
                                                 $balance->total_credit ?? 0
                                             );

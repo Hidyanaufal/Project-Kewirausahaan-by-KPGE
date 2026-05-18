@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\Accounting\AccountCategory;
+use App\Enums\Accounting\AccountType;
 use App\Enums\Accounting\InvoiceStatus;
 use App\Helpers\AuthHelper;
 use App\Models\Accounting\Account;
@@ -56,8 +57,8 @@ class AccountService
     {
         $query = $this->getAccountBalances($startDate, $endDate, [$account->id], $projectId, $companyId)->first();
 
-        $netMovement = $this->calculateNetMovementByCategory(
-            $account->category,
+        $netMovement = $this->calculateNetMovementByAccountType(
+            $account->type,
             $query->total_debit ?? 0,
             $query->total_credit ?? 0
         );
@@ -88,8 +89,8 @@ class AccountService
     {
         $query = $this->getAccountBalances($startDate, $endDate, [$account->id], $projectId, $companyId)->first();
 
-        $netMovement = $this->calculateNetMovementByCategory(
-            $account->category,
+        $netMovement = $this->calculateNetMovementByAccountType(
+            $account->type,
             $query->total_debit ?? 0,
             $query->total_credit ?? 0
         );
@@ -112,6 +113,13 @@ class AccountService
         }
     }
 
+    public function calculateNetMovementByAccountType(AccountType $type, int $debitBalance, int $creditBalance): int
+    {
+        return $type->isNormalDebitBalance()
+            ? $debitBalance - $creditBalance
+            : $creditBalance - $debitBalance;
+    }
+
     /**
      * @param  int|null  $projectId
      * @param  int|null  $companyId
@@ -122,8 +130,8 @@ class AccountService
 
         $needStartingBalances = $account->category->isReal();
 
-        $netMovement = $this->calculateNetMovementByCategory(
-            $account->category,
+        $netMovement = $this->calculateNetMovementByAccountType(
+            $account->type,
             $query->total_debit ?? 0,
             $query->total_credit ?? 0
         );
@@ -282,6 +290,8 @@ class AccountService
     ): Builder {
         $accountIds = array_map('intval', $accountIds);
 
+        $debitNormalTypeSqlList = implode("','", AccountType::debitNormalBalanceTypeValues());
+
         $query = Account::query()
             ->select([
                 'accounts.id',
@@ -296,7 +306,7 @@ class AccountService
                 DB::raw("
                 COALESCE(
                     CASE
-                        WHEN accounts.category IN ('asset', 'expense') THEN
+                        WHEN accounts.type IN ('{$debitNormalTypeSqlList}') THEN
                             SUM(CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END) -
                             SUM(CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END)
                         ELSE

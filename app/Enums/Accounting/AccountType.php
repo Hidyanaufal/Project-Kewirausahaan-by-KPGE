@@ -140,4 +140,17 @@ enum AccountType: string implements HasLabel
             self::ContraExpense,
         ], true);
     }
+
+    /**
+     * {@see self::isNormalDebitBalance()} as raw enum values for SQL (e.g. starting_balance CASE IN (...)).
+     *
+     * @return list<string>
+     */
+    public static function debitNormalBalanceTypeValues(): array
+    {
+        return array_values(array_map(
+            static fn (self $t): string => $t->value,
+            array_filter(self::cases(), static fn (self $t): bool => $t->isNormalDebitBalance())
+        ));
+    }
 }
