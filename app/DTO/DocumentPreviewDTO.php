@@ -34,6 +34,9 @@ readonly class DocumentPreviewDTO extends DocumentDTO
             currencyCode: CurrencyAccessor::getDefaultCurrency(),
             subtotal: self::formatToMoney(100000, null), // $1000.00
             discount: self::formatToMoney(10000, null), // $100.00
+            discountRateLabel: '10%',
+            profitPercentage: 10,
+            profit: self::formatToMoney(50000, null),
             tax: self::formatToMoney(5000, null), // $50.00
             total: self::formatToMoney(95000, null), // $950.00
             amountDue: $amountDue, // $950.00 or null for estimates
@@ -54,8 +57,6 @@ readonly class DocumentPreviewDTO extends DocumentDTO
             accountNumber: $settings->account_number,
             beneficiaryName: $settings->beneficiary_name,
             beneficiaryTitle: $settings->beneficiary_title,
-            profit: self::formatToMoney(50000, null),
-            profitPercentage: 10,
             contactName: 'John Doe',
             recipientDetails: 'Manager (Preview)',
         );
