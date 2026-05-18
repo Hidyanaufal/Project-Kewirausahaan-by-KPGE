@@ -7,6 +7,7 @@ use App\Enums\Accounting\JournalEntryType;
 use App\Enums\Accounting\PaymentMethod;
 use App\Models\AccountDefault;
 use App\Models\Accounting\Account;
+use App\Models\Accounting\Adjustment;
 use App\Models\Accounting\Invoice;
 use App\Models\Accounting\AccountSubtype;
 use App\Models\Accounting\JournalEntry;
@@ -231,4 +232,45 @@ test('partial payment ke-2 di-journal incremental (cash & receivable tidak jadi 
     );
 
     expect($payment2CashDebitDefault)->toBe($expectedCashDebitDefault);
+});
+
+it('does not treat invoice above 10jt as WAPU when PPN WAPU adjustment is not configured', function () {
+    $subtotal = 10_000_000_000;
+    $taxTotal = 1_100_000_000;
+
+    $invoice = new Invoice([
+        'company_id' => $this->testCompany->id,
+        'subtotal' => $subtotal,
+        'tax_total' => $taxTotal,
+        'profit_total' => 0,
+        'discount_total' => 0,
+        'total' => $subtotal + $taxTotal,
+    ]);
+
+    expect($invoice->exceedsWapuThreshold())->toBeTrue()
+        ->and($invoice->isWapu())->toBeFalse()
+        ->and(Adjustment::findPpnWapuForCompany($this->testCompany->id))->toBeNull();
+});
+
+it('treats invoice above 10jt as WAPU when PPN WAPU adjustment is configured', function () {
+    Adjustment::factory()->salesTax('PPN WAPU')->create([
+        'company_id' => $this->testCompany->id,
+        'name' => 'PPN WAPU',
+    ]);
+
+    $subtotal = 10_000_000_000;
+    $taxTotal = 1_100_000_000;
+
+    $invoice = new Invoice([
+        'company_id' => $this->testCompany->id,
+        'subtotal' => $subtotal,
+        'tax_total' => $taxTotal,
+        'profit_total' => 0,
+        'discount_total' => 0,
+        'total' => $subtotal + $taxTotal,
+    ]);
+
+    expect($invoice->exceedsWapuThreshold())->toBeTrue()
+        ->and($invoice->isWapu())->toBeTrue()
+        ->and(Adjustment::findPpnWapuForCompany($this->testCompany->id))->not->toBeNull();
 });

@@ -434,9 +434,15 @@ class Invoice extends Document
         });
     }
 
+    public function exceedsWapuThreshold(): bool
+    {
+        return $this->total > 1_000_000_000; // Greater than 10jt
+    }
+
     public function isWapu(): bool
     {
-        return $this->total > 1000000000; // Greater than 10jt
+        return $this->exceedsWapuThreshold()
+            && Adjustment::findPpnWapuForCompany($this->company_id) !== null;
     }
 
     public function client()

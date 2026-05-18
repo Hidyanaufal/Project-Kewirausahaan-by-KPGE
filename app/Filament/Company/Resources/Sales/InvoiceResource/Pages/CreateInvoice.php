@@ -88,19 +88,13 @@ class CreateInvoice extends CreateRecord
             $totals = $this->updateDocumentTotals($record, $data);
             $record->updateQuietly($totals);
 
-            // Greater than 10jt switch using PPn WAPU
-            if ($record->isWapu()) {
-                $wapuAdjusment = Adjustment::where([
-                    'name' => 'PPN WAPU'
-                ])->first();
+            // Greater than 10jt: apply PPN WAPU only when configured for this company
+            $wapuAdjustment = Adjustment::findPpnWapuForCompany($company->id);
 
-                if (! $wapuAdjusment) {
-                    throw new \Exception('This transaction exceeds 10,000,000. Please configure PPN WAPU in the adjustment settings before proceeding.');
-                }
-
+            if ($record->exceedsWapuThreshold() && $wapuAdjustment) {
                 $items = [];
                 foreach ($data['lineItems'] as $item) {
-                    $item['salesTaxes'] = [$wapuAdjusment->id];
+                    $item['salesTaxes'] = [$wapuAdjustment->id];
                     $items[] = $item;
                 }
 
