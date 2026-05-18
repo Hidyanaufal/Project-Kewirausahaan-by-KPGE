@@ -59,7 +59,7 @@ abstract class BaseAgingReportPage extends BaseReportPage
                 ->alignment(Alignment::Right),
         ];
 
-        for ($i = 1; $i < $numberOfPeriods; $i++) {
+        for ($i = 1; $i <= $numberOfPeriods; $i++) {
             $start = ($i - 1) * $daysPerPeriod + 1;
             $end = $i * $daysPerPeriod;
 
