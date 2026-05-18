@@ -60,7 +60,7 @@ class OpeningBalanceImport implements ShouldQueue, ToModel, WithChunkReading, Wi
         // Jangan "replace" / post saldo untuk account parent supaya tidak double dengan saldo anak-anaknya.
         // Parent detection dibuat lebih robust dari sekadar relasi `children()`, karena di beberapa COA,
         // struktur parent-child bisa terdeteksi via pola kode (mis. 1100.02, 1100-02, atau prefix numerik).
-        if ($this->isParentAccount($account)) {
+        if ($account->isParentAccount()) {
             Log::info('OpeningBalanceImport - skipped parent account balance to prevent double counting', [
                 'company_id' => $this->companyId,
                 'code' => $account->code,
@@ -138,38 +138,6 @@ class OpeningBalanceImport implements ShouldQueue, ToModel, WithChunkReading, Wi
         });
 
         return $account;
-    }
-
-    private function isParentAccount(Account $account): bool
-    {
-        // Fast path: relasi parent-child sudah terset di DB.
-        if ($account->children()->exists()) {
-            return true;
-        }
-
-        $code = trim((string) $account->code);
-        if ($code === '') {
-            return false;
-        }
-
-        $query = Account::query()
-            ->where('company_id', $this->companyId)
-            ->whereKeyNot($account->getKey())
-            ->where(function ($q) use ($code) {
-                // Pola umum COA: parent.child (1100.02) atau parent-child (1100-02)
-                $q->where('code', 'like', $code . '.%')
-                    ->orWhere('code', 'like', $code . '-%');
-
-                // COA numeric tanpa delimiter: treat sebagai parent jika ada prefix numerik yang lebih panjang.
-                if (ctype_digit($code) && strlen($code) >= 3) {
-                    $q->orWhere(function ($qq) use ($code) {
-                        $qq->where('code', 'like', $code . '%')
-                            ->whereRaw('LENGTH(code) > ?', [strlen($code)]);
-                    });
-                }
-            });
-
-        return $query->exists();
     }
 
     private function extractAccountCode(array $row): ?string

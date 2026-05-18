@@ -818,6 +818,10 @@ class ReportService
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
+        $excludedFromTotals = $companyId !== null
+            ? Account::balanceSheetExcludedAccountIdsForCompany((int) $companyId)->flip()
+            : collect();
+
         $accountCategories = [];
         $reportTotalBalances = [
             'assets' => 0,
@@ -840,8 +844,6 @@ class ReportService
                     $accountBalances = $this->calculateAccountBalances($account);
                     $endingBalance = $accountBalances['ending_balance'] ?? $accountBalances['net_movement'];
 
-                    $categorySummaryBalances['ending_balance'] += $endingBalance;
-
                     $formattedAccountBalances = $this->formatBalances($accountBalances);
 
                     $accountDTO = new AccountDTO(
@@ -855,7 +857,11 @@ class ReportService
 
                     $accountType = $account->type->getPluralLabel();
                     $categoryAccountsByType[$accountType][] = $accountDTO;
-                    $subCategoryTotals[$accountType] = ($subCategoryTotals[$accountType] ?? 0) + $endingBalance;
+
+                    if (! $excludedFromTotals->has($account->id)) {
+                        $categorySummaryBalances['ending_balance'] += $endingBalance;
+                        $subCategoryTotals[$accountType] = ($subCategoryTotals[$accountType] ?? 0) + $endingBalance;
+                    }
                 }
             }
 

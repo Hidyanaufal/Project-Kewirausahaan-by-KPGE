@@ -10,6 +10,7 @@ use App\Enums\Accounting\AccountType;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
 use App\Filament\Forms\Components\DateRangeSelect;
 use App\Helpers\AuthHelper;
+use App\Models\Accounting\Account;
 use App\Models\Company;
 use App\Services\AccountService;
 use App\Services\ExportService;
@@ -142,15 +143,14 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             $balanceMap[$account->id] = $endingBalance;
         }
 
-        // Hitung Net Income (Revenue - Expense) untuk Retained Earnings
-        $netIncome = 0;
-        foreach ($accountsWithBalance as $account) {
-            if ($account->category === AccountCategory::Revenue) {
-                $netIncome += $balanceMap[$account->id] ?? 0;
-            } elseif ($account->category === AccountCategory::Expense) {
-                $netIncome -= $balanceMap[$account->id] ?? 0;
-            }
-        }
+        $netIncome = $this->reportService->calculateRetainedEarnings(
+            $startDate,
+            $asOfDate,
+            null,
+            $companyId
+        )->getAmount();
+
+        $excludedFromTotals = Account::balanceSheetExcludedAccountIdsForCompany($companyId)->flip();
         $now = Carbon::now()->format('Y-m-d_H-i-s');
         $startFormatted = Carbon::parse($this->getFilterState('asOfDate'))->format('d M Y');
 
@@ -182,7 +182,7 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
 
         $rows = collect();
 
-        $accounts = \App\Models\Accounting\Account::where('company_id', $companyId)
+        $accounts = Account::where('company_id', $companyId)
             ->whereIn('category', [
                 AccountCategory::Asset,
                 AccountCategory::Liability,
@@ -226,9 +226,10 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             }
         };
 
-        $subtreeBalance = function ($account) use (&$subtreeBalance, $balanceMap): float {
-            $balance = $balanceMap[$account->id] ?? 0;
-            return $balance + $account->children->sum(fn($a) => $subtreeBalance($a));
+        $subtreeBalance = function ($account) use (&$subtreeBalance, $balanceMap, $excludedFromTotals): float {
+            $own = $excludedFromTotals->has($account->id) ? 0 : ($balanceMap[$account->id] ?? 0);
+
+            return $own + $account->children->sum(fn ($child) => $subtreeBalance($child));
         };
 
         // Loop kategori dengan urutan eksplisit: ASSET → LIABILITY → EQUITY
@@ -289,8 +290,7 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 }
 
                 // subtotal per tipe (hanya tampilkan jika bukan 0)
-                // subtotal per tipe (hanya tampilkan jika bukan 0)
-                $typeTotal = $parentAccounts->sum(fn($a) => $subtreeBalance($a));
+                $typeTotal = $parentAccounts->sum(fn ($a) => $subtreeBalance($a));
                 if ($typeTotal != 0) {
                     $rows->push([
                         'data' => [
