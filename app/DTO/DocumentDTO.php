@@ -31,7 +31,7 @@ readonly class DocumentDTO
         public string $currencyCode,
         public ?string $subtotal,
         public ?string $discount,
-        public ?string $discountRateLabel = null,
+        public ?string $discountRateLabel = '',
         public ?string $profitPercentage,
         public ?string $profit,
         public ?string $tax,
