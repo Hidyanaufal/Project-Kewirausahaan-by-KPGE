@@ -933,15 +933,16 @@ class ReportService
             ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)->with(['client:id,name'])->get()->groupBy('client_id')
             : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)->with(['vendor:id,name'])->get()->groupBy('vendor_id');
 
-        $categories = [];
-        $totalAging = [
-            'current' => 0,
-        ];
+        $totalAging = ['current' => 0];
         for ($i = 1; $i <= $numberOfPeriods; $i++) {
             $totalAging["period_{$i}"] = 0;
         }
         $totalAging['over_periods'] = 0;
         $totalAging['total'] = 0;
+
+        // Kumpulkan aging per nama entity — client dengan nama sama di-merge jadi satu baris
+        $agingByName = [];
+        $idByName    = [];
 
         /** @var DocumentCollection<int,Invoice|Bill> $entityDocuments */
         foreach ($documents as $entityId => $entityDocuments) {
@@ -969,20 +970,47 @@ class ReportService
 
             $aging['total'] = array_sum($aging);
 
+            $entity     = $entityDocuments->first()->{$entityType->value};
+            $entityName = $entity->name;
+
+
+            if (! isset($agingByName[$entityName])) {
+                // Pertama kali ketemu nama ini — simpan langsung
+                $agingByName[$entityName] = $aging;
+                $idByName[$entityName]    = $entityId;
+            } else {
+                // Nama sudah ada — jumlahkan setiap bucket (kecuali total)
+                foreach ($aging as $bucket => $amount) {
+                    if ($bucket !== 'total') {
+                        $agingByName[$entityName][$bucket] += $amount;
+                    }
+                }
+                // Hitung ulang total dari bucket yang sudah digabung
+                $tmp = $agingByName[$entityName];
+                unset($tmp['total']);
+                $agingByName[$entityName]['total'] = array_sum($tmp);
+            }
+        }
+
+        // Bangun categories & akumulasi grand total dari data yang sudah di-merge
+        $categories = [];
+
+        foreach ($agingByName as $entityName => $aging) {
             foreach ($aging as $bucket => $amount) {
                 $totalAging[$bucket] += $amount;
             }
 
-            $entity = $entityDocuments->first()->{$entityType->value};
-
             $categories[] = new EntityReportDTO(
-                name: $entity->name,
-                id: $entityId,
+                name: $entityName,
+                id: $idByName[$entityName],
                 aging: $this->formatBalances($aging, AgingBucketDTO::class, false),
             );
         }
 
-        $totalAging['total'] = array_sum($totalAging);
+        // Hitung ulang grand total agar tidak double-count dari field 'total' yang terakumulasi
+        $tmp = $totalAging;
+        unset($tmp['total']);
+        $totalAging['total'] = array_sum($tmp);
 
         return new ReportDTO(
             categories: ['Entities' => $categories],
