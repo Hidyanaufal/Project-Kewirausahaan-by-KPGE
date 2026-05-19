@@ -269,130 +269,150 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
     }
 
     public function __buildReportSummary(): array
-    {
-        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
-        $start = $this->filters['start_date'] ?? now()->startOfYear();
-        $end = $this->filters['end_date'] ?? now()->endOfYear();
+{
+    $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+    $start = $this->filters['start_date'] ?? now()->startOfYear();
+    $end = $this->filters['end_date'] ?? now()->endOfYear();
 
-        $data = [
-            'filename' => 'Statement of Cash Flows Summary.pdf',
-            'company_name' => strtoupper($company->name),
-            'report_title' => 'Statement of Cash Flows Summary (Indirect Method)',
-            'report_period' => 'Period ' . $start->format('F Y') . ' to ' . $end->format('F Y'),
-            'columns' => ['Status', 'Account Type', 'Balance'],
-            'rows' => [],
-        ];
+    $data = [
+        'filename'      => 'Statement of Cash Flows Summary.pdf',
+        'company_name'  => strtoupper($company->name),
+        'report_title'  => 'Statement of Cash Flows Summary (Indirect Method)',
+        'report_period' => 'Period ' . $start->format('F Y') . ' to ' . $end->format('F Y'),
+        'columns'       => ['Account No.', 'Status', 'Account Type', 'Balance'],
+        'rows'          => [],
+    ];
 
-        $rows = collect();
-        $pad = fn(int $level = 0) => ['padding-left' => ($level * 20) . 'px'];
+    $rows = collect();
+    $pad  = fn(int $level = 0) => ['padding-left' => ($level * 20) . 'px'];
 
-        // === Helper untuk ambil total per kategori ===
-        $getAccountSums = function (array $categories) use ($company, $start, $end) {
-            return Account::query()
-                ->where('company_id', $company->id)
-                ->whereIn('category', $categories)
-                ->withSum(['journalEntries as total' => function ($q) use ($start, $end) {
-                    $q->whereBetween('created_at', [$start, $end]);
-                }], 'amount')
-                ->get()
-                ->map(fn($a) => [
-                    'name' => $a->name,
-                    'category' => $a->category->name,
-                    'balance' => $a->total ?? 0,
-                ])
-                ->filter(fn($a) => $a['balance'] != 0);
-        };
+    $getAccountSums = function (array $categories) use ($company, $start, $end) {
+        return Account::query()
+            ->where('company_id', $company->id)
+            ->whereIn('category', $categories)
+            ->withSum(['journalEntries as total' => function ($q) use ($start, $end) {
+                $q->whereBetween('created_at', [$start, $end]);
+            }], 'amount')
+            ->get()
+            ->map(fn($a) => [
+                'code'     => $a->code,
+                'name'     => $a->name,
+                'category' => $a->category->name,
+                'balance'  => $a->total ?? 0,
+            ])
+            ->filter(fn($a) => $a['balance'] != 0);
+    };
 
-        /** ==============================
-         *  Operating Activities
-         * ============================== */
-        $rows->push(['data' => ['Operating Activities', '', ''], 'style' => ['font-weight' => 'bold']]);
+    /** Operating Activities */
+    $rows->push([
+        'data'  => ['', 'Operating Activities', '', ''],
+        'style' => ['font-weight' => 'bold'],
+    ]);
 
-        $operatingAccounts = $getAccountSums([
-            AccountCategory::Asset,
-            AccountCategory::Liability,
-            AccountCategory::Expense,
-            AccountCategory::Revenue,
-        ]);
+    $operatingAccounts = $getAccountSums([
+        AccountCategory::Asset,
+        AccountCategory::Liability,
+        AccountCategory::Expense,
+        AccountCategory::Revenue,
+    ]);
 
-        foreach ($operatingAccounts as $acc) {
-            $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
-            $rows->push([
-                'data' => [$status, $acc['name'], number_format($acc['balance'], 2, ',', '.')],
-                'style' => array_merge($pad(1), [
-                    'color' => $acc['balance'] < 0 ? 'red' : 'black',
-                ]),
-            ]);
-        }
-
-        $totalOperating = $operatingAccounts->sum('balance');
+    foreach ($operatingAccounts as $acc) {
+        $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
         $rows->push([
-            'data' => ['Total of Operating Activities', '', number_format($totalOperating, 2, ',', '.')],
-            'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+            'data'  => [
+                $acc['code'],
+                $status,
+                $acc['name'],
+                number_format($acc['balance'], 2, ',', '.'),
+            ],
+            'style' => array_merge($pad(1), [
+                'color' => $acc['balance'] < 0 ? 'red' : 'black',
+            ]),
         ]);
-
-        /** ==============================
-         *  Investing
-         * ============================== */
-        $rows->push(['data' => ['Investing', '', ''], 'style' => ['font-weight' => 'bold']]);
-
-        $investingAccounts = $getAccountSums([
-            AccountCategory::Asset,
-        ]);
-
-        foreach ($investingAccounts as $acc) {
-            $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
-            $rows->push([
-                'data' => [$status, $acc['name'], number_format($acc['balance'], 2, ',', '.')],
-                'style' => array_merge($pad(1), [
-                    'color' => $acc['balance'] < 0 ? 'red' : 'black',
-                ]),
-            ]);
-        }
-
-        $totalInvesting = $investingAccounts->sum('balance');
-        $rows->push([
-            'data' => ['Total of Investing', '', number_format($totalInvesting, 2, ',', '.')],
-            'style' => ['font-weight' => 'bold', 'color' => 'blue'],
-        ]);
-
-        /** ==============================
-         *  Financing
-         * ============================== */
-        $rows->push(['data' => ['Financing', '', ''], 'style' => ['font-weight' => 'bold']]);
-
-        $financingAccounts = $getAccountSums([
-            AccountCategory::Equity,
-        ]);
-
-        foreach ($financingAccounts as $acc) {
-            $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
-            $rows->push([
-                'data' => [$status, $acc['name'], number_format($acc['balance'], 2, ',', '.')],
-                'style' => array_merge($pad(1), [
-                    'color' => $acc['balance'] < 0 ? 'red' : 'black',
-                ]),
-            ]);
-        }
-
-        $totalFinancing = $financingAccounts->sum('balance');
-        $rows->push([
-            'data' => ['Total of Financing', '', number_format($totalFinancing, 2, ',', '.')],
-            'style' => ['font-weight' => 'bold', 'color' => 'blue'],
-        ]);
-
-        /** ==============================
-         *  Summary
-         * ============================== */
-        $netChange = $totalOperating + $totalInvesting + $totalFinancing;
-
-        $rows->push(['data' => ['Total of Net Cash Provide (Used) in This Period', '', number_format($netChange, 2, ',', '.')], 'style' => ['font-weight' => 'bold', 'color' => 'blue']]);
-        $rows->push(['data' => ['Total of Cash & Cash Equivalent at Beginning of Period', '', number_format(358051327.93, 2, ',', '.')], 'style' => ['font-weight' => 'bold', 'color' => 'blue']]);
-        $rows->push(['data' => ['Total of Cash & Cash Equivalent at End of Period', '', number_format(358051327.93 + $netChange, 2, ',', '.')], 'style' => ['font-weight' => 'bold', 'color' => 'blue']]);
-
-        $data['rows'] = $rows->toArray();
-        return $data;
     }
+
+    $totalOperating = $operatingAccounts->sum('balance');
+    $rows->push([
+        'data'  => ['', 'Total of Operating Activities', '', number_format($totalOperating, 2, ',', '.')],
+        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+    ]);
+
+    /** Investing */
+    $rows->push([
+        'data'  => ['', 'Investing', '', ''],
+        'style' => ['font-weight' => 'bold'],
+    ]);
+
+    $investingAccounts = $getAccountSums([AccountCategory::Asset]);
+
+    foreach ($investingAccounts as $acc) {
+        $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
+        $rows->push([
+            'data'  => [
+                $acc['code'],
+                $status,
+                $acc['name'],
+                number_format($acc['balance'], 2, ',', '.'),
+            ],
+            'style' => array_merge($pad(1), [
+                'color' => $acc['balance'] < 0 ? 'red' : 'black',
+            ]),
+        ]);
+    }
+
+    $totalInvesting = $investingAccounts->sum('balance');
+    $rows->push([
+        'data'  => ['', 'Total of Investing', '', number_format($totalInvesting, 2, ',', '.')],
+        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+    ]);
+
+    /** Financing */
+    $rows->push([
+        'data'  => ['', 'Financing', '', ''],
+        'style' => ['font-weight' => 'bold'],
+    ]);
+
+    $financingAccounts = $getAccountSums([AccountCategory::Equity]);
+
+    foreach ($financingAccounts as $acc) {
+        $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
+        $rows->push([
+            'data'  => [
+                $acc['code'],
+                $status,
+                $acc['name'],
+                number_format($acc['balance'], 2, ',', '.'),
+            ],
+            'style' => array_merge($pad(1), [
+                'color' => $acc['balance'] < 0 ? 'red' : 'black',
+            ]),
+        ]);
+    }
+
+    $totalFinancing = $financingAccounts->sum('balance');
+    $rows->push([
+        'data'  => ['', 'Total of Financing', '', number_format($totalFinancing, 2, ',', '.')],
+        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+    ]);
+
+    /** Summary */
+    $netChange = $totalOperating + $totalInvesting + $totalFinancing;
+    $rows->push([
+        'data'  => ['', 'Total of Net Cash Provide (Used) in This Period', '', number_format($netChange, 2, ',', '.')],
+        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+    ]);
+    $rows->push([
+        'data'  => ['', 'Total of Cash & Cash Equivalent at Beginning of Period', '', number_format(358051327.93, 2, ',', '.')],
+        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+    ]);
+    $rows->push([
+        'data'  => ['', 'Total of Cash & Cash Equivalent at End of Period', '', number_format(358051327.93 + $netChange, 2, ',', '.')],
+        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+    ]);
+
+    $data['rows'] = $rows->toArray();
+    return $data;
+}
 
     # [Template]
     public function __buildReportIndirectTemplate(): array
