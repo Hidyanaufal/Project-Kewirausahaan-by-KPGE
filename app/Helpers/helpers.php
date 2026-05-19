@@ -171,13 +171,13 @@ if (! function_exists('form_merge')) {
     }
 }
 
-if (!function_exists('relation_create')) {
+if (! function_exists('relation_create')) {
     /**
      * Create a root model and all its related models automatically.
      *
-     * @param string $root The root model class
-     * @param array $data Input data from form
-     * @param array $relations Key: relation name in root model, Value: related model class
+     * @param  string  $root  The root model class
+     * @param  array  $data  Input data from form
+     * @param  array  $relations  Key: relation name in root model, Value: related model class
      * @return \Illuminate\Database\Eloquent\Model The created root model instance
      */
     function relation_create(
@@ -198,13 +198,13 @@ if (!function_exists('relation_create')) {
     }
 }
 
-if (!function_exists('relation_update')) {
+if (! function_exists('relation_update')) {
     /**
      * Update a root model and all its related models automatically.
      *
-     * @param \Illuminate\Database\Eloquent\Model $root The root model instance
-     * @param array $data Input data from form
-     * @param array $relations Key: relation name in root model, Value: related model class
+     * @param  \Illuminate\Database\Eloquent\Model  $root  The root model instance
+     * @param  array  $data  Input data from form
+     * @param  array  $relations  Key: relation name in root model, Value: related model class
      * @return \Illuminate\Database\Eloquent\Model The updated root model instance
      */
     function relation_update(
@@ -240,16 +240,14 @@ if (!function_exists('relation_update')) {
     }
 }
 
-
-if (!function_exists('default_company_id')) {
+if (! function_exists('default_company_id')) {
     function default_company_id()
     {
         return 1;
     }
 }
 
-
-if (!function_exists('extract_iframe_src')) {
+if (! function_exists('extract_iframe_src')) {
     function extract_iframe_src(string $iframe): ?string
     {
         if (preg_match('/src="([^"]+)"/', $iframe, $matches)) {
@@ -260,7 +258,7 @@ if (!function_exists('extract_iframe_src')) {
     }
 }
 
-if (!function_exists('formatCurrencyShort')) {
+if (! function_exists('formatCurrencyShort')) {
     function formatCurrencyShort(string $value): string
     {
         // Bersihkan format Rp
@@ -280,7 +278,25 @@ if (!function_exists('formatCurrencyShort')) {
     }
 }
 
-if (!function_exists('getRomanMonth')) {
+if (! function_exists('formatMoneyRoundWhole')) {
+    function formatMoneyRoundWhole(?string $formattedMoney): ?string
+    {
+        if (! $formattedMoney) {
+            return null;
+        }
+
+        $numeric = str_replace(['Rp', ' '], '', $formattedMoney);
+        $numeric = str_replace('.', '', $numeric);
+        $numeric = str_replace(',', '.', $numeric);
+        $numeric = (float) $numeric;
+
+        $rounded = (int) round($numeric, 0, PHP_ROUND_HALF_UP);
+
+        return 'Rp' . number_format($rounded, 0, ',', '.');
+    }
+}
+
+if (! function_exists('getRomanMonth')) {
     function getRomanMonth(int $month): string
     {
         $romans = [
@@ -295,8 +311,9 @@ if (!function_exists('getRomanMonth')) {
             'IX',
             'X',
             'XI',
-            'XII'
+            'XII',
         ];
+
         return $romans[$month - 1];
     }
 }

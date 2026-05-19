@@ -71,7 +71,7 @@
     </tbody>
     <tfoot>
         <tr class="bg-gray-100 dark:bg-gray-700">
-            <td colspan="2" class="px-3 py-2 text-sm font-semibold text-left text-gray-900 dark:text-gray-100">Total</td>
+            <td colspan="3" class="px-3 py-2 text-sm font-semibold text-left text-gray-900 dark:text-gray-100">Total</td>
             <td class="px-3 py-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
                 {{ number_format($totalDebit / 100) }}
             </td>
