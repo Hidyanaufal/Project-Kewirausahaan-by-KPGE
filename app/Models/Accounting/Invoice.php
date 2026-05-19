@@ -50,8 +50,8 @@ use Livewire\Component;
 #[ObservedBy(InvoiceObserver::class)]
 class Invoice extends Document
 {
-    use HasDocumentNumber;
     use HasAttacments;
+    use HasDocumentNumber;
 
     protected $table = 'invoices';
 
@@ -137,6 +137,7 @@ class Invoice extends Document
         }
         $defaultSetting = $company->defaultInvoice;
         $numberPrefix = $defaultSetting->number_prefix ?? '';
+
         return $numberPrefix;
     }
 
@@ -145,35 +146,46 @@ class Invoice extends Document
         parent::boot();
         static::updating(function (Invoice $record) {
             $subtotal = $record->subtotal + $record->profit_total - ($record->discount_total ?? 0);
-            $tax_pph23 = $subtotal * 0.02;
-            if ($record->isWapu()) {
-                $record->actual_total = $subtotal - $tax_pph23;
+
+            if ($record->pph23 !== null) {
+                if ($record->isWapu()) {
+                    $record->actual_total = $subtotal - (int) $record->pph23;
+                } else {
+                    $record->actual_total = $subtotal - (int) $record->pph23 + $record->tax_total;
+                }
             } else {
-                $record->actual_total = $subtotal - $tax_pph23 + $record->tax_total;
+                $tax_pph23 = $subtotal * 0.02;
+                if ($record->isWapu()) {
+                    $record->actual_total = $subtotal - $tax_pph23;
+                } else {
+                    $record->actual_total = $subtotal - $tax_pph23 + $record->tax_total;
+                }
             }
 
             if ($record->isDirty('status')) {
                 if ($record->status === InvoiceStatus::Paid) {
                     // Membaca akun coa default
-                        $accountWapu            = Account::getAccountsWapu($record->company_id);
-                        $accountPPn             = Account::getAccountsPPn($record->company_id);
-                        $accountPPh23           = Account::getAccountsPPh23($record->company_id);
-                        $receivableAccount     = Account::getAccountsReceivableAccount($record->company_id);
+                    $accountWapu = Adjustment::companyHasPpnWapu($record->company_id)
+                        ? Account::getAccountsWapu($record->company_id)
+                        : null;
+                    $accountPPn = Account::getAccountsPPn($record->company_id);
+                    $accountPPh23 = Account::getAccountsPPh23($record->company_id);
+                    $receivableAccount = Account::getAccountsReceivableAccount($record->company_id);
 
                     // Membaca data jurnal ketika approval invoice
                     $latestTransaction = Transaction::query()
                         ->where([
                             'transactionable_type' => Invoice::class,
-                            'transactionable_id'   => $record->id,
-                            'is_payment'           => true,
+                            'transactionable_id' => $record->id,
+                            'is_payment' => true,
                         ])
                         ->orderBy('id', 'desc')
                         ->first();
                     $approvalTransaction = Transaction::query()
                         ->where([
-                            'is_payment'           => false,
+                            'is_payment' => false,
                             'transactionable_type' => Invoice::class,
-                            'transactionable_id'   => $record->id,
+                            'transactionable_id' => $record->id,
                         ])
                         ->first();
                     $approvalJournalEntries = JournalEntry::query()
@@ -183,118 +195,123 @@ class Invoice extends Document
                         ->get();
 
                     $journalAmountTotal = 0;
-                    $pph23CreatedAmountTotal = 0;
 
-                        $journalReceivable = $approvalJournalEntries
-                            ->where('account_id', $receivableAccount->id)
-                            ->first();
-                        $totalReceivable = $journalReceivable->amount ?? 0;
+                    $pph23Amount = (int) (
+                        $latestTransaction->meta['pph23_cents']
+                        ?? $record->pph23
+                        ?? 0
+                    );
 
-                        // Hitung sisa receivable (remaining) berdasarkan akumulasi net receivable dari payment-pembayaran sebelumnya.
-                        // Tujuannya agar journal pada partial payment ke-2 tidak lagi "di-overwrite" menjadi full invoice.
-                        $previousPaymentTransactionIds = Transaction::query()
-                            ->where([
-                                'transactionable_type' => Invoice::class,
-                                'transactionable_id'   => $record->id,
-                                'is_payment'           => true,
-                            ])
-                            ->where('id', '<', $latestTransaction->id)
-                            ->pluck('id');
+                    $journalReceivable = $approvalJournalEntries
+                        ->where('account_id', $receivableAccount->id)
+                        ->first();
+                    $totalReceivable = $journalReceivable->amount ?? 0;
 
-                        $previousReceivableCredits = JournalEntry::query()
-                            ->whereIn('transaction_id', $previousPaymentTransactionIds)
-                            ->where('account_id', $receivableAccount->id)
-                            ->where('type', JournalEntryType::Credit)
-                            ->sum('amount');
+                    // Hitung sisa receivable (remaining) berdasarkan akumulasi net receivable dari payment-pembayaran sebelumnya.
+                    // Tujuannya agar journal pada partial payment ke-2 tidak lagi "di-overwrite" menjadi full invoice.
+                    $previousPaymentTransactionIds = Transaction::query()
+                        ->where([
+                            'transactionable_type' => Invoice::class,
+                            'transactionable_id' => $record->id,
+                            'is_payment' => true,
+                        ])
+                        ->where('id', '<', $latestTransaction->id)
+                        ->pluck('id');
 
-                        $previousReceivableDebits = JournalEntry::query()
-                            ->whereIn('transaction_id', $previousPaymentTransactionIds)
-                            ->where('account_id', $receivableAccount->id)
-                            ->where('type', JournalEntryType::Debit)
-                            ->sum('amount');
+                    $previousReceivableCredits = JournalEntry::query()
+                        ->whereIn('transaction_id', $previousPaymentTransactionIds)
+                        ->where('account_id', $receivableAccount->id)
+                        ->where('type', JournalEntryType::Credit)
+                        ->sum('amount');
 
-                        $previousNetReceivable = (int) $previousReceivableCredits - (int) $previousReceivableDebits;
-                        $remainingReceivable = (int) $totalReceivable - $previousNetReceivable;
+                    $previousReceivableDebits = JournalEntry::query()
+                        ->whereIn('transaction_id', $previousPaymentTransactionIds)
+                        ->where('account_id', $receivableAccount->id)
+                        ->where('type', JournalEntryType::Debit)
+                        ->sum('amount');
+
+                    $previousNetReceivable = (int) $previousReceivableCredits - (int) $previousReceivableDebits;
+                    $remainingReceivable = (int) $totalReceivable - $previousNetReceivable;
 
                     foreach ($approvalJournalEntries as $journal) {
                         // PPN WAPU
-                        if ($journal->account_id == $accountWapu->id) {
+                        if ($accountWapu && $journal->account_id == $accountWapu->id) {
                             $journalEntry = JournalEntry::create([
                                 'transaction_id' => $latestTransaction->id,
-                                'account_id'     => $accountWapu->id,
-                                'type'           => JournalEntryType::Debit,
-                                'amount'         => $journal->amount,
-                                'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                                'account_id' => $accountWapu->id,
+                                'type' => JournalEntryType::Debit,
+                                'amount' => $journal->amount,
+                                'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
                             ]);
                             $journalAmountTotal += $journalEntry->amount;
                         }
 
-                        // PPN 
+                        // PPN
                         if ($journal->account_id == $accountPPn->id) {
                             $journalEntry = JournalEntry::create([
                                 'transaction_id' => $latestTransaction->id,
-                                'account_id'     => $accountPPn->id,
-                                'type'           => JournalEntryType::Debit,
-                                'amount'         => $journal->amount,
-                                'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                                'account_id' => $accountPPn->id,
+                                'type' => JournalEntryType::Debit,
+                                'amount' => $journal->amount,
+                                'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
                             ]);
                             $journalAmountTotal += $journalEntry->amount;
                         }
 
-                        // Revenue/Pendapatan
-                        if ($journal->account->category == AccountCategory::Revenue) {
-                            $journalEntry = JournalEntry::create([
-                                'transaction_id' => $latestTransaction->id,
-                                'account_id'     => $accountPPh23->id,
-                                'type'           => JournalEntryType::Debit,
-                                'amount'         => $journal->amount * 0.02,
-                                'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
-                            ]);
-                            $pph23CreatedAmountTotal += $journalEntry->amount;
-                            $journalAmountTotal += $journalEntry->amount;
-                        }
                     }
 
-                    // Di hook merge jurnal, nilai PPh23 ditetapkan memakai nilai final `$record->pph23` (bukan akumulasi `journal->amount * 0.02`).
-                    // Agar perhitungan kas/receivable tetap balance, selaraskan `journalAmountTotal` sebelum menghitung `$bankAmount`.
-                    if ($record->pph23) {
-                        $journalAmountTotal = $journalAmountTotal - $pph23CreatedAmountTotal + (int) $record->pph23;
+                    if ($pph23Amount > 0) {
+                        $pph23Entry = JournalEntry::create([
+                            'transaction_id' => $latestTransaction->id,
+                            'account_id' => $accountPPh23->id,
+                            'type' => JournalEntryType::Debit,
+                            'amount' => $pph23Amount,
+                            'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                        ]);
+                        $journalAmountTotal += $pph23Entry->amount;
                     }
 
-                    // Penyesuaian uang yang diterima oleh kas
-                        $bankAmount = $remainingReceivable - $journalAmountTotal;
+                    $calculatedBankAmount = $remainingReceivable - $journalAmountTotal;
+                    $cashAmount = (int) (
+                        $latestTransaction->meta['amount_in_document_currency_cents']
+                        ?? $calculatedBankAmount
+                    );
 
                     JournalEntry::query()
                         ->where([
                             'transaction_id' => $latestTransaction->id,
-                            'account_id'     => $latestTransaction->bankAccount->account_id,
+                            'account_id' => $latestTransaction->bankAccount->account_id,
                         ])
                         ->delete();
 
                     JournalEntry::create([
                         'transaction_id' => $latestTransaction->id,
-                        'account_id'     => $latestTransaction->bankAccount->account_id,
-                        'type'           => JournalEntryType::Debit,
-                        'amount'         => $bankAmount,
-                        'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                        'account_id' => $latestTransaction->bankAccount->account_id,
+                        'type' => JournalEntryType::Debit,
+                        'amount' => $cashAmount,
+                        'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
                     ]);
 
                     // Penyesuaian account receivable
                     JournalEntry::query()
                         ->where([
                             'transaction_id' => $latestTransaction->id,
-                            'account_id'     => $journalReceivable->account_id,
+                            'account_id' => $journalReceivable->account_id,
                         ])
                         ->delete();
 
                     JournalEntry::create([
                         'transaction_id' => $latestTransaction->id,
-                        'account_id'     => $journalReceivable->account_id,
-                        'type'           => JournalEntryType::Credit,
-                            'amount'         => $remainingReceivable,
-                        'description'    => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                        'account_id' => $journalReceivable->account_id,
+                        'type' => JournalEntryType::Credit,
+                        'amount' => $remainingReceivable,
+                        'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
                     ]);
                 }
+            }
+
+            if ($record->status === InvoiceStatus::Cancelled) {
+                return;
             }
 
             /**
@@ -304,14 +321,16 @@ class Invoice extends Document
             DB::transaction(function () use ($record) {
                 // Definisikan akun pajak
                 $pph23Account = Account::getAccountsPPh23($record->company_id);
-                $ppnAccount   = Account::getAccountsPPn($record->company_id);
-                $wapuAccount  = Account::getAccountsWapu($record->company_id);
+                $ppnAccount = Account::getAccountsPPn($record->company_id);
 
                 $taxAccounts = [
                     $pph23Account->id,
                     $ppnAccount->id,
-                    $wapuAccount->id,
                 ];
+
+                if (Adjustment::companyHasPpnWapu($record->company_id)) {
+                    $taxAccounts[] = Account::getAccountsWapu($record->company_id)->id;
+                }
 
                 // Ambil semua transaksi yang terkait dengan invoice ini
                 $transactions = Transaction::where('transactionable_type', Invoice::class)
@@ -321,11 +340,15 @@ class Invoice extends Document
                 foreach ($transactions as $trx) {
                     $journals = JournalEntry::where('transaction_id', $trx->id)->get();
 
-                    if ($journals->isEmpty()) continue;
+                    if ($journals->isEmpty()) {
+                        continue;
+                    }
 
                     // Filter hanya journal pajak
                     $taxJournals = $journals->whereIn('account_id', $taxAccounts);
-                    if ($taxJournals->isEmpty()) continue;
+                    if ($taxJournals->isEmpty()) {
+                        continue;
+                    }
 
                     // Gabungkan per akun pajak agar tetap terpisah (PPN, PPh23, WAPU)
                     $mergedTax = $taxJournals
@@ -334,29 +357,29 @@ class Invoice extends Document
                             return collect($byType)->map(function ($group, $type) use ($accountId, $trx, $record, $pph23Account) {
                                 if ($accountId == $pph23Account->id and $record->pph23) {
                                     return [
-                                        'company_id'     => $trx->company_id,
-                                        'account_id'     => $accountId,
+                                        'company_id' => $trx->company_id,
+                                        'account_id' => $accountId,
                                         'transaction_id' => $trx->id,
-                                        'type'           => $type,
-                                        'amount'         => $record->pph23,
-                                        'description'    => "Tax entry ({$group->first()->account->name}) for Invoice #{$record->invoice_number}",
-                                        'created_by'     => $record->updated_by ?? 1,
-                                        'updated_by'     => $record->updated_by ?? 1,
-                                        'created_at'     => now(),
-                                        'updated_at'     => now(),
+                                        'type' => $type,
+                                        'amount' => $record->pph23,
+                                        'description' => "Tax entry ({$group->first()->account->name}) for Invoice #{$record->invoice_number}",
+                                        'created_by' => $record->updated_by ?? 1,
+                                        'updated_by' => $record->updated_by ?? 1,
+                                        'created_at' => now(),
+                                        'updated_at' => now(),
                                     ];
                                 } else {
                                     return [
-                                        'company_id'     => $trx->company_id,
-                                        'account_id'     => $accountId,
+                                        'company_id' => $trx->company_id,
+                                        'account_id' => $accountId,
                                         'transaction_id' => $trx->id,
-                                        'type'           => $type,
-                                        'amount'         => $group->sum('amount'),
-                                        'description'    => "Tax entry ({$group->first()->account->name}) for Invoice #{$record->invoice_number}",
-                                        'created_by'     => $record->updated_by ?? 1,
-                                        'updated_by'     => $record->updated_by ?? 1,
-                                        'created_at'     => now(),
-                                        'updated_at'     => now(),
+                                        'type' => $type,
+                                        'amount' => $group->sum('amount'),
+                                        'description' => "Tax entry ({$group->first()->account->name}) for Invoice #{$record->invoice_number}",
+                                        'created_by' => $record->updated_by ?? 1,
+                                        'updated_by' => $record->updated_by ?? 1,
+                                        'created_at' => now(),
+                                        'updated_at' => now(),
                                     ];
                                 }
                             });
@@ -386,16 +409,16 @@ class Invoice extends Document
                                 $first = $group->first();
 
                                 return [
-                                    'company_id'     => $trx->company_id,
-                                    'account_id'     => $first->account_id,
+                                    'company_id' => $trx->company_id,
+                                    'account_id' => $first->account_id,
                                     'transaction_id' => $trx->id,
-                                    'type'           => $type,
-                                    'amount'         => $group->sum('amount'),
-                                    'description'    => "Merged revenue entry ({$first->account->name}) for Invoice #{$record->invoice_number}",
-                                    'created_by'     => $record->updated_by ?? 1,
-                                    'updated_by'     => $record->updated_by ?? 1,
-                                    'created_at'     => now(),
-                                    'updated_at'     => now(),
+                                    'type' => $type,
+                                    'amount' => $group->sum('amount'),
+                                    'description' => "Merged revenue entry ({$first->account->name}) for Invoice #{$record->invoice_number}",
+                                    'created_by' => $record->updated_by ?? 1,
+                                    'updated_by' => $record->updated_by ?? 1,
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
                                 ];
                             })
                             ->values();
@@ -425,9 +448,15 @@ class Invoice extends Document
         });
     }
 
+    public function exceedsWapuThreshold(): bool
+    {
+        return $this->total > 1_000_000_000; // Greater than 10jt
+    }
+
     public function isWapu(): bool
     {
-        return $this->total > 1000000000; // Greater than 10jt
+        return $this->exceedsWapuThreshold()
+            && Adjustment::companyHasPpnWapu($this->company_id);
     }
 
     public function client()
@@ -645,7 +674,7 @@ class Invoice extends Document
         return $this->status !== InvoiceStatus::Cancelled
             && ! $this->hasBeenSent()
             && $this->wasApproved()
-            && !$this->isPaid();
+            && ! $this->isPaid();
     }
 
     public function hasPayments(): bool
@@ -684,6 +713,7 @@ class Invoice extends Document
             if (preg_match('/' . preg_quote($prefixWithYear) . '-(\d{3,4})/', $doc->invoice_number, $matches)) {
                 return (int) $matches[1];
             }
+
             return 0;
         })->filter()->values();
 
@@ -752,6 +782,7 @@ class Invoice extends Document
             'meta' => [
                 'original_document_currency' => $invoiceCurrency,
                 'amount_in_document_currency_cents' => $amountInInvoiceCurrencyCents,
+                'pph23_cents' => $data['pph23'] ?? null,
             ],
         ]);
     }
@@ -783,7 +814,7 @@ class Invoice extends Document
             throw new \RuntimeException('Invoice cannot be finalized.');
         }
 
-        if (!$this->tax_code_id || !$this->tax_number || !$this->tax_date) {
+        if (! $this->tax_code_id || ! $this->tax_number || ! $this->tax_date) {
             throw new \RuntimeException('Tax data (tax_code_id, tax_number, tax_date) must be filled before finalizing.');
         }
 
@@ -863,19 +894,26 @@ class Invoice extends Document
         // profit
         if ($this->profit_total > 0) {
             $profitTotal = $this->profit_total;
-            $profitDescription =  'Profit ' .  $baseDescription;
+            $profitDescription = 'Profit ' . $baseDescription;
             $journalEntryData[] = [
                 'type' => JournalEntryType::Credit,
-                'account_id' => Account::getAccountsProfit()->id,
+                'account_id' => Account::getAccountsProfit($this->company_id)->id,
                 'amount_in_invoice_currency' => $profitTotal,
                 'description' => $profitDescription,
             ];
-            $journalEntryData[] = [
-                'type' => JournalEntryType::Credit,
-                'account_id' => Account::getAccountsWapu()->id,
-                'amount_in_invoice_currency' => $this->tax_total,
-                'description' => $profitDescription,
-            ];
+
+            if ($this->tax_total > 0) {
+                $taxAccountId = Adjustment::companyHasPpnWapu($this->company_id)
+                    ? Account::getAccountsWapu($this->company_id)->id
+                    : Account::getAccountsPPn($this->company_id)->id;
+
+                $journalEntryData[] = [
+                    'type' => JournalEntryType::Credit,
+                    'account_id' => $taxAccountId,
+                    'amount_in_invoice_currency' => $this->tax_total,
+                    'description' => $profitDescription,
+                ];
+            }
         }
 
         // Convert amounts to default currency
@@ -901,7 +939,7 @@ class Invoice extends Document
             $adjustmentAmount = abs($imbalance);
 
             // Find last entry of target type and adjust it
-            $lastKey = array_key_last(array_filter($journalEntryData, fn($entry) => $entry['type'] === $targetType, ARRAY_FILTER_USE_BOTH));
+            $lastKey = array_key_last(array_filter($journalEntryData, fn ($entry) => $entry['type'] === $targetType, ARRAY_FILTER_USE_BOTH));
             $journalEntryData[$lastKey]['amount_in_default_currency'] += $adjustmentAmount;
 
             if ($targetType === JournalEntryType::Debit) {
@@ -925,7 +963,7 @@ class Invoice extends Document
         ]);
 
         Log::debug('debug journal entry data ' . __FILE__, [
-            'journalEntry' => $journalEntryData
+            'journalEntry' => $journalEntryData,
         ]);
 
         // Create all journal entries
@@ -970,7 +1008,7 @@ class Invoice extends Document
         return $action::make('blockedApprove')
             ->label('Approve')
             ->icon('heroicon-m-check-circle')
-            ->visible(fn(self $record) => $record->canBeApproved() && $record->hasInactiveAdjustments())
+            ->visible(fn (self $record) => $record->canBeApproved() && $record->hasInactiveAdjustments())
             ->requiresConfirmation()
             ->modalAlignment(Alignment::Start)
             ->modalIconColor('danger')
@@ -1064,6 +1102,7 @@ class Invoice extends Document
                 } elseif ($record->canBeFinalized()) {
                     return 'Invoice finalized successfully! The document is now ready.';
                 }
+
                 return 'Invoice approved successfully';
             })
             ->action(function (self $record, MountableAction $action, Component $livewire) {
@@ -1092,6 +1131,7 @@ class Invoice extends Document
                                 ->body($e->getMessage())
                                 ->send();
                             $action->halt();
+
                             return;
                         }
 
@@ -1100,12 +1140,13 @@ class Invoice extends Document
                 }
                 // Approval Level 2: Finalize
                 elseif ($record->canBeFinalized()) {
-                    if (!$record->tax_code_id || !$record->tax_number || !$record->tax_date) {
+                    if (! $record->tax_code_id || ! $record->tax_number || ! $record->tax_date) {
                         Notification::make()
                             ->title('Tax data is missing. Please fill it out first.')
                             ->danger()
                             ->send();
                         $action->halt();
+
                         return;
                     }
 
@@ -1118,6 +1159,7 @@ class Invoice extends Document
                             ->body($e->getMessage())
                             ->send();
                         $action->halt();
+
                         return;
                     }
 
@@ -1138,12 +1180,13 @@ class Invoice extends Document
             ->databaseTransaction()
             ->successNotificationTitle('Invoice finalized')
             ->action(function (self $record, MountableAction $action, Component $livewire) {
-                if (!$record->tax_code_id || !$record->tax_number || !$record->tax_date) {
+                if (! $record->tax_code_id || ! $record->tax_number || ! $record->tax_date) {
                     Notification::make()
                         ->title('Tax data is missing. Please fill it out first.')
                         ->danger()
                         ->send();
                     $action->halt();
+
                     return;
                 }
 
@@ -1156,6 +1199,7 @@ class Invoice extends Document
                         ->body($e->getMessage())
                         ->send();
                     $action->halt();
+
                     return;
                 }
 
@@ -1243,6 +1287,37 @@ class Invoice extends Document
             });
     }
 
+    /**
+     * Soft-delete all transactions linked to this invoice (including payments and
+     * approval journals). Journal lines are soft-deleted via TransactionObserver.
+     * Resets payment fields and sets status to cancelled.
+     */
+    public function cancelWithAccountingVoid(): void
+    {
+        foreach ($this->transactions()->get() as $transaction) {
+            $transaction->journalEntries()->each(function (JournalEntry $entry): void {
+                $entry->delete();
+            });
+        }
+
+        static::withoutEvents(function (): void {
+            foreach ($this->transactions()->get() as $transaction) {
+                $transaction->delete();
+            }
+        });
+
+        DB::table($this->getTable())
+            ->where($this->getKeyName(), $this->getKey())
+            ->update([
+                'status' => InvoiceStatus::Cancelled->value,
+                'amount_paid' => 0,
+                'paid_at' => null,
+                'updated_at' => now(),
+            ]);
+
+        $this->refresh();
+    }
+
     public static function getCancelInvoiceAction(string $action = Action::class): MountableAction
     {
         return $action::make('cancelInvoice')
@@ -1261,12 +1336,12 @@ class Invoice extends Document
             ->modalDescription(function (self $record) {
                 if ($record->hasPayments()) {
                     return new HtmlString(
-                        "<p class='text-sm mb-2'>Invoice ini sudah memiliki pembayaran. Membatalkan invoice dapat mempengaruhi rekonsiliasi dan laporan.</p>" .
+                        "<p class='text-sm mb-2'>Invoice ini sudah memiliki pembayaran. Membatalkan invoice akan meng-soft-delete transaksi dan baris jurnal terkait serta mengatur ulang jumlah terbayar. Hal ini dapat mempengaruhi rekonsiliasi dan laporan.</p>" .
                         "<p class='text-sm'>Apakah Anda yakin ingin membatalkan invoice ini?</p>"
                     );
                 }
 
-                return 'Invoice akan dibatalkan (status diubah menjadi Cancelled). Apakah Anda yakin ingin melanjutkan?';
+                return 'Invoice akan dibatalkan (status Cancelled), transaksi dan jurnal terkait akan di-soft-delete, serta jumlah terbayar direset. Apakah Anda yakin ingin melanjutkan?';
             })
             ->modalSubmitActionLabel('Batalkan Invoice')
             ->databaseTransaction()
@@ -1280,11 +1355,12 @@ class Invoice extends Document
                         ->danger()
                         ->send();
                     $action->cancel();
+
                     return;
                 }
-                $record->update([
-                    'status' => InvoiceStatus::Cancelled,
-                ]);
+
+                $record->cancelWithAccountingVoid();
+                $record->refresh();
 
                 $action->success();
             })

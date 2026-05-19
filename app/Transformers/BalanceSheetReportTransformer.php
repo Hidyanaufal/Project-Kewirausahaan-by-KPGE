@@ -90,6 +90,7 @@ class BalanceSheetReportTransformer extends SummaryReportTransformer
                     }
                     // Parse formatted money string to float
                     $balance = CurrencyConverter::convertToFloat($balanceStr);
+
                     return $balance != 0; // Keep only non-zero balances
                 }
             );
@@ -131,6 +132,7 @@ class BalanceSheetReportTransformer extends SummaryReportTransformer
                         }
                         // Parse formatted money string to float
                         $balance = CurrencyConverter::convertToFloat($balanceStr);
+
                         return $balance != 0; // Keep only non-zero balances
                     }
                 );
@@ -218,7 +220,7 @@ class BalanceSheetReportTransformer extends SummaryReportTransformer
                 );
             }
 
-            // Only for the "Equity" category, calculate and add "Total Other Equity"
+            // Residual when category total ≠ sum of type subtotals (e.g. rounding); should be ~0 after correct grouping.
             if ($accountCategoryName === 'Equity') {
                 $totalEquitySummary = $accountCategory->summary->endingBalance ?? 0;
                 $totalEquitySummary = money($totalEquitySummary, CurrencyAccessor::getDefaultCurrency())->getAmount();

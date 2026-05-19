@@ -5,7 +5,7 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
-use App\Enums\Accounting\AccountCategory;
+use App\Enums\Accounting\AccountType;
 use App\Filament\Company\Resources\Accounting\TransactionResource;
 use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Helpers\AuthHelper;
@@ -366,11 +366,11 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
 
         $balanceMapPartial = [];
         foreach ($balanceRowsWithPayee as $id => $row) {
-            $category = $row->category instanceof AccountCategory
-                ? $row->category
-                : AccountCategory::from($row->category ?? 'asset');
-            $netMovement = $this->accountService->calculateNetMovementByCategory(
-                $category,
+            $type = $row->type instanceof AccountType
+                ? $row->type
+                : AccountType::from($row->type ?? 'current_asset');
+            $netMovement = $this->accountService->calculateNetMovementByAccountType(
+                $type,
                 (int) ($row->total_debit ?? 0),
                 (int) ($row->total_credit ?? 0)
             );
@@ -397,11 +397,11 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                 if ($rowFull === null || $rowPayee === null) {
                     continue;
                 }
-                $category = $rowPayee->category instanceof AccountCategory
-                    ? $rowPayee->category
-                    : AccountCategory::from($rowPayee->category ?? 'asset');
-                $periodNetMovement = $this->accountService->calculateNetMovementByCategory(
-                    $category,
+                $type = $rowPayee->type instanceof AccountType
+                    ? $rowPayee->type
+                    : AccountType::from($rowPayee->type ?? 'current_asset');
+                $periodNetMovement = $this->accountService->calculateNetMovementByAccountType(
+                    $type,
                     (int) ($rowPayee->total_debit ?? 0),
                     (int) ($rowPayee->total_credit ?? 0)
                 );
