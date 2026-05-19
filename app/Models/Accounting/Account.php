@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 #[ObservedBy(AccountObserver::class)]
@@ -142,6 +143,77 @@ class Account extends Model
     public function isUncategorized(): bool
     {
         return $this->type->isUncategorized();
+    }
+
+    /**
+     * Whether this account is a parent/header in the chart of accounts (has child accounts).
+     * Parent balances must not be aggregated alongside children to avoid double-counting in reports.
+     */
+    public function isParentAccount(): bool
+    {
+        if ($this->relationLoaded('children')) {
+            if ($this->children->isNotEmpty()) {
+                return true;
+            }
+        } elseif ($this->children()->exists()) {
+            return true;
+        }
+
+        $code = trim((string) $this->code);
+
+        if ($code === '') {
+            return false;
+        }
+
+        return static::query()
+            ->where('company_id', $this->company_id)
+            ->whereKeyNot($this->getKey())
+            ->where(function (Builder $query) use ($code) {
+                $query->where('code', 'like', $code . '.%')
+                    ->orWhere('code', 'like', $code . '-%');
+
+                if (ctype_digit($code) && strlen($code) >= 3) {
+                    $query->orWhere(function (Builder $nested) use ($code) {
+                        $nested->where('code', 'like', $code . '%')
+                            ->whereRaw('LENGTH(code) > ?', [strlen($code)]);
+                    });
+                }
+            })
+            ->exists();
+    }
+
+    /**
+     * Account IDs that should be excluded from balance-sheet category totals (parent/header accounts).
+     *
+     * @return Collection<int, int>
+     */
+    public static function parentAccountIdsForCompany(int $companyId): Collection
+    {
+        return static::query()
+            ->where('company_id', $companyId)
+            ->get(['id', 'code', 'company_id'])
+            ->filter(static fn (self $account): bool => $account->isParentAccount())
+            ->pluck('id');
+    }
+
+    /**
+     * Account IDs excluded from balance sheet totals: parent/header accounts and system clearing accounts
+     * (e.g. Open Balance Equity) whose balances are already reflected in other balance sheet lines.
+     *
+     * @return Collection<int, int>
+     */
+    public static function balanceSheetExcludedAccountIdsForCompany(int $companyId): Collection
+    {
+        $excluded = static::parentAccountIdsForCompany($companyId);
+
+        $clearingAccountIds = AccountDefault::query()
+            ->where('company_id', $companyId)
+            ->whereIn('key', [
+                AccountDefaultKey::OpenBalance,
+            ])
+            ->pluck('account_id');
+
+        return $excluded->merge($clearingAccountIds)->unique()->values();
     }
 
     public function transactions(): HasMany
