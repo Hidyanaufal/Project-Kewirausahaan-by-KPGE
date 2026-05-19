@@ -288,6 +288,102 @@ test('partial payment ke-2 di-journal incremental (cash & receivable tidak jadi 
     expect($payment2CashDebitDefault)->toBe($expectedCashDebitDefault);
 });
 
+test('record payment respects manual amount and pph23', function () {
+    $companyId = auth()->user()?->current_company_id ?? $this->testCompany->id;
+
+    $invoice = Invoice::factory()
+        ->withLineItems()
+        ->state([
+            'company_id' => $companyId,
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    $approvalTrx = $invoice->approvalTransaction;
+    expect($approvalTrx)->not->toBeNull();
+
+    $receivableAccount = Account::getAccountsReceivableAccount($invoice->company_id);
+    $ppnAccount = Account::getAccountsPPn($invoice->company_id);
+    $pph23Account = Account::getAccountsPPh23($invoice->company_id);
+
+    $remainingReceivable = (int) JournalEntry::query()
+        ->where('transaction_id', $approvalTrx->id)
+        ->where('account_id', $receivableAccount->id)
+        ->sum('amount');
+
+    $ppnAmount = (int) JournalEntry::query()
+        ->where('transaction_id', $approvalTrx->id)
+        ->where('account_id', $ppnAccount->id)
+        ->sum('amount');
+
+    $wapuAmount = 0;
+    $wapuAccount = Account::getAccountsWapuIfConfigured($invoice->company_id);
+    if ($wapuAccount) {
+        $wapuAmount = (int) JournalEntry::query()
+            ->where('transaction_id', $approvalTrx->id)
+            ->where('account_id', $wapuAccount->id)
+            ->sum('amount');
+    }
+
+    $defaultPph23 = (int) round(($invoice->subtotal + $invoice->profit_total - ($invoice->discount_total ?? 0)) * 0.02);
+    $manualPph23 = max($defaultPph23 - 50_000, 1_000);
+    $manualCash = $remainingReceivable - $ppnAmount - $wapuAmount - $manualPph23;
+
+    expect($manualCash)->toBeGreaterThan(0);
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $invoice->company_id)
+        ->where('enabled', true)
+        ->first();
+    expect($bankAccount)->not->toBeNull();
+
+    $invoice->update(['pph23' => $manualPph23]);
+
+    $invoice->recordPayment([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $manualCash,
+        'pph23' => $manualPph23,
+        'notes' => 'Manual amount and PPh23 test',
+    ]);
+
+    $invoice->refresh();
+
+    expect($invoice->status)->toBe(InvoiceStatus::Paid)
+        ->and((int) $invoice->pph23)->toBe($manualPph23);
+
+    $paymentTrx = Transaction::query()
+        ->where('transactionable_type', Invoice::class)
+        ->where('transactionable_id', $invoice->id)
+        ->where('is_payment', true)
+        ->orderByDesc('id')
+        ->first();
+
+    expect($paymentTrx)->not->toBeNull()
+        ->and((int) ($paymentTrx->meta['pph23_cents'] ?? 0))->toBe($manualPph23)
+        ->and((int) ($paymentTrx->meta['amount_in_document_currency_cents'] ?? 0))->toBe($manualCash);
+
+    $pph23JournalAmount = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $pph23Account->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $cashAccountId = $paymentTrx->bankAccount->account_id;
+    $cashDebit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $cashAccountId)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    expect($pph23JournalAmount)->toBe($manualPph23)
+        ->and($cashDebit)->toBe($manualCash);
+});
+
 function removePpnWapuConfigurationForCompany(int $companyId): void
 {
     Adjustment::query()

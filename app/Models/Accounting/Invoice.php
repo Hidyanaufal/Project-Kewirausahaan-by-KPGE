@@ -146,11 +146,20 @@ class Invoice extends Document
         parent::boot();
         static::updating(function (Invoice $record) {
             $subtotal = $record->subtotal + $record->profit_total - ($record->discount_total ?? 0);
-            $tax_pph23 = $subtotal * 0.02;
-            if ($record->isWapu()) {
-                $record->actual_total = $subtotal - $tax_pph23;
+
+            if ($record->pph23 !== null) {
+                if ($record->isWapu()) {
+                    $record->actual_total = $subtotal - (int) $record->pph23;
+                } else {
+                    $record->actual_total = $subtotal - (int) $record->pph23 + $record->tax_total;
+                }
             } else {
-                $record->actual_total = $subtotal - $tax_pph23 + $record->tax_total;
+                $tax_pph23 = $subtotal * 0.02;
+                if ($record->isWapu()) {
+                    $record->actual_total = $subtotal - $tax_pph23;
+                } else {
+                    $record->actual_total = $subtotal - $tax_pph23 + $record->tax_total;
+                }
             }
 
             if ($record->isDirty('status')) {
@@ -186,7 +195,12 @@ class Invoice extends Document
                         ->get();
 
                     $journalAmountTotal = 0;
-                    $pph23CreatedAmountTotal = 0;
+
+                    $pph23Amount = (int) (
+                        $latestTransaction->meta['pph23_cents']
+                        ?? $record->pph23
+                        ?? 0
+                    );
 
                     $journalReceivable = $approvalJournalEntries
                         ->where('account_id', $receivableAccount->id)
@@ -244,28 +258,24 @@ class Invoice extends Document
                             $journalAmountTotal += $journalEntry->amount;
                         }
 
-                        // Revenue/Pendapatan
-                        if ($journal->account->category == AccountCategory::Revenue) {
-                            $journalEntry = JournalEntry::create([
-                                'transaction_id' => $latestTransaction->id,
-                                'account_id' => $accountPPh23->id,
-                                'type' => JournalEntryType::Debit,
-                                'amount' => $journal->amount * 0.02,
-                                'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
-                            ]);
-                            $pph23CreatedAmountTotal += $journalEntry->amount;
-                            $journalAmountTotal += $journalEntry->amount;
-                        }
                     }
 
-                    // Di hook merge jurnal, nilai PPh23 ditetapkan memakai nilai final `$record->pph23` (bukan akumulasi `journal->amount * 0.02`).
-                    // Agar perhitungan kas/receivable tetap balance, selaraskan `journalAmountTotal` sebelum menghitung `$bankAmount`.
-                    if ($record->pph23) {
-                        $journalAmountTotal = $journalAmountTotal - $pph23CreatedAmountTotal + (int) $record->pph23;
+                    if ($pph23Amount > 0) {
+                        $pph23Entry = JournalEntry::create([
+                            'transaction_id' => $latestTransaction->id,
+                            'account_id' => $accountPPh23->id,
+                            'type' => JournalEntryType::Debit,
+                            'amount' => $pph23Amount,
+                            'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
+                        ]);
+                        $journalAmountTotal += $pph23Entry->amount;
                     }
 
-                    // Penyesuaian uang yang diterima oleh kas
-                    $bankAmount = $remainingReceivable - $journalAmountTotal;
+                    $calculatedBankAmount = $remainingReceivable - $journalAmountTotal;
+                    $cashAmount = (int) (
+                        $latestTransaction->meta['amount_in_document_currency_cents']
+                        ?? $calculatedBankAmount
+                    );
 
                     JournalEntry::query()
                         ->where([
@@ -278,7 +288,7 @@ class Invoice extends Document
                         'transaction_id' => $latestTransaction->id,
                         'account_id' => $latestTransaction->bankAccount->account_id,
                         'type' => JournalEntryType::Debit,
-                        'amount' => $bankAmount,
+                        'amount' => $cashAmount,
                         'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
                     ]);
 
@@ -772,6 +782,7 @@ class Invoice extends Document
             'meta' => [
                 'original_document_currency' => $invoiceCurrency,
                 'amount_in_document_currency_cents' => $amountInInvoiceCurrencyCents,
+                'pph23_cents' => $data['pph23'] ?? null,
             ],
         ]);
     }
