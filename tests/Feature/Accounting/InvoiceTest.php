@@ -20,7 +20,57 @@ use App\Scopes\CurrentCompanyScope;
 beforeEach(function () {
     $this->defaultCurrency = CurrencyAccessor::getDefaultCurrency();
     $this->withOfferings();
+    ensureInvoiceAccountDefaultsForCompany($this->testCompany->id);
 });
+
+function ensureInvoiceAccountDefaultsForCompany(int $companyId): void
+{
+    $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
+
+    $assetSubtype = AccountSubtype::query()
+        ->where('company_id', $companyId)
+        ->where('category', AccountCategory::Asset)
+        ->first();
+
+    $subtypeId = $assetSubtype?->id ?? AccountSubtype::query()
+        ->where('company_id', $companyId)
+        ->value('id');
+
+    $defaultsToEnsure = [
+        AccountDefaultKey::PPh23->value => 'PPh 23 (Test)',
+        AccountDefaultKey::PPn->value => 'PPN (Test)',
+        AccountDefaultKey::Profit->value => 'Profit (Test)',
+        AccountDefaultKey::AccountsReceivable->value => 'Accounts Receivable (Test)',
+        AccountDefaultKey::SalesDiscount->value => 'Sales Discount (Test)',
+    ];
+
+    foreach ($defaultsToEnsure as $key => $accountName) {
+        $exists = AccountDefault::query()
+            ->withoutGlobalScope(CurrentCompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('key', $key)
+            ->exists();
+
+        if ($exists) {
+            continue;
+        }
+
+        $account = Account::factory()->create([
+            'company_id' => $companyId,
+            'subtype_id' => $subtypeId,
+            'name' => $accountName,
+            'currency_code' => $defaultCurrency,
+            'archived' => false,
+            'default' => false,
+        ]);
+
+        AccountDefault::query()->create([
+            'company_id' => $companyId,
+            'account_id' => $account->id,
+            'key' => $key,
+        ]);
+    }
+}
 
 it('creates a basic invoice with line items and calculates totals correctly', function () {
     $invoice = Invoice::factory()
@@ -44,6 +94,7 @@ test('approved invoices are marked as Unsent when not Overdue', function () {
     $invoice = Invoice::factory()
         ->withLineItems()
         ->state([
+            'company_id' => $this->testCompany->id,
             'due_date' => now()->addDays(30),
         ])
         ->create();
@@ -51,6 +102,7 @@ test('approved invoices are marked as Unsent when not Overdue', function () {
     $invoice->refresh();
 
     $invoice->approveDraft();
+    $invoice->refresh();
 
     expect($invoice)
         ->hasLineItems()->toBeTrue()
@@ -63,6 +115,7 @@ test('approved invoices are marked as Overdue when Overdue', function () {
     $invoice = Invoice::factory()
         ->withLineItems()
         ->state([
+            'company_id' => $this->testCompany->id,
             'due_date' => now()->subDays(30),
         ])
         ->create();
@@ -70,6 +123,7 @@ test('approved invoices are marked as Overdue when Overdue', function () {
     $invoice->refresh();
 
     $invoice->approveDraft();
+    $invoice->refresh();
 
     expect($invoice)
         ->hasLineItems()->toBeTrue()
@@ -232,6 +286,84 @@ test('partial payment ke-2 di-journal incremental (cash & receivable tidak jadi 
     );
 
     expect($payment2CashDebitDefault)->toBe($expectedCashDebitDefault);
+});
+
+function removePpnWapuConfigurationForCompany(int $companyId): void
+{
+    Adjustment::query()
+        ->where('company_id', $companyId)
+        ->where('name', 'PPN WAPU')
+        ->delete();
+
+    AccountDefault::query()
+        ->withoutGlobalScope(CurrentCompanyScope::class)
+        ->where('company_id', $companyId)
+        ->where('key', AccountDefaultKey::PPnWapu->value)
+        ->delete();
+}
+
+test('approveDraft succeeds without PPN WAPU adjustment or account default', function () {
+    $companyId = $this->testCompany->id;
+    removePpnWapuConfigurationForCompany($companyId);
+
+    expect(Adjustment::companyHasPpnWapu($companyId))->toBeFalse();
+
+    $invoice = Invoice::factory()
+        ->withLineItems()
+        ->state([
+            'company_id' => $companyId,
+            'due_date' => now()->addDays(30),
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    expect($invoice->wasApproved())->toBeTrue()
+        ->and($invoice->approvalTransaction)->not->toBeNull();
+});
+
+test('approveDraft with profit journals tax to PPN when WAPU is not configured', function () {
+    $companyId = $this->testCompany->id;
+    removePpnWapuConfigurationForCompany($companyId);
+
+    $profitTotal = 1_000_000;
+    $taxTotal = 110_000;
+
+    $invoice = Invoice::factory()
+        ->withLineItems(1)
+        ->state([
+            'company_id' => $companyId,
+            'due_date' => now()->addDays(30),
+            'profit_total' => $profitTotal,
+            'tax_total' => $taxTotal,
+            'discount_method' => \App\Enums\Accounting\DocumentDiscountMethod::PerLineItem,
+            'discount_total' => 0,
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $invoice->updateQuietly([
+        'total' => $invoice->subtotal + $profitTotal + $taxTotal - ($invoice->discount_total ?? 0),
+    ]);
+
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    $ppnAccount = Account::getAccountsPPn($companyId);
+    $wapuAccount = Account::getAccountsWapuIfConfigured($companyId);
+
+    $approvalTransaction = $invoice->approvalTransaction;
+    expect($approvalTransaction)->not->toBeNull();
+
+    expect(
+        JournalEntry::query()
+            ->where('transaction_id', $approvalTransaction->id)
+            ->where('account_id', $ppnAccount->id)
+            ->exists()
+    )->toBeTrue()
+        ->and($wapuAccount)->toBeNull();
 });
 
 it('does not treat invoice above 10jt as WAPU when PPN WAPU adjustment is not configured', function () {

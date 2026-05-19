@@ -156,7 +156,9 @@ class Invoice extends Document
             if ($record->isDirty('status')) {
                 if ($record->status === InvoiceStatus::Paid) {
                     // Membaca akun coa default
-                    $accountWapu = Account::getAccountsWapu($record->company_id);
+                    $accountWapu = Adjustment::companyHasPpnWapu($record->company_id)
+                        ? Account::getAccountsWapu($record->company_id)
+                        : null;
                     $accountPPn = Account::getAccountsPPn($record->company_id);
                     $accountPPh23 = Account::getAccountsPPh23($record->company_id);
                     $receivableAccount = Account::getAccountsReceivableAccount($record->company_id);
@@ -219,7 +221,7 @@ class Invoice extends Document
 
                     foreach ($approvalJournalEntries as $journal) {
                         // PPN WAPU
-                        if ($journal->account_id == $accountWapu->id) {
+                        if ($accountWapu && $journal->account_id == $accountWapu->id) {
                             $journalEntry = JournalEntry::create([
                                 'transaction_id' => $latestTransaction->id,
                                 'account_id' => $accountWapu->id,
@@ -310,13 +312,15 @@ class Invoice extends Document
                 // Definisikan akun pajak
                 $pph23Account = Account::getAccountsPPh23($record->company_id);
                 $ppnAccount = Account::getAccountsPPn($record->company_id);
-                $wapuAccount = Account::getAccountsWapu($record->company_id);
 
                 $taxAccounts = [
                     $pph23Account->id,
                     $ppnAccount->id,
-                    $wapuAccount->id,
                 ];
+
+                if (Adjustment::companyHasPpnWapu($record->company_id)) {
+                    $taxAccounts[] = Account::getAccountsWapu($record->company_id)->id;
+                }
 
                 // Ambil semua transaksi yang terkait dengan invoice ini
                 $transactions = Transaction::where('transactionable_type', Invoice::class)
@@ -442,7 +446,7 @@ class Invoice extends Document
     public function isWapu(): bool
     {
         return $this->exceedsWapuThreshold()
-            && Adjustment::findPpnWapuForCompany($this->company_id) !== null;
+            && Adjustment::companyHasPpnWapu($this->company_id);
     }
 
     public function client()
@@ -882,16 +886,23 @@ class Invoice extends Document
             $profitDescription = 'Profit ' . $baseDescription;
             $journalEntryData[] = [
                 'type' => JournalEntryType::Credit,
-                'account_id' => Account::getAccountsProfit()->id,
+                'account_id' => Account::getAccountsProfit($this->company_id)->id,
                 'amount_in_invoice_currency' => $profitTotal,
                 'description' => $profitDescription,
             ];
-            $journalEntryData[] = [
-                'type' => JournalEntryType::Credit,
-                'account_id' => Account::getAccountsWapu()->id,
-                'amount_in_invoice_currency' => $this->tax_total,
-                'description' => $profitDescription,
-            ];
+
+            if ($this->tax_total > 0) {
+                $taxAccountId = Adjustment::companyHasPpnWapu($this->company_id)
+                    ? Account::getAccountsWapu($this->company_id)->id
+                    : Account::getAccountsPPn($this->company_id)->id;
+
+                $journalEntryData[] = [
+                    'type' => JournalEntryType::Credit,
+                    'account_id' => $taxAccountId,
+                    'amount_in_invoice_currency' => $this->tax_total,
+                    'description' => $profitDescription,
+                ];
+            }
         }
 
         // Convert amounts to default currency

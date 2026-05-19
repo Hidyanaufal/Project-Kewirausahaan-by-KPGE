@@ -82,6 +82,11 @@ class Adjustment extends Model
             ->first();
     }
 
+    public static function companyHasPpnWapu(int $companyId): bool
+    {
+        return static::findPpnWapuForCompany($companyId) !== null;
+    }
+
     public function isSalesTax(): bool
     {
         return $this->category->isTax() && $this->type->isSales();
