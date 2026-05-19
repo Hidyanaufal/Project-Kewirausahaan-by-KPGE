@@ -250,6 +250,29 @@ class Account extends Model
         return self::findAccountByNameOrFail(AccountDefaultKey::PPnWapu, $companyId);
     }
 
+    public static function getAccountsWapuIfConfigured(?int $companyId = null): ?self
+    {
+        if (! $companyId) {
+            return null;
+        }
+
+        $accountDefault = AccountDefault::query()
+            ->withoutGlobalScope(CurrentCompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('key', AccountDefaultKey::PPnWapu->value)
+            ->first();
+
+        if (! $accountDefault) {
+            return null;
+        }
+
+        return self::query()
+            ->withoutGlobalScope(CurrentCompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('id', $accountDefault->account_id)
+            ->first();
+    }
+
     public static function getAccountsProfit(?int $companyId = null): self
     {
         return self::findAccountByNameOrFail(AccountDefaultKey::Profit, $companyId);
