@@ -298,7 +298,7 @@ class ReportService
             );
 
             foreach ($account->journalEntries as $journalEntry) {
-                $transaction = $journalEntry->transaction;
+                $transaction = $journalEntry->transaction()->withoutGlobalScopes()->first();
                 $signedAmount = $journalEntry->signed_amount;
                 $amount = $journalEntry->amount;
 
