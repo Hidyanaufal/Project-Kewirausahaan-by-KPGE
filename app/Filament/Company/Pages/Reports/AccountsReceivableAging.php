@@ -287,8 +287,10 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
 
         // Grand total at the end (matches UI total across all customers).
         if (! empty($grand)) {
-            $agingKeys = array_keys(array_filter($grand, fn ($k) => str_starts_with((string) $k, 'period_'), ARRAY_FILTER_USE_KEY));
-            sort($agingKeys);
+            // Do NOT sort — PHP preserves insertion order for associative arrays.
+            // Sorting alphabetically would scramble the aging period columns
+            // (e.g. over_periods would end up before period_1, period_2, etc.).
+            $agingKeys = array_keys(array_filter($grand, fn ($k) => $k !== 'total_prime', ARRAY_FILTER_USE_KEY));
 
             $grandRow = ['Total', '', number_format(($grand['total_prime'] ?? 0) / 100, 2, ',', '.')];
             foreach ($agingKeys as $key) {
