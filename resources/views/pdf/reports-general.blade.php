@@ -46,6 +46,16 @@
             border-collapse: collapse;
             margin-top: 30px;
         }
+        table.report-table-fixed {
+            table-layout: fixed;
+            width: 100%;
+        }
+        table.report-table-fixed th,
+        table.report-table-fixed td {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            vertical-align: top;
+        }
         table th, table td {
             padding: 2px 6px;
             text-align: left;
@@ -63,8 +73,20 @@
         <h3>{{ $data['report_period'] }}</h3>
     </center>
 
+    @php
+        $pdfTable = $data['pdf_table'] ?? null;
+        $tableClass = $pdfTable ? 'report-table-fixed' : '';
+    @endphp
+
     <center>
-        <table>
+        <table class="{{ $tableClass }}">
+            @if (! empty($pdfTable['column_widths']))
+                <colgroup>
+                    @foreach ($pdfTable['column_widths'] as $width)
+                        <col style="width: {{ $width }}">
+                    @endforeach
+                </colgroup>
+            @endif
             <thead>
                 <tr style="color: rgb(6, 6, 174)">
                     @foreach ($data['columns'] as $col)
@@ -106,9 +128,13 @@
                             @endphp
                             <td>
                                 <p style="{{ $style }}">
-                                    {{ (!$isMarkedString && is_numeric($cell))
-                                        ? number_format($cell, 2, ',', '.')
-                                        : $cell }}
+                                    @if ($cell === null || $cell === '')
+                                        &nbsp;
+                                    @elseif (! $isMarkedString && is_numeric($cell))
+                                        {{ number_format($cell, 2, ',', '.') }}
+                                    @else
+                                        {{ $cell }}
+                                    @endif
                                 </p>
                             </td>
                         @endforeach

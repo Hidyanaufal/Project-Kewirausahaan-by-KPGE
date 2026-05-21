@@ -868,7 +868,7 @@ class ExportService
             'data' => $data,
         ]);
 
-        $pdf->setOptions([
+        $pdfOptions = [
             'dpi' => 96,
             'zoom' => 1,
             'enable-local-file-access' => true,
@@ -878,7 +878,13 @@ class ExportService
             'margin-left' => 5,
             'margin-right' => 5,
             'disable-smart-shrinking' => true,
-        ]);
+        ];
+
+        if (! empty($data['pdf_table']['orientation'])) {
+            $pdfOptions['orientation'] = $data['pdf_table']['orientation'];
+        }
+
+        $pdf->setOptions($pdfOptions);
 
         return response()->streamDownload(function () use ($pdf) {
             echo $pdf->output();
@@ -892,7 +898,7 @@ class ExportService
         {
             use \Maatwebsite\Excel\Concerns\RegistersEventListeners;
 
-            public function __construct(protected array $data) {}
+            public function __construct(public array $data) {}
 
             public function array(): array
             {
@@ -1063,10 +1069,58 @@ class ExportService
                 return [];
             }
 
-            public static function afterSheet(\Maatwebsite\Excel\Events\AfterSheet $event)
+            public static function afterSheet(\Maatwebsite\Excel\Events\AfterSheet $event): void
             {
-                // Freeze di bawah header tabel
                 $event->sheet->freezePane('A5');
+
+                $sheet = $event->sheet->getDelegate();
+                $export = $event->getConcernable();
+                if (! is_object($export) || ! isset($export->data['rows'])) {
+                    return;
+                }
+
+                $mergeColumns = $export->data['excel_merge_columns'] ?? [];
+                $wrapColumns = $export->data['excel_wrap_columns'] ?? [];
+                $dataStartRow = 5;
+                $highestRow = $sheet->getHighestRow();
+
+                if ($mergeColumns !== []) {
+                    $currentKey = null;
+                    $groupStart = null;
+                    $rowIndex = 0;
+
+                    foreach ($export->data['rows'] as $row) {
+                        $sheetRow = $dataStartRow + $rowIndex;
+                        $key = ($row['excel_merge'] ?? false) ? ($row['excel_merge_key'] ?? null) : null;
+
+                        if ($key !== $currentKey) {
+                            if ($currentKey !== null && $groupStart !== null && $sheetRow - 1 > $groupStart) {
+                                foreach ($mergeColumns as $col) {
+                                    $sheet->mergeCells("{$col}{$groupStart}:{$col}" . ($sheetRow - 1));
+                                }
+                            }
+                            $currentKey = $key;
+                            $groupStart = $key !== null ? $sheetRow : null;
+                        }
+
+                        $rowIndex++;
+                    }
+
+                    if ($currentKey !== null && $groupStart !== null && $highestRow > $groupStart) {
+                        foreach ($mergeColumns as $col) {
+                            $sheet->mergeCells("{$col}{$groupStart}:{$col}{$highestRow}");
+                        }
+                    }
+                }
+
+                if ($wrapColumns !== [] && $highestRow >= $dataStartRow) {
+                    foreach ($wrapColumns as $col) {
+                        $sheet->getStyle("{$col}{$dataStartRow}:{$col}{$highestRow}")
+                            ->getAlignment()
+                            ->setWrapText(true)
+                            ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP);
+                    }
+                }
             }
 
             public function title(): string

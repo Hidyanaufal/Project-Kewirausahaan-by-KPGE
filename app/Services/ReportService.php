@@ -1177,7 +1177,13 @@ class ReportService
 
         $documents = $entityType === DocumentEntityType::Client
             ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)
-                ->with(['client:id,name', 'project:id,name'])
+                ->with([
+                    'client:id,name',
+                    'project:id,name',
+                    'lineItems' => function ($query) {
+                        $query->orderBy('line_number')->with('offering:id,name');
+                    },
+                ])
                 ->get()
             : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
                 ->with(['vendor:id,name', 'project:id,name'])
@@ -1202,10 +1208,23 @@ class ReportService
                 $ageFromDue = $due->diffInDays($asOfDateCarbon, false);
             }
 
+            $itemNames = [];
+            if ($entityType === DocumentEntityType::Client) {
+                foreach ($doc->lineItems ?? [] as $lineItem) {
+                    $name = trim((string) ($lineItem->offering?->name ?? ''));
+                    if ($name === '') {
+                        $name = trim((string) ($lineItem->description ?? ''));
+                    }
+                    $itemNames[] = $name !== '' ? $name : '-';
+                }
+            }
+
             $rows[] = [
+                'invoice_id' => $doc->id,
                 'customer_name' => $entity->name ?? '-',
                 'invoice_number' => $doc->code ?? '-',
                 'project_name' => $projectName,
+                'item_names' => $itemNames,
                 'invoice_date' => $invoiceDate,
                 'due_date' => $dueDate,
                 'invoice_amount' => $invoiceAmount,
@@ -1220,6 +1239,7 @@ class ReportService
                 'Invoice',
                 'No. Invoice',
                 'Project',
+                'Items',
                 'Date',
                 'Due Date',
                 'Invoice Amount',
