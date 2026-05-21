@@ -13,7 +13,8 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             // UserCompanySeeder::class,
-            TaxCodeSeeder::class
+            TaxCodeSeeder::class,
+            // AssetMasterDataSeeder::class, // manual only: php artisan db:seed --class=AssetMasterDataSeeder
         ]);
     }
 }
