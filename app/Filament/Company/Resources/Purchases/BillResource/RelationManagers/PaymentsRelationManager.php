@@ -2,12 +2,9 @@
 
 namespace App\Filament\Company\Resources\Purchases\BillResource\RelationManagers;
 
-use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\PaymentMethod;
 use App\Enums\Accounting\TransactionType;
-use App\Models\Accounting\Account;
 use App\Models\Accounting\Bill;
-use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Transaction;
 use App\Models\Banking\BankAccount;
 use App\Utilities\Currency\CurrencyAccessor;
@@ -21,6 +18,7 @@ use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\MaxWidth;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 
 class PaymentsRelationManager extends RelationManager
 {
@@ -236,22 +234,13 @@ class PaymentsRelationManager extends RelationManager
                     ->mountUsing(function (Form $form) {
                         /** @var Bill $record */
                         $record = $this->getOwnerRecord()->fresh();
-                        $initialTransaction = $record->initialTransaction;
-                        $defaultPph23 = 0;
-                        if ($initialTransaction) {
-                            $journals = JournalEntry::where('transaction_id', $initialTransaction->id)->get();
-                            $expenseAccountIds = Account::where('company_id', $record->company_id)
-                                ->where('category', AccountCategory::Expense)
-                                ->pluck('id');
-                            $expenseJournals = $journals->whereIn('account_id', $expenseAccountIds);
-                            $expenseTotal = $expenseJournals->sum('amount');
-                            $defaultPph23 = (int) round($expenseTotal * 0.02);
-                        }
+                        $defaultPph23 = $record->defaultPph23FromInitialTransaction();
+
                         $form->fill([
                             'posted_at' => company_today()->toDateString(),
                             'amount' => max($record->amount_due, 0),
                             'pph23' => $defaultPph23 ?: null,
-                            'payment_method'    => PaymentMethod::BankPayment
+                            'payment_method' => PaymentMethod::BankPayment,
                         ]);
                     })
                     ->databaseTransaction()
@@ -259,9 +248,19 @@ class PaymentsRelationManager extends RelationManager
                     ->action(function (Tables\Actions\CreateAction $action, array $data) {
                         /** @var Bill $record */
                         $record = $this->getOwnerRecord();
-                        $record->pph23 = ! empty($data['pph23']) ? $data['pph23'] : null;
-                        $record->save();
-                        $record->recordPayment($data);
+
+                        DB::transaction(function () use ($record, $data) {
+                            $pph23Cents = ! empty($data['pph23']) ? (int) $data['pph23'] : null;
+
+                            $record->update([
+                                'pph23' => $pph23Cents,
+                            ]);
+
+                            $record->recordPayment([
+                                ...$data,
+                                'pph23' => $pph23Cents,
+                            ]);
+                        });
 
                         $action->success();
 

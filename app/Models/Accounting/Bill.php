@@ -6,6 +6,7 @@ use App\Casts\RateCast;
 use App\Collections\Accounting\DocumentCollection;
 use App\Concerns\HasAttacments;
 use App\Concerns\HasDocumentNumber;
+use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\AdjustmentComputation;
 use App\Enums\Accounting\BillStatus;
 use App\Enums\Accounting\DocumentDiscountMethod;
@@ -103,14 +104,8 @@ class Bill extends Document
             }
             $record->actual_total = $record->total - ($record->pph23 ?? 0);
 
-            if ($record->isDirty('status') && $record->status === BillStatus::Paid && $record->pph23) {
-                // Bill: PPh23 saat pelunasan dicatat sebagai Hutang PPh23 (liability).
-                // Fallback ke perilaku lama bila default belum dikonfigurasi.
-                try {
-                    $accountPPh23 = Account::getAccountsPPh23Payable($record->company_id);
-                } catch (\Throwable) {
-                    $accountPPh23 = Account::getAccountsPPh23($record->company_id);
-                }
+            if ($record->isDirty('status') && $record->status === BillStatus::Paid) {
+                $accountPPh23 = Account::getAccountsPPh23Payable($record->company_id);
                 $accountPayable = Account::getAccountsPayableAccount($record->company_id);
 
                 $latestTransaction = Transaction::query()
@@ -123,6 +118,16 @@ class Bill extends Document
                     ->first();
 
                 if (! $latestTransaction) {
+                    return;
+                }
+
+                $pph23Amount = (int) (
+                    $latestTransaction->meta['pph23_cents']
+                    ?? $record->pph23
+                    ?? 0
+                );
+
+                if ($pph23Amount <= 0) {
                     return;
                 }
 
@@ -139,7 +144,7 @@ class Bill extends Document
                     return;
                 }
 
-                $pph23InDefaultCurrency = $record->formatAmountToDefaultCurrency((int) $record->pph23);
+                $pph23InDefaultCurrency = $record->formatAmountToDefaultCurrency($pph23Amount);
 
                 DB::transaction(function () use ($apDebitEntry, $pph23InDefaultCurrency, $latestTransaction, $accountPPh23, $record) {
                     $apDebitEntry->update(['amount' => $apDebitEntry->amount + $pph23InDefaultCurrency]);
@@ -387,8 +392,26 @@ class Bill extends Document
             'meta' => [
                 'original_document_currency' => $billCurrency,
                 'amount_in_document_currency_cents' => $amountInBillCurrencyCents,
+                'pph23_cents' => $data['pph23'] ?? null,
             ],
         ]);
+    }
+
+    public function defaultPph23FromInitialTransaction(): int
+    {
+        $initialTransaction = $this->initialTransaction;
+
+        if (! $initialTransaction) {
+            return 0;
+        }
+
+        $journals = JournalEntry::where('transaction_id', $initialTransaction->id)->get();
+        $expenseAccountIds = Account::where('company_id', $this->company_id)
+            ->where('category', AccountCategory::Expense)
+            ->pluck('id');
+        $expenseTotal = $journals->whereIn('account_id', $expenseAccountIds)->sum('amount');
+
+        return (int) round($expenseTotal * 0.02);
     }
 
     public function createInitialTransaction(?Carbon $postedAt = null): void
