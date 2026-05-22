@@ -207,10 +207,12 @@ class ExportService
             $normalized = strtolower(trim($label));
             if (in_array($normalized, ['account code', 'account no', 'account no.', 'gl account no.', 'account number'], true)) {
                 $accountCodeIndex = $i;
+
                 break;
             }
             if ($normalized === 'account_code') {
                 $accountCodeIndex = $i;
+
                 break;
             }
         }
@@ -222,6 +224,7 @@ class ExportService
                 $value = $row[$accountCodeIndex] ?? '';
                 $newRow = $row;
                 array_splice($newRow, $accountCodeIndex + 1, 0, [$value]);
+
                 return $newRow;
             }, $legacyRows);
         }
@@ -235,6 +238,7 @@ class ExportService
             $normalized = strtolower(trim($label));
             if (in_array($normalized, ['account', 'account name', 'accounts'], true)) {
                 $accountNameIndex = $i;
+
                 break;
             }
         }
@@ -307,6 +311,7 @@ class ExportService
                 $b = $rowsForEnhanced[$i]['data'] ?? null;
                 if ($a !== $b) {
                     $idx = $i + 1; // 1-based for humans
+
                     throw new \RuntimeException("Mismatch detected at table row #{$idx}. Legacy and enhanced row data differ.");
                 }
             }
@@ -327,6 +332,7 @@ class ExportService
             'rows' => $rowsForEnhanced,
         ]);
     }
+
     /**
      * @param  array<string, mixed>  $row
      * @return list<mixed>
@@ -918,6 +924,7 @@ class ExportService
                     foreach (($row['data'] ?? []) as $cell) {
                         if (is_string($cell) && str_starts_with($cell, '__str')) {
                             $normalizedRow[] = str_replace('__str', '', $cell);
+
                             continue;
                         }
 
@@ -941,6 +948,7 @@ class ExportService
                                 if ($clean !== '' && is_numeric($clean)) {
                                     $num = (float) $clean;
                                     $normalizedRow[] = $negative ? -abs($num) : $num;
+
                                     continue;
                                 }
                             }
@@ -1027,6 +1035,7 @@ class ExportService
                     ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 
                 // ====== FORMAT ANGKA ======
+                $numberFormatCode = $this->data['number_format_code'] ?? '#,##0.00';
                 $numericColumns = $this->data['numeric_columns'] ?? null;
                 if (is_array($numericColumns) && ! empty($numericColumns)) {
                     foreach ($numericColumns as $col) {
@@ -1035,14 +1044,14 @@ class ExportService
                         }
                         $col = strtoupper($col);
                         $sheet->getStyle("{$col}5:{$col}{$highestRow}")
-                            ->getNumberFormat()->setFormatCode('#,##0.00');
+                            ->getNumberFormat()->setFormatCode($numberFormatCode);
                         $sheet->getStyle("{$col}5:{$col}{$highestRow}")
                             ->getAlignment()->setHorizontal('right');
                     }
                 } else {
                     foreach (range('B', $highestCol) as $col) {
                         $sheet->getStyle("{$col}5:{$col}{$highestRow}")
-                            ->getNumberFormat()->setFormatCode('#,##0.00');
+                            ->getNumberFormat()->setFormatCode($numberFormatCode);
                         $sheet->getStyle("{$col}5:{$col}{$highestRow}")
                             ->getAlignment()->setHorizontal('right');
                     }

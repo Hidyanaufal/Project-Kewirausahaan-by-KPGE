@@ -87,10 +87,13 @@
                     @endforeach
                 </colgroup>
             @endif
+            @php
+                $balanceColumnIndex = $data['balance_column_index'] ?? null;
+            @endphp
             <thead>
                 <tr style="color: rgb(6, 6, 174)">
-                    @foreach ($data['columns'] as $col)
-                        <th>{{ $col }}</th>
+                    @foreach ($data['columns'] as $index => $col)
+                        <th @if ($balanceColumnIndex !== null && $index === $balanceColumnIndex) style="text-align: right" @endif>{{ $col }}</th>
                     @endforeach
                 </tr>
             </thead>
@@ -99,6 +102,19 @@
                     @php
                         $rowStyles = $row['style'] ?? [];
                         $rowCellStyles = $row['cell_styles'] ?? [];
+
+                        if (isset($rowStyles['cell_styles']) && is_array($rowStyles['cell_styles'])) {
+                            foreach ($rowStyles['cell_styles'] as $cellIndex => $cellStyle) {
+                                if (! is_array($cellStyle)) {
+                                    continue;
+                                }
+                                $rowCellStyles[$cellIndex] = array_merge($rowCellStyles[$cellIndex] ?? [], $cellStyle);
+                            }
+                            unset($rowStyles['cell_styles']);
+                        }
+
+                        $descriptionColumnIndex = $data['description_column_index'] ?? 0;
+                        $balanceColumnIndex = $data['balance_column_index'] ?? null;
                         $indentDescriptionOnly = isset($rowStyles['padding-left']) && ! isset($rowStyles['font-weight']);
                     @endphp
                     <tr>
@@ -110,7 +126,7 @@
                                 }
 
                                 if ($indentDescriptionOnly) {
-                                    $effectiveStyles = $index === 0
+                                    $effectiveStyles = $index === $descriptionColumnIndex
                                         ? ['padding-left' => $rowStyles['padding-left']]
                                         : [];
                                 } else {
@@ -122,7 +138,12 @@
                                     $rowCellStyles[$index] ?? []
                                 );
 
+                                if ($balanceColumnIndex !== null && $index === $balanceColumnIndex) {
+                                    $effectiveStyles['text-align'] = 'right';
+                                }
+
                                 $style = collect($effectiveStyles)
+                                    ->filter(fn ($v) => is_scalar($v))
                                     ->map(fn ($v, $k) => "{$k}: {$v}")
                                     ->join('; ');
                             @endphp
@@ -131,7 +152,7 @@
                                     @if ($cell === null || $cell === '')
                                         &nbsp;
                                     @elseif (! $isMarkedString && is_numeric($cell))
-                                        {{ number_format($cell, 2, ',', '.') }}
+                                        {{ number_format($cell, $data['amount_decimal_places'] ?? 2, ',', '.') }}
                                     @else
                                         {{ $cell }}
                                     @endif
