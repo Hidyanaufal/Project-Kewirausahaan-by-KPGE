@@ -5,24 +5,24 @@ namespace App\Filament\Company\Pages\Reports;
 use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
-use App\Enums\Accounting\AccountCategory;
-use App\Enums\Accounting\AccountType;
 use App\Filament\Company\Pages\Concerns\HasReportTabs;
 use App\Helpers\AuthHelper;
-use App\Models\Accounting\Account;
 use App\Models\Company;
+use App\Services\CompanySettingsService;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
 use App\Transformers\CashFlowStatementReportTransformer;
+use App\Utilities\Currency\CurrencyConverter;
 use Carbon\Carbon;
 use Filament\Actions\Action;
-use Filament\Forms\Form;
 use Filament\Forms;
+use Filament\Forms\Form;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
 use Guava\FilamentClusters\Forms\Cluster;
+use Illuminate\Support\Collection;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -99,98 +99,278 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
         if ($template == 'summary') {
             return $this->__buildReportSummary();
         }
+
         return $this->__buildReportDirect();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function cashFlowExportMeta(string $balanceColumn, int $descriptionColumnIndex = 1): array
+    {
+        $balanceColumnIndex = ord(strtoupper($balanceColumn)) - ord('A');
+
+        $widths = match ($balanceColumnIndex) {
+            3 => ['14%', '12%', '44%', '30%'],
+            2 => ['14%', '46%', '40%'],
+            1 => ['58%', '42%'],
+            default => ['14%', '46%', '40%'],
+        };
+
+        return [
+            'amount_decimal_places' => 0,
+            'number_format_code' => '#,##0',
+            'numeric_columns' => [$balanceColumn],
+            'description_column_index' => $descriptionColumnIndex,
+            'balance_column_index' => $balanceColumnIndex,
+            'pdf_table' => [
+                'column_widths' => $widths,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<int, float|int|string>  $data
+     * @return array{data: array<int, float|int|string>, style?: array<string, string>, cell_styles?: array<int, array<string, string>>}
+     */
+    private function cashFlowMakeRow(array $data, array $style = [], int $padLevel = 0, int $descriptionColumnIndex = 0): array
+    {
+        $row = ['data' => $data];
+
+        if ($style !== []) {
+            $row['style'] = $style;
+        }
+
+        if ($padLevel > 0) {
+            $row['cell_styles'] = [
+                $descriptionColumnIndex => [
+                    'padding-left' => ($padLevel * 10) . 'px',
+                ],
+            ];
+        }
+
+        return $row;
+    }
+
+    private function parseCashFlowAmount(mixed $value): float
+    {
+        if ($value === null || $value === '') {
+            return 0.0;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+
+        $currency = CompanySettingsService::getDefaultCurrency($this->company->id);
+
+        return CurrencyConverter::convertToFloat((string) $value, $currency);
+    }
+
+    private function getCashFlowReportDto(): ReportDTO
+    {
+        return $this->reportService->buildCashFlowStatementReport(
+            $this->getFormattedStartDate(),
+            $this->getFormattedEndDate(),
+            $this->getToggledColumns(),
+            companyId: $this->company->id,
+        );
+    }
+
+    /**
+     * @return array{starting: float, net: float, ending: float}
+     */
+    private function getCashFlowFooterTotals(ReportDTO $reportDto): array
+    {
+        $overall = $reportDto->overallTotal;
+
+        return [
+            'starting' => $this->parseCashFlowAmount($overall?->startingBalance),
+            'net' => $this->parseCashFlowAmount($overall?->netMovement),
+            'ending' => $this->parseCashFlowAmount($overall?->endingBalance),
+        ];
+    }
+
+    private function getCashFlowSectionTotal(ReportDTO $reportDto, string $sectionName): float
+    {
+        $category = $reportDto->categories[$sectionName] ?? null;
+
+        if ($category === null) {
+            return 0.0;
+        }
+
+        return $this->parseCashFlowAmount($category->summary->netMovement ?? 0);
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: float|string}
+     */
+    private function cashFlowDetailRow(?string $accountCode, string $label, float | string $balance = ''): array
+    {
+        $codeCell = ($accountCode !== null && $accountCode !== '') ? '__str' . $accountCode : '';
+
+        return [$codeCell, $label, $balance];
+    }
+
+    /**
+     * Baris section untuk export Direct / Detail.
+     *
+     * - direct: daftar akun per section + total section + footer (tanpa subtotal per tipe akun)
+     * - detail: seperti laporan on-screen — subtotal tipe hanya jika >1 akun dalam tipe tersebut
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function buildCashFlowSectionRows(
+        ReportDTO $reportDto,
+        int $descriptionColumnIndex,
+        string $exportTemplate = 'detail',
+    ): Collection {
+        $rows = collect();
+        $footerStyle = ['font-weight' => 'bold', 'color' => 'rgb(0,0,128)'];
+        $includeTypeTotals = $exportTemplate === 'detail';
+
+        $sections = [
+            'Operating Activities' => 'Total of Operating Activities',
+            'Investing Activities' => 'Total of Investing',
+            'Financing Activities' => 'Total of Financing',
+        ];
+
+        foreach ($sections as $sectionKey => $totalLabel) {
+            $category = $reportDto->categories[$sectionKey] ?? null;
+            $sectionTotal = $this->getCashFlowSectionTotal($reportDto, $sectionKey);
+
+            $rows->push($this->cashFlowMakeRow(
+                $this->cashFlowDetailRow(null, $sectionKey, ''),
+                ['font-weight' => 'bold'],
+                0,
+                $descriptionColumnIndex,
+            ));
+
+            if ($category !== null) {
+                foreach ($category->types ?? [] as $typeName => $type) {
+                    $accountRows = [];
+                    foreach ($type->accounts ?? [] as $account) {
+                        $amount = $this->parseCashFlowAmount($account->balance->netMovement ?? 0);
+                        if ($amount == 0.0) {
+                            continue;
+                        }
+
+                        $accountRows[] = $account;
+                    }
+
+                    if ($accountRows === []) {
+                        continue;
+                    }
+
+                    $rows->push($this->cashFlowMakeRow(
+                        $this->cashFlowDetailRow(null, $typeName, ''),
+                        ['font-weight' => 'bold'],
+                        1,
+                        $descriptionColumnIndex,
+                    ));
+
+                    foreach ($accountRows as $account) {
+                        $amount = $this->parseCashFlowAmount($account->balance->netMovement ?? 0);
+                        $rows->push($this->cashFlowMakeRow(
+                            $this->cashFlowDetailRow($account->accountCode, $account->accountName, $amount),
+                            [],
+                            2,
+                            $descriptionColumnIndex,
+                        ));
+                    }
+
+                    if ($includeTypeTotals && count($accountRows) > 1) {
+                        $typeTotal = $this->parseCashFlowAmount($type->summary->netMovement ?? 0);
+                        $rows->push($this->cashFlowMakeRow(
+                            $this->cashFlowDetailRow(null, 'Total of ' . $typeName, $typeTotal),
+                            ['font-weight' => 'bold'],
+                            1,
+                            $descriptionColumnIndex,
+                        ));
+                    }
+                }
+            }
+
+            $rows->push($this->cashFlowMakeRow(
+                $this->cashFlowDetailRow(null, $totalLabel, $sectionTotal),
+                $footerStyle,
+                0,
+                $descriptionColumnIndex,
+            ));
+        }
+
+        $this->appendCashFlowGrandFooter($rows, $reportDto, 'detail', $descriptionColumnIndex);
+
+        return $rows;
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: string, 3: float|string}
+     */
+    private function cashFlowSummaryRow(?string $accountCode, string $status, string $accountType, float | string $balance = ''): array
+    {
+        $codeCell = ($accountCode !== null && $accountCode !== '') ? '__str' . $accountCode : '';
+
+        return [$codeCell, $status, $accountType, $balance];
+    }
+
+    private function appendCashFlowGrandFooter(
+        Collection $rows,
+        ReportDTO $reportDto,
+        string $layout,
+        int $descriptionColumnIndex,
+    ): void {
+        $footer = $this->getCashFlowFooterTotals($reportDto);
+        $footerStyle = [
+            'font-weight' => 'bold',
+            'color' => $layout === 'summary' ? 'blue' : 'rgb(0, 0, 128)',
+        ];
+
+        $footerRows = [
+            ['', 'Total of Net Cash Provide (Used) in This Period', $footer['net']],
+            ['', 'Total of Cash & Cash Equivalent at Beginning of Period', $footer['starting']],
+            ['', 'Total of Cash & Cash Equivalent at End of Period', $footer['ending']],
+        ];
+
+        foreach ($footerRows as [$code, $label, $amount]) {
+            if ($layout === 'summary') {
+                $rows->push([
+                    'data' => $this->cashFlowSummaryRow($code ?: null, '', $label, $amount),
+                    'style' => $footerStyle,
+                ]);
+            } else {
+                $rows->push([
+                    'data' => $this->cashFlowDetailRow($code ?: null, $label, $amount),
+                    'style' => $footerStyle,
+                ]);
+            }
+        }
     }
 
     public function __buildReportDirect(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
-        $report = $this->report;
+        $reportDto = $this->getCashFlowReportDto();
         $now = now()->format('Y-m-d_H-i-s');
+        $descCol = 1;
 
         $data = [
-            'filename'      => "{$company->name} Statement of Cash Flows (Direct Method) {$now}.pdf",
-            'company_name'  => $company->name,
-            'report_title'  => 'Statement of Cash Flows (Direct Method)',
-            'report_period' => "Period " . Carbon::parse($report->getStartDate())->format('F Y') . " to " . Carbon::parse($report->getEndDate())->format('F Y'),
-            'columns'       => [
-                "Description",
-                "Balance",
+            'filename' => "{$company->name} Statement of Cash Flows (Direct Method) {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'Statement of Cash Flows (Direct Method)',
+            'report_period' => 'Period ' . $reportDto->startDate?->format('F Y') . ' to ' . $reportDto->endDate?->format('F Y'),
+            'columns' => [
+                'Account No.',
+                'Description',
+                'Balance',
             ],
-            'rows' => [],
+            'rows' => $this->buildCashFlowSectionRows($reportDto, $descCol, 'direct')->toArray(),
         ];
 
-        // Helper padding function
-        $pad = fn(int $level = 0) => ['padding-left' => ($level * 10) . 'px'];
-
-        $rows = collect();
-
-        // === Cash Flow from Operating Activities ===
-        $rows->push([
-            'data' => ['Cash Flows from Operating Activities'],
-            'style' => array_merge(['font-weight' => 'bold'], $pad(0)),
-        ]);
-
-        $rows->push(['data' => ['Cash from Sales', 2419141494.74], 'style' => $pad(1)]);
-        $rows->push(['data' => ['PENDAPATAN DILUAR USAHA', null], 'style' => array_merge(['font-weight' => 'bold'], $pad(1))]);
-        $rows->push(['data' => ['Pendapatan Lain-Lain', 5343645.82], 'style' => $pad(2)]);
-
-        $rows->push(['data' => ['COGS', -2428410027.00], 'style' => array_merge(['font-weight' => 'bold'], $pad(1))]);
-        $rows->push(['data' => ['HPP TK - Korpel', -3945019968.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['HPP TK - SDM', -745755701.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['HPP TK - Website / PSD', -2052746085.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['HPP Tiket', -350745622.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['HPP - BPJS', -1101040938.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['HPP - PPh 21', -331971010.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['HPP Pengadaan Barang', -975570647.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['HPP Survey', -5474071852.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['HPP TK - Bukit Daun', -402969149.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['HPP TK - SCM', -123255055.00], 'style' => $pad(2)]);
-
-        // === Operating Profit / Loss ===
-        $rows->push([
-            'data' => ['Operating Profit/(Loss) before changes in operating assets and liabilities', -814439211.17],
-            'style' => array_merge(['font-weight' => 'bold'], $pad(1)),
-        ]);
-
-        // === Decrease (Increase) in operating assets ===
-        $rows->push(['data' => ['Decrease (increase) in operating assets'], 'style' => array_merge(['font-weight' => 'bold'], $pad(1))]);
-        $rows->push(['data' => ['Biaya dibayar dimuka', -192137100.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['Angsuran PPh 25', -192137100.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['Total Decrease (increase) in operating assets', -192137100.00], 'style' => array_merge(['font-weight' => 'bold'], $pad(1))]);
-
-        // === Increase (decrease) in operating liabilities ===
-        $rows->push(['data' => ['Increase (decrease) in operating liabilities'], 'style' => array_merge(['font-weight' => 'bold'], $pad(1))]);
-        $rows->push(['data' => ['Hutang KPP', -955000000.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['Hutang KPG', 1760000000.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['PPN Keluaran', -142922929.00], 'style' => $pad(2)]);
-        $rows->push(['data' => ['Total Increase (decrease) in operating liabilities', 662077071.00], 'style' => array_merge(['font-weight' => 'bold'], $pad(1))]);
-
-        // === Net Cash Used/Provided ===
-        $rows->push([
-            'data' => ['Net Cash (used in) / Provided by Operating Activities', -344499240.17],
-            'style' => array_merge(['font-weight' => 'bold'], $pad(0)),
-        ]);
-
-        // === Cash Flows from Investing ===
-        $rows->push(['data' => ['Cash Flows from Investing Activities'], 'style' => array_merge(['font-weight' => 'bold'], $pad(0))]);
-        $rows->push(['data' => ['Net cash provided by / (used in) investing activities', 0], 'style' => array_merge(['font-weight' => 'bold'], $pad(0))]);
-
-        // === Cash Flows from Financing ===
-        $rows->push(['data' => ['Cash Flows from Financing Activities'], 'style' => array_merge(['font-weight' => 'bold'], $pad(0))]);
-        $rows->push(['data' => ['Net cash provided by / (used in) financing activities', 0], 'style' => array_merge(['font-weight' => 'bold'], $pad(0))]);
-
-        // === Total Cash ===
-        $rows->push(['data' => ['Net Cash provided by / (used in) this period', -344499240.17], 'style' => array_merge(['font-weight' => 'bold', 'color' => 'rgb(0, 0, 128)'], $pad(0))]);
-        $rows->push(['data' => ['Cash & equivalent at Beginning of Period', 358051327.93], 'style' => array_merge(['font-weight' => 'bold', 'color' => 'rgb(0, 0, 128)'], $pad(0))]);
-        $rows->push(['data' => ['Cash & equivalent at End of Period', 13552087.76], 'style' => array_merge(['font-weight' => 'bold', 'color' => 'rgb(0, 0, 128)'], $pad(0))]);
-
-        $data['rows'] = $rows->toArray();
-
-        return $data;
+        return array_merge($data, $this->cashFlowExportMeta('C', $descCol));
     }
 
-    # [Template]
+    // [Template]
     public function __buildReportSummaryTemplate(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
@@ -265,156 +445,82 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
         $rows->push(['data' => ['Total of Cash & Cash Equivalent at End of Period', '', '13.552.087,76'], 'style' => ['font-weight' => 'bold', 'color' => 'blue']]);
 
         $data['rows'] = $rows->toArray();
+
         return $data;
     }
 
     public function __buildReportSummary(): array
-{
-    $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
-    $start = $this->filters['start_date'] ?? now()->startOfYear();
-    $end = $this->filters['end_date'] ?? now()->endOfYear();
+    {
+        $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+        $reportDto = $this->getCashFlowReportDto();
+        $start = $reportDto->startDate;
+        $end = $reportDto->endDate;
 
-    $data = [
-        'filename'      => 'Statement of Cash Flows Summary.pdf',
-        'company_name'  => strtoupper($company->name),
-        'report_title'  => 'Statement of Cash Flows Summary (Indirect Method)',
-        'report_period' => 'Period ' . $start->format('F Y') . ' to ' . $end->format('F Y'),
-        'columns'       => ['Account No.', 'Status', 'Account Type', 'Balance'],
-        'rows'          => [],
-    ];
+        $data = [
+            'filename' => 'Statement of Cash Flows Summary.pdf',
+            'company_name' => strtoupper($company->name),
+            'report_title' => 'Statement of Cash Flows Summary (Indirect Method)',
+            'report_period' => 'Period ' . Carbon::parse($start)->format('F Y') . ' to ' . Carbon::parse($end)->format('F Y'),
+            'columns' => ['Account No.', 'Status', 'Account Type', 'Balance'],
+            'rows' => [],
+        ];
 
-    $rows = collect();
-    $pad  = fn(int $level = 0) => ['padding-left' => ($level * 20) . 'px'];
+        $rows = collect();
+        $descCol = 2;
 
-    $getAccountSums = function (array $categories) use ($company, $start, $end) {
-        return Account::query()
-            ->where('company_id', $company->id)
-            ->whereIn('category', $categories)
-            ->withSum(['journalEntries as total' => function ($q) use ($start, $end) {
-                $q->whereBetween('created_at', [$start, $end]);
-            }], 'amount')
-            ->get()
-            ->map(fn($a) => [
-                'code'     => $a->code,
-                'name'     => $a->name,
-                'category' => $a->category->name,
-                'balance'  => $a->total ?? 0,
-            ])
-            ->filter(fn($a) => $a['balance'] != 0);
-    };
+        $sections = [
+            'Operating Activities' => ['header' => 'Operating Activities', 'totalLabel' => 'Total of Operating Activities'],
+            'Investing Activities' => ['header' => 'Investing', 'totalLabel' => 'Total of Investing'],
+            'Financing Activities' => ['header' => 'Financing', 'totalLabel' => 'Total of Financing'],
+        ];
 
-    /** Operating Activities */
-    $rows->push([
-        'data'  => ['', 'Operating Activities', '', ''],
-        'style' => ['font-weight' => 'bold'],
-    ]);
+        foreach ($sections as $sectionKey => $labels) {
+            $category = $reportDto->categories[$sectionKey] ?? null;
 
-    $operatingAccounts = $getAccountSums([
-        AccountCategory::Asset,
-        AccountCategory::Liability,
-        AccountCategory::Expense,
-        AccountCategory::Revenue,
-    ]);
+            $rows->push([
+                'data' => $this->cashFlowSummaryRow(null, '', $labels['header'], ''),
+                'style' => ['font-weight' => 'bold'],
+            ]);
 
-    foreach ($operatingAccounts as $acc) {
-        $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
-        $rows->push([
-            'data'  => [
-                $acc['code'],
-                $status,
-                $acc['name'],
-                number_format($acc['balance'], 2, ',', '.'),
-            ],
-            'style' => array_merge($pad(1), [
-                'color' => $acc['balance'] < 0 ? 'red' : 'black',
-            ]),
-        ]);
+            if ($category !== null) {
+                foreach ($category->types ?? [] as $type) {
+                    foreach ($type->accounts ?? [] as $account) {
+                        $amount = $this->parseCashFlowAmount($account->balance->netMovement ?? 0);
+                        if ($amount == 0.0) {
+                            continue;
+                        }
+
+                        $status = $amount >= 0 ? 'Added' : 'Deduct';
+                        $rows->push($this->cashFlowMakeRow(
+                            $this->cashFlowSummaryRow(
+                                $account->accountCode,
+                                $status,
+                                $account->accountName,
+                                $amount,
+                            ),
+                            ['color' => $amount < 0 ? 'red' : 'black'],
+                            1,
+                            $descCol,
+                        ));
+                    }
+                }
+            }
+
+            $sectionTotal = $this->getCashFlowSectionTotal($reportDto, $sectionKey);
+            $rows->push([
+                'data' => $this->cashFlowSummaryRow(null, '', $labels['totalLabel'], $sectionTotal),
+                'style' => ['font-weight' => 'bold', 'color' => 'blue'],
+            ]);
+        }
+
+        $this->appendCashFlowGrandFooter($rows, $reportDto, 'summary', $descCol);
+
+        $data['rows'] = $rows->toArray();
+
+        return array_merge($data, $this->cashFlowExportMeta('D', 2));
     }
 
-    $totalOperating = $operatingAccounts->sum('balance');
-    $rows->push([
-        'data'  => ['', 'Total of Operating Activities', '', number_format($totalOperating, 2, ',', '.')],
-        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
-    ]);
-
-    /** Investing */
-    $rows->push([
-        'data'  => ['', 'Investing', '', ''],
-        'style' => ['font-weight' => 'bold'],
-    ]);
-
-    $investingAccounts = $getAccountSums([AccountCategory::Asset]);
-
-    foreach ($investingAccounts as $acc) {
-        $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
-        $rows->push([
-            'data'  => [
-                $acc['code'],
-                $status,
-                $acc['name'],
-                number_format($acc['balance'], 2, ',', '.'),
-            ],
-            'style' => array_merge($pad(1), [
-                'color' => $acc['balance'] < 0 ? 'red' : 'black',
-            ]),
-        ]);
-    }
-
-    $totalInvesting = $investingAccounts->sum('balance');
-    $rows->push([
-        'data'  => ['', 'Total of Investing', '', number_format($totalInvesting, 2, ',', '.')],
-        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
-    ]);
-
-    /** Financing */
-    $rows->push([
-        'data'  => ['', 'Financing', '', ''],
-        'style' => ['font-weight' => 'bold'],
-    ]);
-
-    $financingAccounts = $getAccountSums([AccountCategory::Equity]);
-
-    foreach ($financingAccounts as $acc) {
-        $status = $acc['balance'] >= 0 ? 'Added' : 'Deduct';
-        $rows->push([
-            'data'  => [
-                $acc['code'],
-                $status,
-                $acc['name'],
-                number_format($acc['balance'], 2, ',', '.'),
-            ],
-            'style' => array_merge($pad(1), [
-                'color' => $acc['balance'] < 0 ? 'red' : 'black',
-            ]),
-        ]);
-    }
-
-    $totalFinancing = $financingAccounts->sum('balance');
-    $rows->push([
-        'data'  => ['', 'Total of Financing', '', number_format($totalFinancing, 2, ',', '.')],
-        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
-    ]);
-
-    /** Summary */
-    $netChange = $totalOperating + $totalInvesting + $totalFinancing;
-    $rows->push([
-        'data'  => ['', 'Total of Net Cash Provide (Used) in This Period', '', number_format($netChange, 2, ',', '.')],
-        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
-    ]);
-    $rows->push([
-        'data'  => ['', 'Total of Cash & Cash Equivalent at Beginning of Period', '', number_format(358051327.93, 2, ',', '.')],
-        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
-    ]);
-    $rows->push([
-        'data'  => ['', 'Total of Cash & Cash Equivalent at End of Period', '', number_format(358051327.93 + $netChange, 2, ',', '.')],
-        'style' => ['font-weight' => 'bold', 'color' => 'blue'],
-    ]);
-
-    $data['rows'] = $rows->toArray();
-    return $data;
-}
-
-    # [Template]
+    // [Template]
     public function __buildReportIndirectTemplate(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
@@ -422,11 +528,11 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
         $now = now()->format('Y-m-d_H-i-s');
 
         $data = [
-            'filename'      => "{$company->name} Statement of Cash Flows Detail (Indirect Method) {$now}.pdf",
-            'company_name'  => $company->name,
-            'report_title'  => 'Statement of Cash Flows Detail (Indirect Method)',
-            'report_period' => "Period " . Carbon::parse($report->getStartDate())->format('F Y') . " to " . Carbon::parse($report->getEndDate())->format('F Y'),
-            'columns'       => [
+            'filename' => "{$company->name} Statement of Cash Flows Detail (Indirect Method) {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'Statement of Cash Flows Detail (Indirect Method)',
+            'report_period' => 'Period ' . Carbon::parse($report->getStartDate())->format('F Y') . ' to ' . Carbon::parse($report->getEndDate())->format('F Y'),
+            'columns' => [
                 'Account No.',
                 'Account Name',
                 'Balance',
@@ -435,7 +541,7 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
         ];
 
         // helper padding level
-        $pad = fn(int $level = 0) => ['padding-left' => ($level * 10) . 'px'];
+        $pad = fn (int $level = 0) => ['padding-left' => ($level * 10) . 'px'];
 
         $rows = collect();
 
@@ -564,98 +670,22 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
     public function __buildReportIndirect(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
-        $start = $this->filters['start_date'] ?? now()->startOfYear();
-        $end = $this->filters['end_date'] ?? now()->endOfYear();
-
-        // Ambil semua akun aktif perusahaan
-        $accounts = Account::query()
-            ->where('company_id', $company->id)
-            ->where('archived', false)
-            ->get();
-
-        // === Dynamic Filtering ===
-        $addedAccounts = $accounts->filter(function ($account) {
-            return match ($account->category) {
-                AccountCategory::Asset => ! $account->type->isContra(),
-                AccountCategory::Revenue => $account->type === AccountType::OperatingRevenue
-                    || $account->type === AccountType::NonOperatingRevenue,
-                AccountCategory::Expense => $account->type->isContra(), // misal biaya kontra dianggap positif
-                default => false,
-            };
-        });
-
-        $deductAccounts = $accounts->filter(function ($account) {
-            return match ($account->category) {
-                AccountCategory::Liability,
-                AccountCategory::Equity => ! $account->type->isContra(),
-                AccountCategory::Expense => $account->type === AccountType::OperatingExpense
-                    || $account->type === AccountType::NonOperatingExpense,
-                AccountCategory::Revenue => $account->type->isContra(), // pendapatan kontra mengurangi
-                default => false,
-            };
-        });
-
-        // === Build data ===
-        $rows = collect();
-
-        $pad = fn(int $level = 0) => ['padding-left' => ($level * 10) . 'px'];
-
-        $rows->push([
-            'data' => ['Cash Flow from Operating Activities'],
-            'style' => array_merge(['font-weight' => 'bold'], $pad(0)),
-        ]);
-
-        foreach ($addedAccounts as $account) {
-            // Skip account jika balance = 0
-            $balance = $account->ending_balance->getValue();
-            if ($balance == 0) {
-                continue;
-            }
-
-            $rows->push([
-                'data' => [
-                    '__str' . $account->code,
-                    $account->name,
-                    $balance,
-                ],
-                'style' => $pad(1),
-            ]);
-        }
-
-        $rows->push([
-            'data' => ['Less:'],
-            'style' => array_merge(['font-weight' => 'bold'], $pad(0)),
-        ]);
-
-        foreach ($deductAccounts as $account) {
-            // Skip account jika balance = 0
-            $balance = $account->ending_balance->getValue();
-            if ($balance == 0) {
-                continue;
-            }
-
-            $rows->push([
-                'data' => [
-                    '__str' . $account->code,
-                    $account->name,
-                    $balance,
-                ],
-                'style' => $pad(1),
-            ]);
-        }
-
+        $reportDto = $this->getCashFlowReportDto();
+        $start = $reportDto->startDate;
+        $end = $reportDto->endDate;
         $now = now()->format('Y-m-d_H-i-s');
+        $descCol = 1;
 
         $data = [
-            'filename'      => "{$company->name} Statement of Cash Flows Detail (Indirect Method) {$now}.pdf",
-            'company_name'  => $company->name,
-            'report_title'  => 'Statement of Cash Flows Detail (Indirect Method)',
-            'report_period' => "Period " . Carbon::parse($start)->format('F Y') . " to " . Carbon::parse($end)->format('F Y'),
-            'columns'       => ['Account No.', 'Account Name', 'Balance'],
-            'rows'          => $rows->toArray(),
+            'filename' => "{$company->name} Statement of Cash Flows Detail (Indirect Method) {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'Statement of Cash Flows Detail (Indirect Method)',
+            'report_period' => 'Period ' . Carbon::parse($start)->format('F Y') . ' to ' . Carbon::parse($end)->format('F Y'),
+            'columns' => ['Account No.', 'Account Name', 'Balance'],
+            'rows' => $this->buildCashFlowSectionRows($reportDto, $descCol, 'detail')->toArray(),
         ];
 
-        return $data;
+        return array_merge($data, $this->cashFlowExportMeta('C', $descCol));
     }
 
     protected function getHeaderActions(): array
@@ -686,8 +716,8 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
                         ->required(),
                 ])
                 ->action(function (array $data) {
-                    $format     = $data['format'];
-                    $template   = $data['template'];
+                    $format = $data['format'];
+                    $template = $data['template'];
 
                     if ($format == 'xlsx') {
                         return $this->exportXLSX($template);
@@ -696,7 +726,7 @@ class CashFlowStatement extends BaseReportPage implements EnhancedReport
                     if ($format == 'pdf') {
                         return $this->exportPDF($template);
                     }
-                })
+                }),
         ];
     }
 
