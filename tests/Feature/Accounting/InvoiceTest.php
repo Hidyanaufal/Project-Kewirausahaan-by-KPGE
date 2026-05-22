@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Accounting\AdjustmentComputation;
 use App\Enums\Accounting\InvoiceStatus;
 use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\AccountDefaultKey;
@@ -398,6 +399,71 @@ function removePpnWapuConfigurationForCompany(int $companyId): void
         ->delete();
 }
 
+function ensurePpnWapuConfigurationForCompany(int $companyId): Account
+{
+    $existing = Account::getAccountsWapuIfConfigured($companyId);
+    if ($existing) {
+        return $existing;
+    }
+
+    $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
+    $assetSubtype = AccountSubtype::query()
+        ->where('company_id', $companyId)
+        ->where('category', AccountCategory::Asset)
+        ->first();
+
+    $wapuAccount = Account::factory()->create([
+        'company_id' => $companyId,
+        'subtype_id' => $assetSubtype?->id,
+        'name' => 'PPN WAPU (Test)',
+        'currency_code' => $defaultCurrency,
+    ]);
+
+    AccountDefault::query()->create([
+        'company_id' => $companyId,
+        'account_id' => $wapuAccount->id,
+        'key' => AccountDefaultKey::PPnWapu->value,
+    ]);
+
+    Adjustment::factory()->salesTax('PPN WAPU')->create([
+        'company_id' => $companyId,
+        'name' => 'PPN WAPU',
+        'account_id' => $wapuAccount->id,
+        'rate' => 110_000,
+        'computation' => AdjustmentComputation::Percentage,
+    ]);
+
+    return $wapuAccount;
+}
+
+function attachElevenPercentPpnToInvoiceLineItem(Invoice $invoice): void
+{
+    $ppnAccount = Account::getAccountsPPn($invoice->company_id);
+    $adjustment = Adjustment::factory()->salesTax('PPN 11%')->create([
+        'company_id' => $invoice->company_id,
+        'account_id' => $ppnAccount->id,
+        'rate' => 110_000,
+        'computation' => AdjustmentComputation::Percentage,
+    ]);
+
+    $lineItem = $invoice->lineItems->first();
+    $lineItem->adjustments()->sync([$adjustment->id]);
+    $lineItem->updateQuietly([
+        'tax_total' => $lineItem->calculateTaxTotalAmount(),
+    ]);
+}
+
+function sumApprovalSalesTaxCredits(Invoice $invoice): int
+{
+    $approvalTransaction = $invoice->approvalTransaction;
+
+    return (int) JournalEntry::query()
+        ->where('transaction_id', $approvalTransaction->id)
+        ->where('account_id', $invoice->salesTaxAccountId())
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+}
+
 test('approveDraft succeeds without PPN WAPU adjustment or account default', function () {
     $companyId = $this->testCompany->id;
     removePpnWapuConfigurationForCompany($companyId);
@@ -424,13 +490,17 @@ test('approveDraft with profit journals tax to PPN when WAPU is not configured',
     $companyId = $this->testCompany->id;
     removePpnWapuConfigurationForCompany($companyId);
 
-    $profitTotal = 1_000_000;
-    $taxTotal = 110_000;
+    $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
+    $subtotal = 1_000_000;
+    $profitTotal = 100_000;
+    $taxTotal = 121_000;
+    $total = $subtotal + $profitTotal + $taxTotal;
 
     $invoice = Invoice::factory()
         ->withLineItems(1)
         ->state([
             'company_id' => $companyId,
+            'currency_code' => $defaultCurrency,
             'due_date' => now()->addDays(30),
             'profit_total' => $profitTotal,
             'tax_total' => $taxTotal,
@@ -440,26 +510,207 @@ test('approveDraft with profit journals tax to PPN when WAPU is not configured',
         ->create();
 
     $invoice->refresh();
+    $invoice->lineItems->first()->updateQuietly([
+        'subtotal' => $subtotal,
+        'unit_price' => $subtotal,
+        'quantity' => 1,
+    ]);
+    attachElevenPercentPpnToInvoiceLineItem($invoice);
     $invoice->updateQuietly([
-        'total' => $invoice->subtotal + $profitTotal + $taxTotal - ($invoice->discount_total ?? 0),
+        'subtotal' => $subtotal,
+        'profit_total' => $profitTotal,
+        'tax_total' => $taxTotal,
+        'total' => $total,
     ]);
 
+    $invoice->refresh();
+    $invoice->load(['lineItems.adjustments', 'client']);
     $invoice->approveDraft();
     $invoice->refresh();
 
-    $ppnAccount = Account::getAccountsPPn($companyId);
     $wapuAccount = Account::getAccountsWapuIfConfigured($companyId);
+    $receivableAccount = Account::getAccountsReceivableAccount($companyId);
 
     $approvalTransaction = $invoice->approvalTransaction;
     expect($approvalTransaction)->not->toBeNull();
 
-    expect(
-        JournalEntry::query()
-            ->where('transaction_id', $approvalTransaction->id)
-            ->where('account_id', $ppnAccount->id)
-            ->exists()
-    )->toBeTrue()
-        ->and($wapuAccount)->toBeNull();
+    $arDebit = (int) JournalEntry::query()
+        ->where('transaction_id', $approvalTransaction->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $expectedAr = $invoice->formatAmountToDefaultCurrency($total);
+    $expectedTax = $invoice->formatAmountToDefaultCurrency($taxTotal);
+
+    expect($wapuAccount)->toBeNull()
+        ->and($arDebit)->toBe($expectedAr)
+        ->and(sumApprovalSalesTaxCredits($invoice))->toBe($expectedTax)
+        ->and($invoice->needsProfitJournalFix())->toBeFalse();
+});
+
+test('approveDraft with profit journals AR and WAPU tax match invoice totals', function () {
+    $companyId = $this->testCompany->id;
+    ensurePpnWapuConfigurationForCompany($companyId);
+
+    $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
+    $subtotal = 1_000_000_000;
+    $profitTotal = 100_000_000;
+    $taxTotal = 121_000_000;
+    $total = $subtotal + $profitTotal + $taxTotal;
+
+    $invoice = Invoice::factory()
+        ->withLineItems(1)
+        ->state([
+            'company_id' => $companyId,
+            'currency_code' => $defaultCurrency,
+            'due_date' => now()->addDays(30),
+            'profit_total' => $profitTotal,
+            'tax_total' => $taxTotal,
+            'discount_method' => \App\Enums\Accounting\DocumentDiscountMethod::PerLineItem,
+            'discount_total' => 0,
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $invoice->lineItems->first()->updateQuietly([
+        'subtotal' => $subtotal,
+        'unit_price' => $subtotal,
+        'quantity' => 1,
+    ]);
+
+    $wapuAdjustment = Adjustment::query()
+        ->where('company_id', $companyId)
+        ->where('name', 'PPN WAPU')
+        ->first();
+    $invoice->lineItems->first()->adjustments()->sync([$wapuAdjustment->id]);
+    $invoice->lineItems->first()->updateQuietly([
+        'tax_total' => $invoice->lineItems->first()->calculateTaxTotalAmount(),
+    ]);
+
+    $invoice->updateQuietly([
+        'subtotal' => $subtotal,
+        'profit_total' => $profitTotal,
+        'tax_total' => $taxTotal,
+        'total' => $total,
+    ]);
+
+    $invoice->refresh();
+    $invoice->load(['lineItems.adjustments', 'client']);
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    $receivableAccount = Account::getAccountsReceivableAccount($companyId);
+    $approvalTransaction = $invoice->approvalTransaction;
+
+    $arDebit = (int) JournalEntry::query()
+        ->where('transaction_id', $approvalTransaction->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $expectedAr = $invoice->formatAmountToDefaultCurrency($total);
+    $expectedTax = $invoice->formatAmountToDefaultCurrency($taxTotal);
+
+    expect($arDebit)->toBe($expectedAr)
+        ->and(sumApprovalSalesTaxCredits($invoice))->toBe($expectedTax)
+        ->and($invoice->needsProfitJournalFix())->toBeFalse()
+        ->and($invoice->journalTransactionIsBalanced($approvalTransaction))->toBeTrue();
+});
+
+test('fix invoice profit journals command repairs legacy duplicate tax journals', function () {
+    $companyId = $this->testCompany->id;
+    ensurePpnWapuConfigurationForCompany($companyId);
+
+    $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
+    $subtotal = 1_000_000_000;
+    $profitTotal = 100_000_000;
+    $taxTotal = 121_000_000;
+    $total = $subtotal + $profitTotal + $taxTotal;
+
+    $invoice = Invoice::factory()
+        ->withLineItems(1)
+        ->state([
+            'company_id' => $companyId,
+            'currency_code' => $defaultCurrency,
+            'due_date' => now()->addDays(30),
+            'profit_total' => $profitTotal,
+            'tax_total' => $taxTotal,
+            'discount_method' => \App\Enums\Accounting\DocumentDiscountMethod::PerLineItem,
+            'discount_total' => 0,
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $invoice->lineItems->first()->updateQuietly([
+        'subtotal' => $subtotal,
+        'unit_price' => $subtotal,
+        'quantity' => 1,
+    ]);
+
+    $wapuAdjustment = Adjustment::query()
+        ->where('company_id', $companyId)
+        ->where('name', 'PPN WAPU')
+        ->first();
+    $invoice->lineItems->first()->adjustments()->sync([$wapuAdjustment->id]);
+    $invoice->lineItems->first()->updateQuietly([
+        'tax_total' => $invoice->lineItems->first()->calculateTaxTotalAmount(),
+    ]);
+
+    $invoice->updateQuietly([
+        'subtotal' => $subtotal,
+        'profit_total' => $profitTotal,
+        'tax_total' => $taxTotal,
+        'total' => $total,
+    ]);
+
+    $invoice->refresh();
+    $invoice->load(['lineItems.adjustments', 'client']);
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    $receivableAccount = Account::getAccountsReceivableAccount($companyId);
+    $wapuAccount = Account::getAccountsWapu($companyId);
+    $approvalTransaction = $invoice->approvalTransaction;
+
+    $legacyTaxOvercredit = $taxTotal - (int) round($subtotal * 0.11);
+
+    JournalEntry::query()
+        ->where('transaction_id', $approvalTransaction->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->update(['amount' => $invoice->formatAmountToDefaultCurrency($total) + $legacyTaxOvercredit]);
+
+    JournalEntry::query()
+        ->where('transaction_id', $approvalTransaction->id)
+        ->where('account_id', $wapuAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->update(['amount' => $invoice->formatAmountToDefaultCurrency($taxTotal) + $legacyTaxOvercredit]);
+
+    $invoice->refresh();
+    expect($invoice->needsProfitJournalFix())->toBeTrue();
+
+    session(['current_company_id' => $companyId]);
+
+    $this->artisan('fix:invoice-profit-journals', [
+        '--invoice-id' => $invoice->id,
+    ])->assertSuccessful();
+
+    $invoice->refresh();
+    $approvalTransaction = $invoice->approvalTransaction;
+
+    $arDebit = (int) JournalEntry::query()
+        ->where('transaction_id', $approvalTransaction->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $expectedAr = $invoice->formatAmountToDefaultCurrency($total);
+    $expectedTax = $invoice->formatAmountToDefaultCurrency($taxTotal);
+
+    expect($arDebit)->toBe($expectedAr)
+        ->and(sumApprovalSalesTaxCredits($invoice))->toBe($expectedTax)
+        ->and($invoice->needsProfitJournalFix())->toBeFalse();
 });
 
 it('does not treat invoice above 10jt as WAPU when PPN WAPU adjustment is not configured', function () {
