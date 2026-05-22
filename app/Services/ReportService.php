@@ -868,16 +868,21 @@ class ReportService
             if ($category === AccountCategory::Equity) {
                 $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), $projectId, $companyId)->getAmount();
 
-                $categorySummaryBalances['ending_balance'] += $retainedEarningsAmount;
+                $addComputedRetainedEarnings = $companyId === null
+                    || Account::shouldAddComputedRetainedEarningsToBalanceSheet((int) $companyId);
 
-                $retainedEarningsDTO = new AccountDTO(
-                    'Retained Earnings',
-                    'RE',
-                    null,
-                    $this->formatBalances(['ending_balance' => $retainedEarningsAmount]),
-                    startDate: $startDateCarbon->toDateString(),
-                    endDate: $asOfDateCarbon->toDateString(),
-                );
+                if ($addComputedRetainedEarnings) {
+                    $categorySummaryBalances['ending_balance'] += $retainedEarningsAmount;
+
+                    $retainedEarningsDTO = new AccountDTO(
+                        'Retained Earnings',
+                        'RE',
+                        null,
+                        $this->formatBalances(['ending_balance' => $retainedEarningsAmount]),
+                        startDate: $startDateCarbon->toDateString(),
+                        endDate: $asOfDateCarbon->toDateString(),
+                    );
+                }
             }
 
             $subCategories = [];

@@ -216,6 +216,23 @@ class Account extends Model
         return $excluded->merge($clearingAccountIds)->unique()->values();
     }
 
+    /**
+     * Whether computed retained earnings (Revenue − Expense) should be added to balance sheet equity totals.
+     * When a dedicated retained earnings GL account exists, cumulative P&L is already reflected there and
+     * adding the computed figure would double-count.
+     */
+    public static function shouldAddComputedRetainedEarningsToBalanceSheet(int $companyId): bool
+    {
+        return ! static::query()
+            ->where('company_id', $companyId)
+            ->where('category', AccountCategory::Equity)
+            ->where(function (Builder $query): void {
+                $query->where('code', 'like', '3200%')
+                    ->orWhereRaw('LOWER(name) LIKE ?', ['%retained earn%']);
+            })
+            ->exists();
+    }
+
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class, 'account_id');

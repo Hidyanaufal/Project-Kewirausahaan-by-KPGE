@@ -207,6 +207,105 @@ it('excludes open balance equity clearing account from balance sheet category to
     expect(abs($equitySummary - ($expectedEquity + $retainedEarnings)))->toBeLessThan(0.02);
 });
 
+it('detects dedicated retained earnings GL account for balance sheet aggregation', function () {
+    $company = $this->testCompany;
+
+    $referenceEquity = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::Equity)
+        ->firstOrFail();
+
+    expect(Account::shouldAddComputedRetainedEarningsToBalanceSheet($company->id))->toBeTrue();
+
+    Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $referenceEquity->subtype_id,
+        'code' => '3200.99',
+        'name' => 'TEST RETAINED EARNING',
+    ]);
+
+    expect(Account::shouldAddComputedRetainedEarningsToBalanceSheet($company->id))->toBeFalse();
+});
+
+it('skips computed retained earnings in balance sheet totals when GL retained earnings account exists', function () {
+    $company = $this->testCompany;
+    $asOf = Carbon::now()->toDateString();
+
+    $referenceEquity = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::Equity)
+        ->firstOrFail();
+
+    $retainedGl = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $referenceEquity->subtype_id,
+        'code' => '3200.98',
+        'name' => 'TEST RETAINED EARNING GL',
+    ]);
+
+    $amount = 500_000;
+    $bankAccount = $company->default->bankAccount;
+
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount)
+        ->create([
+            'posted_at' => now()->toDateTimeString(),
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $bankAccount->account_id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount,
+    ]));
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $retainedGl->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+
+    $report = Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
+
+    expect($report->categories['Equity']->types ?? [])
+        ->not->toHaveKey('Retained Earnings');
+
+    $equitySummary = CurrencyConverter::convertToFloat(
+        $report->categories['Equity']->summary->endingBalance ?? '0'
+    );
+
+    $startDate = app(ReportService::class)->getEarliestTransactionDate();
+    $accounts = app(AccountService::class)->getAccountBalances($startDate, $asOf, [], null, $company->id)->get();
+    $excludedIds = Account::balanceSheetExcludedAccountIdsForCompany($company->id)->flip();
+
+    $expectedEquityGl = 0;
+    foreach ($accounts as $account) {
+        if ($account->type->getCategory() !== AccountCategory::Equity || $excludedIds->has($account->id)) {
+            continue;
+        }
+
+        $balances = Reporting::calculateAccountBalances($account);
+        $expectedEquityGl += ($balances['ending_balance'] ?? 0) / 100;
+    }
+
+    $computedRetainedEarnings = Reporting::calculateRetainedEarnings($startDate, $asOf, null, $company->id)->getAmount() / 100;
+
+    expect(abs($equitySummary - $expectedEquityGl))->toBeLessThan(0.02);
+
+    if (abs($computedRetainedEarnings) > 0.01) {
+        expect(abs($equitySummary - ($expectedEquityGl + $computedRetainedEarnings)))->toBeGreaterThan(0.02);
+    }
+});
+
 it('balance sheet category totals satisfy assets equals liabilities plus equity', function () {
     $company = $this->testCompany;
     $asOf = Carbon::now()->toDateString();
