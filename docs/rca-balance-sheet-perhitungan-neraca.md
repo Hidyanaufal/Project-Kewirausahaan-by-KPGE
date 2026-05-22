@@ -6,8 +6,8 @@
 | **Modul** | Laporan Keuangan — Balance Sheet (Standard) |
 | **Perusahaan contoh** | KOPERASI PERTAMINA GEOTHERMAL |
 | **Tanggal laporan** | 18 Mei 2026 |
-| **Branch perbaikan** | `fix/balance-sheet-category-totals-double-count` |
-| **Status** | Perbaikan kode selesai; verifikasi data disarankan |
+| **Branch perbaikan** | `fix/balance-sheet-category-totals-double-count`, `fix/balance-sheet-retained-earnings-double-count` |
+| **Status** | Perbaikan agregasi selesai; residual ~355 juta (22 Mei 2026) — audit penutupan buku disarankan |
 
 ---
 
@@ -101,23 +101,45 @@ Ekuitas implisit yang benar (Assets − Liabilities − (Revenue − Expense)) �
 
 **Deteksi parent:** relasi `children()` **atau** pola kode (`1100.02`, `1100-02`, prefix numerik lebih panjang).
 
-### 5.4 Penyebab #3 — RENDAH (residual): Selisih ~Rp 238 juta setelah perbaikan
+### 5.4 Penyebab #3 — KRITIS (lanjutan): Double-count Retained Earnings GL + terhitung
 
-Setelah mengecualikan parent + open balance equity:
+Setelah perbaikan parent + open balance (PR #90), pada **22 Mei 2026** masih muncul selisih **~Rp 5,71 miliar**:
 
 | Metrik | Nilai |
 |--------|--------|
-| Assets − (Liabilities + Equity) | ~**-Rp 238 juta** (~0,54% dari total aset) |
+| Total Assets | Rp 44.639.763.015,47 |
+| Total Liabilities | Rp 18.866.224.217,88 |
+| Total Equity (salah) | Rp 20.061.526.670,78 |
+| **Assets − (Liabilities + Equity)** | **Rp 5.712.012.126,81** |
+
+| Komponen | Nilai |
+|----------|--------|
+| Ekuitas GL (non-excluded, tanpa RE terhitung) | Rp 25.417.940.137,47 |
+| `calculateRetainedEarnings()` (Rev−Exp) | Rp −5.356.413.466,69 |
+| Akun `3200.01 RETAINED EARNING` (sudah di GL) | Rp +5.336.254.371,10 |
+
+**Mekanisme:** Total equity menjumlahkan saldo akun GL retained earnings **dan** menambahkan RE terhitung dari akun nominal yang belum ditutup — konsep laba ditahan terhitung dua kali dengan efek bersih ~−5,36 M.
+
+**Perbaikan (branch `fix/balance-sheet-retained-earnings-double-count`):** `Account::shouldAddComputedRetainedEarningsToBalanceSheet()` — jika ada akun equity kode `3200%` atau nama mengandung "retained earn", **jangan** tambahkan RE terhitung ke total kategori.
+
+### 5.5 Penyebab #4 — RENDAH (residual): Selisih ~Rp 355 juta setelah perbaikan RE
+
+Setelah mengecualikan parent, open balance, dan double-count RE:
+
+| Metrik | Nilai (22 Mei 2026) |
+|--------|--------|
+| Total Equity | **Rp 25.417.940.137,47** |
+| Assets − (Liabilities + Equity) | **~Rp 355 juta** (~0,8% aset) |
 
 Kemungkinan kontribusi:
 
-- Interaksi akun **RETAINED EARNING** (GL) vs **Retained Earnings** terhitung (Revenue − Expense).
-- Akun nominal Revenue/Expense masih membawa saldo kumulatif besar di GL sementara baris RE hanya neto periode.
-- Pembulatan dan akun parent pada sisi aset/liabilitas (header dengan saldo langsung).
+- Saldo Revenue/Expense kumulatif belum ditutup ke `3200.01` secara konsisten.
+- Selisih RE GL (+5,34 M) vs Rev−Exp net (−5,36 M).
+- Pembulatan dan akun header aset/liabilitas.
 
-**Tindakan lanjutan (di luar scope kode):** audit jurnal, penutupan buku, dan rekonsiliasi akun `320001 RETAINED EARNING` vs akun pendapatan/beban.
+**Tindakan lanjutan:** `php artisan accounting:reconcile-retained-earnings --company-id=1 --as-of=2026-05-22`
 
-### 5.5 Hipotesis yang DITOLAK
+### 5.6 Hipotesis yang DITOLAK
 
 | Hipotesis | Hasil investigasi |
 |-----------|-------------------|
@@ -145,18 +167,19 @@ Kemungkinan kontribusi:
 - **Bukan** akun parent/header, **dan**
 - **Bukan** akun default sistem `open_balance` (Open Balance Equity),
 
-**ditambah** untuk kategori Equity:
+**ditambah** untuk kategori Equity **hanya jika** `Account::shouldAddComputedRetainedEarningsToBalanceSheet($companyId)`:
 
 - **Retained Earnings** = `calculateRetainedEarnings()` = Σ Revenue − Σ Expense (periode penuh dari tanggal transaksi terawal s/d as-of date).
+- Jika perusahaan punya akun GL retained earnings (`3200%` / nama "retained earn"), total equity = **hanya** jumlah akun equity GL (non-excluded); RE terhitung tidak dijumlahkan.
 
 **Baris detail akun** di tab Details **tetap menampilkan semua akun** (termasuk parent dan open balance); yang berubah hanya **angka subtotal/total**.
 
-### 6.3 Hasil numerik setelah perbaikan (data KPGE, 18 Mei 2026)
+### 6.3 Hasil numerik setelah perbaikan (data KPGE)
 
-| Metrik | Sebelum | Sesudah |
-|--------|---------|---------|
-| Total Equity | -Rp 69.202.834.798,47 | **+Rp 28.419.938.923,60** |
-| Selisih \|A − (L + E)\| | ~Rp 97,2 miliar | **~Rp 238 juta** |
+| Metrik | 18 Mei 2026 (setelah PR #90) | 22 Mei 2026 (setelah fix RE) |
+|--------|------------------------------|------------------------------|
+| Total Equity | +Rp 28.419.938.923,60 | **+Rp 25.417.940.137,47** |
+| Selisih \|A − (L + E)\| | ~Rp 238 juta | **~Rp 355 juta** |
 
 ---
 
@@ -171,8 +194,13 @@ Kemungkinan kontribusi:
 | 3 | `app/Filament/Company/Pages/Reports/BalanceSheet.php` | Selaraskan `buildReportEnhanced` | ~30 |
 | 4 | `app/Imports/OpeningBalanceImport.php` | Delegate ke `Account::isParentAccount()` | -34 |
 | 5 | `tests/Feature/Reports/BalanceSheetReportTest.php` | +3 test regresi | +172 |
+| 6 | `app/Models/Accounting/Account.php` | `shouldAddComputedRetainedEarningsToBalanceSheet()` | +15 |
+| 7 | `app/Services/ReportService.php` | Kondisi RE terhitung di `buildBalanceSheetReport` | ~10 |
+| 8 | `app/Filament/Company/Pages/Reports/BalanceSheet.php` | Selaraskan `buildReportEnhanced` | ~5 |
+| 9 | `app/Console/Commands/ReconcileBalanceSheetRetainedEarnings.php` | Command audit | baru |
+| 10 | `tests/Feature/Reports/BalanceSheetReportTest.php` | +2 test RE GL | +90 |
 
-**Branch:** `fix/balance-sheet-category-totals-double-count`
+**Branch:** `fix/balance-sheet-category-totals-double-count`, `fix/balance-sheet-retained-earnings-double-count`
 
 ---
 
