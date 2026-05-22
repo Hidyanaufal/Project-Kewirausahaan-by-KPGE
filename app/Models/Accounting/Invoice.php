@@ -7,6 +7,7 @@ use App\Collections\Accounting\DocumentCollection;
 use App\Concerns\HasAttacments;
 use App\Concerns\HasDocumentNumber;
 use App\Enums\Accounting\AccountCategory;
+use App\Enums\Accounting\AdjustmentCategory;
 use App\Enums\Accounting\AdjustmentComputation;
 use App\Enums\Accounting\DocumentDiscountMethod;
 use App\Enums\Accounting\DocumentType;
@@ -162,151 +163,18 @@ class Invoice extends Document
                 }
             }
 
-            if ($record->isDirty('status')) {
-                if ($record->status === InvoiceStatus::Paid) {
-                    // Membaca akun coa default
-                    $accountWapu = Adjustment::companyHasPpnWapu($record->company_id)
-                        ? Account::getAccountsWapu($record->company_id)
-                        : null;
-                    $accountPPn = Account::getAccountsPPn($record->company_id);
-                    $accountPPh23 = Account::getAccountsPPh23($record->company_id);
-                    $receivableAccount = Account::getAccountsReceivableAccount($record->company_id);
+            if ($record->isDirty('status') && $record->status === InvoiceStatus::Paid) {
+                $latestTransaction = Transaction::query()
+                    ->where([
+                        'transactionable_type' => Invoice::class,
+                        'transactionable_id' => $record->id,
+                        'is_payment' => true,
+                    ])
+                    ->orderByDesc('id')
+                    ->first();
 
-                    // Membaca data jurnal ketika approval invoice
-                    $latestTransaction = Transaction::query()
-                        ->where([
-                            'transactionable_type' => Invoice::class,
-                            'transactionable_id' => $record->id,
-                            'is_payment' => true,
-                        ])
-                        ->orderBy('id', 'desc')
-                        ->first();
-                    $approvalTransaction = Transaction::query()
-                        ->where([
-                            'is_payment' => false,
-                            'transactionable_type' => Invoice::class,
-                            'transactionable_id' => $record->id,
-                        ])
-                        ->first();
-                    $approvalJournalEntries = JournalEntry::query()
-                        ->where([
-                            'transaction_id' => $approvalTransaction->id,
-                        ])
-                        ->get();
-
-                    $journalAmountTotal = 0;
-
-                    $pph23Amount = (int) (
-                        $latestTransaction->meta['pph23_cents']
-                        ?? $record->pph23
-                        ?? 0
-                    );
-
-                    $journalReceivable = $approvalJournalEntries
-                        ->where('account_id', $receivableAccount->id)
-                        ->first();
-                    $totalReceivable = $journalReceivable->amount ?? 0;
-
-                    // Hitung sisa receivable (remaining) berdasarkan akumulasi net receivable dari payment-pembayaran sebelumnya.
-                    // Tujuannya agar journal pada partial payment ke-2 tidak lagi "di-overwrite" menjadi full invoice.
-                    $previousPaymentTransactionIds = Transaction::query()
-                        ->where([
-                            'transactionable_type' => Invoice::class,
-                            'transactionable_id' => $record->id,
-                            'is_payment' => true,
-                        ])
-                        ->where('id', '<', $latestTransaction->id)
-                        ->pluck('id');
-
-                    $previousReceivableCredits = JournalEntry::query()
-                        ->whereIn('transaction_id', $previousPaymentTransactionIds)
-                        ->where('account_id', $receivableAccount->id)
-                        ->where('type', JournalEntryType::Credit)
-                        ->sum('amount');
-
-                    $previousReceivableDebits = JournalEntry::query()
-                        ->whereIn('transaction_id', $previousPaymentTransactionIds)
-                        ->where('account_id', $receivableAccount->id)
-                        ->where('type', JournalEntryType::Debit)
-                        ->sum('amount');
-
-                    $previousNetReceivable = (int) $previousReceivableCredits - (int) $previousReceivableDebits;
-                    $remainingReceivable = (int) $totalReceivable - $previousNetReceivable;
-
-                    foreach ($approvalJournalEntries as $journal) {
-                        // PPN WAPU
-                        if ($accountWapu && $journal->account_id == $accountWapu->id) {
-                            $journalEntry = JournalEntry::create([
-                                'transaction_id' => $latestTransaction->id,
-                                'account_id' => $accountWapu->id,
-                                'type' => JournalEntryType::Debit,
-                                'amount' => $journal->amount,
-                                'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
-                            ]);
-                            $journalAmountTotal += $journalEntry->amount;
-                        }
-
-                        // PPN
-                        if ($journal->account_id == $accountPPn->id) {
-                            $journalEntry = JournalEntry::create([
-                                'transaction_id' => $latestTransaction->id,
-                                'account_id' => $accountPPn->id,
-                                'type' => JournalEntryType::Debit,
-                                'amount' => $journal->amount,
-                                'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
-                            ]);
-                            $journalAmountTotal += $journalEntry->amount;
-                        }
-
-                    }
-
-                    if ($pph23Amount > 0) {
-                        $pph23Entry = JournalEntry::create([
-                            'transaction_id' => $latestTransaction->id,
-                            'account_id' => $accountPPh23->id,
-                            'type' => JournalEntryType::Debit,
-                            'amount' => $pph23Amount,
-                            'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
-                        ]);
-                        $journalAmountTotal += $pph23Entry->amount;
-                    }
-
-                    $calculatedBankAmount = $remainingReceivable - $journalAmountTotal;
-                    $cashAmount = (int) (
-                        $latestTransaction->meta['amount_in_document_currency_cents']
-                        ?? $calculatedBankAmount
-                    );
-
-                    JournalEntry::query()
-                        ->where([
-                            'transaction_id' => $latestTransaction->id,
-                            'account_id' => $latestTransaction->bankAccount->account_id,
-                        ])
-                        ->delete();
-
-                    JournalEntry::create([
-                        'transaction_id' => $latestTransaction->id,
-                        'account_id' => $latestTransaction->bankAccount->account_id,
-                        'type' => JournalEntryType::Debit,
-                        'amount' => $cashAmount,
-                        'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
-                    ]);
-
-                    // Penyesuaian account receivable
-                    JournalEntry::query()
-                        ->where([
-                            'transaction_id' => $latestTransaction->id,
-                            'account_id' => $journalReceivable->account_id,
-                        ])
-                        ->delete();
-
-                    JournalEntry::create([
-                        'transaction_id' => $latestTransaction->id,
-                        'account_id' => $journalReceivable->account_id,
-                        'type' => JournalEntryType::Credit,
-                        'amount' => $remainingReceivable,
-                        'description' => "Invoice #{$record->invoice_number}: Payment from {$record->client->name}",
-                    ]);
+                if ($latestTransaction) {
+                    $record->applyPaymentJournalEntriesForTransaction($latestTransaction);
                 }
             }
 
@@ -314,130 +182,7 @@ class Invoice extends Document
                 return;
             }
 
-            /**
-             * Merge journal by transaction khusus untuk (PPN, PPN WAPU, PPh23)
-             * Merge journal by account_category.revenue
-             */
-            DB::transaction(function () use ($record) {
-                // Definisikan akun pajak
-                $pph23Account = Account::getAccountsPPh23($record->company_id);
-                $ppnAccount = Account::getAccountsPPn($record->company_id);
-
-                $taxAccounts = [
-                    $pph23Account->id,
-                    $ppnAccount->id,
-                ];
-
-                if (Adjustment::companyHasPpnWapu($record->company_id)) {
-                    $taxAccounts[] = Account::getAccountsWapu($record->company_id)->id;
-                }
-
-                // Ambil semua transaksi yang terkait dengan invoice ini
-                $transactions = Transaction::where('transactionable_type', Invoice::class)
-                    ->where('transactionable_id', $record->id)
-                    ->get();
-
-                foreach ($transactions as $trx) {
-                    $journals = JournalEntry::where('transaction_id', $trx->id)->get();
-
-                    if ($journals->isEmpty()) {
-                        continue;
-                    }
-
-                    // Filter hanya journal pajak
-                    $taxJournals = $journals->whereIn('account_id', $taxAccounts);
-                    if ($taxJournals->isEmpty()) {
-                        continue;
-                    }
-
-                    // Gabungkan per akun pajak agar tetap terpisah (PPN, PPh23, WAPU)
-                    $mergedTax = $taxJournals
-                        ->groupBy(['account_id', 'type'])
-                        ->map(function ($byType, $accountId) use ($trx, $record, $pph23Account) {
-                            return collect($byType)->map(function ($group, $type) use ($accountId, $trx, $record, $pph23Account) {
-                                if ($accountId == $pph23Account->id and $record->pph23) {
-                                    return [
-                                        'company_id' => $trx->company_id,
-                                        'account_id' => $accountId,
-                                        'transaction_id' => $trx->id,
-                                        'type' => $type,
-                                        'amount' => $record->pph23,
-                                        'description' => "Tax entry ({$group->first()->account->name}) for Invoice #{$record->invoice_number}",
-                                        'created_by' => $record->updated_by ?? 1,
-                                        'updated_by' => $record->updated_by ?? 1,
-                                        'created_at' => now(),
-                                        'updated_at' => now(),
-                                    ];
-                                } else {
-                                    return [
-                                        'company_id' => $trx->company_id,
-                                        'account_id' => $accountId,
-                                        'transaction_id' => $trx->id,
-                                        'type' => $type,
-                                        'amount' => $group->sum('amount'),
-                                        'description' => "Tax entry ({$group->first()->account->name}) for Invoice #{$record->invoice_number}",
-                                        'created_by' => $record->updated_by ?? 1,
-                                        'updated_by' => $record->updated_by ?? 1,
-                                        'created_at' => now(),
-                                        'updated_at' => now(),
-                                    ];
-                                }
-                            });
-                        })
-                        ->flatten(1)
-                        ->values();
-
-                    // Hapus journal pajak lama
-                    JournalEntry::where('transaction_id', $trx->id)
-                        ->whereIn('account_id', $taxAccounts)
-                        ->delete();
-
-                    // === Gabungkan journal dengan AccountCategory::Revenue ===
-                    $revenueAccounts = Account::where('company_id', $trx->company_id)
-                        ->where('category', AccountCategory::Revenue)
-                        ->pluck('id');
-
-                    // Ambil semua jurnal dengan akun kategori Revenue
-                    $revenueJournals = $journals->whereIn('account_id', $revenueAccounts);
-
-                    if ($revenueJournals->isNotEmpty()) {
-                        // Group per type (Debit/Kredit)
-                        $mergedRevenue = $revenueJournals
-                            ->groupBy('type')
-                            ->map(function ($group, $type) use ($trx, $record) {
-                                // Ambil data dari item pertama (untuk deskripsi & referensi akun)
-                                $first = $group->first();
-
-                                return [
-                                    'company_id' => $trx->company_id,
-                                    'account_id' => $first->account_id,
-                                    'transaction_id' => $trx->id,
-                                    'type' => $type,
-                                    'amount' => $group->sum('amount'),
-                                    'description' => "Merged revenue entry ({$first->account->name}) for Invoice #{$record->invoice_number}",
-                                    'created_by' => $record->updated_by ?? 1,
-                                    'updated_by' => $record->updated_by ?? 1,
-                                    'created_at' => now(),
-                                    'updated_at' => now(),
-                                ];
-                            })
-                            ->values();
-
-                        // Hapus jurnal Revenue lama
-                        JournalEntry::where('transaction_id', $trx->id)
-                            ->whereIn('account_id', $revenueAccounts)
-                            ->delete();
-
-                        // Insert hasil agregasi Revenue baru
-                        JournalEntry::insert($mergedRevenue->toArray());
-                    }
-
-                    // Insert hasil agregasi
-                    if ($mergedTax->isNotEmpty()) {
-                        JournalEntry::insert($mergedTax->toArray());
-                    }
-                }
-            });
+            $record->mergeTaxAndRevenueJournalEntries();
         });
     }
 
@@ -457,6 +202,355 @@ class Invoice extends Document
     {
         return $this->exceedsWapuThreshold()
             && Adjustment::companyHasPpnWapu($this->company_id);
+    }
+
+    public function salesTaxAccountId(): int
+    {
+        return $this->isWapu()
+            ? Account::getAccountsWapu($this->company_id)->id
+            : Account::getAccountsPPn($this->company_id)->id;
+    }
+
+    public function mergeTaxAndRevenueJournalEntries(): void
+    {
+        if ($this->status === InvoiceStatus::Cancelled) {
+            return;
+        }
+
+        DB::transaction(function () {
+            $pph23Account = Account::getAccountsPPh23($this->company_id);
+            $ppnAccount = Account::getAccountsPPn($this->company_id);
+
+            $taxAccounts = [
+                $pph23Account->id,
+                $ppnAccount->id,
+            ];
+
+            if (Adjustment::companyHasPpnWapu($this->company_id)) {
+                $taxAccounts[] = Account::getAccountsWapu($this->company_id)->id;
+            }
+
+            $transactions = Transaction::where('transactionable_type', Invoice::class)
+                ->where('transactionable_id', $this->id)
+                ->get();
+
+            foreach ($transactions as $trx) {
+                $journals = JournalEntry::where('transaction_id', $trx->id)->get();
+
+                if ($journals->isEmpty()) {
+                    continue;
+                }
+
+                $taxJournals = $journals->whereIn('account_id', $taxAccounts);
+                if ($taxJournals->isNotEmpty()) {
+                    $mergedTax = $taxJournals
+                        ->groupBy(['account_id', 'type'])
+                        ->map(function ($byType, $accountId) use ($trx, $pph23Account) {
+                            return collect($byType)->map(function ($group, $type) use ($accountId, $trx, $pph23Account) {
+                                if ($accountId == $pph23Account->id && $this->pph23) {
+                                    return [
+                                        'company_id' => $trx->company_id,
+                                        'account_id' => $accountId,
+                                        'transaction_id' => $trx->id,
+                                        'type' => $type,
+                                        'amount' => $this->pph23,
+                                        'description' => "Tax entry ({$group->first()->account->name}) for Invoice #{$this->invoice_number}",
+                                        'created_by' => $this->updated_by ?? 1,
+                                        'updated_by' => $this->updated_by ?? 1,
+                                        'created_at' => now(),
+                                        'updated_at' => now(),
+                                    ];
+                                }
+
+                                return [
+                                    'company_id' => $trx->company_id,
+                                    'account_id' => $accountId,
+                                    'transaction_id' => $trx->id,
+                                    'type' => $type,
+                                    'amount' => $group->sum('amount'),
+                                    'description' => "Tax entry ({$group->first()->account->name}) for Invoice #{$this->invoice_number}",
+                                    'created_by' => $this->updated_by ?? 1,
+                                    'updated_by' => $this->updated_by ?? 1,
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ];
+                            });
+                        })
+                        ->flatten(1)
+                        ->values();
+
+                    JournalEntry::where('transaction_id', $trx->id)
+                        ->whereIn('account_id', $taxAccounts)
+                        ->delete();
+
+                    if ($mergedTax->isNotEmpty()) {
+                        JournalEntry::insert($mergedTax->toArray());
+                    }
+                }
+
+                $revenueAccounts = Account::where('company_id', $trx->company_id)
+                    ->where('category', AccountCategory::Revenue)
+                    ->pluck('id');
+
+                $revenueJournals = $journals->whereIn('account_id', $revenueAccounts);
+
+                if ($revenueJournals->isNotEmpty()) {
+                    $mergedRevenue = $revenueJournals
+                        ->groupBy('type')
+                        ->map(function ($group, $type) use ($trx) {
+                            $first = $group->first();
+
+                            return [
+                                'company_id' => $trx->company_id,
+                                'account_id' => $first->account_id,
+                                'transaction_id' => $trx->id,
+                                'type' => $type,
+                                'amount' => $group->sum('amount'),
+                                'description' => "Merged revenue entry ({$first->account->name}) for Invoice #{$this->invoice_number}",
+                                'created_by' => $this->updated_by ?? 1,
+                                'updated_by' => $this->updated_by ?? 1,
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ];
+                        })
+                        ->values();
+
+                    JournalEntry::where('transaction_id', $trx->id)
+                        ->whereIn('account_id', $revenueAccounts)
+                        ->delete();
+
+                    JournalEntry::insert($mergedRevenue->toArray());
+                }
+            }
+        });
+    }
+
+    public function applyPaymentJournalEntriesForTransaction(Transaction $paymentTransaction): void
+    {
+        $accountWapu = Adjustment::companyHasPpnWapu($this->company_id)
+            ? Account::getAccountsWapu($this->company_id)
+            : null;
+        $accountPPn = Account::getAccountsPPn($this->company_id);
+        $accountPPh23 = Account::getAccountsPPh23($this->company_id);
+        $receivableAccount = Account::getAccountsReceivableAccount($this->company_id);
+
+        $approvalTransaction = Transaction::query()
+            ->where([
+                'is_payment' => false,
+                'transactionable_type' => Invoice::class,
+                'transactionable_id' => $this->id,
+            ])
+            ->first();
+
+        if (! $approvalTransaction) {
+            return;
+        }
+
+        $approvalJournalEntries = JournalEntry::query()
+            ->where('transaction_id', $approvalTransaction->id)
+            ->get();
+
+        $journalReceivable = $approvalJournalEntries
+            ->where('account_id', $receivableAccount->id)
+            ->first();
+
+        if (! $journalReceivable) {
+            return;
+        }
+
+        $totalReceivable = (int) $journalReceivable->amount;
+
+        $pph23Amount = (int) (
+            $paymentTransaction->meta['pph23_cents']
+            ?? $this->pph23
+            ?? 0
+        );
+
+        $previousPaymentTransactionIds = Transaction::query()
+            ->where([
+                'transactionable_type' => Invoice::class,
+                'transactionable_id' => $this->id,
+                'is_payment' => true,
+            ])
+            ->where('id', '<', $paymentTransaction->id)
+            ->pluck('id');
+
+        $previousReceivableCredits = (int) JournalEntry::query()
+            ->whereIn('transaction_id', $previousPaymentTransactionIds)
+            ->where('account_id', $receivableAccount->id)
+            ->where('type', JournalEntryType::Credit)
+            ->sum('amount');
+
+        $previousReceivableDebits = (int) JournalEntry::query()
+            ->whereIn('transaction_id', $previousPaymentTransactionIds)
+            ->where('account_id', $receivableAccount->id)
+            ->where('type', JournalEntryType::Debit)
+            ->sum('amount');
+
+        $previousNetReceivable = $previousReceivableCredits - $previousReceivableDebits;
+        $remainingReceivable = $totalReceivable - $previousNetReceivable;
+
+        $taxAccountIds = array_filter([
+            $accountWapu?->id,
+            $accountPPn->id,
+        ]);
+
+        JournalEntry::query()
+            ->where('transaction_id', $paymentTransaction->id)
+            ->where(function ($query) use ($taxAccountIds, $receivableAccount, $accountPPh23, $paymentTransaction) {
+                $query->whereIn('account_id', $taxAccountIds)
+                    ->orWhere('account_id', $receivableAccount->id)
+                    ->orWhere('account_id', $accountPPh23->id)
+                    ->orWhere('account_id', $paymentTransaction->bankAccount?->account_id);
+            })
+            ->delete();
+
+        $journalAmountTotal = 0;
+        $paymentDescription = "Invoice #{$this->invoice_number}: Payment from {$this->client->name}";
+
+        foreach ($approvalJournalEntries as $journal) {
+            if ($accountWapu && $journal->account_id == $accountWapu->id) {
+                $entry = JournalEntry::create([
+                    'transaction_id' => $paymentTransaction->id,
+                    'account_id' => $accountWapu->id,
+                    'type' => JournalEntryType::Debit,
+                    'amount' => $journal->amount,
+                    'description' => $paymentDescription,
+                ]);
+                $journalAmountTotal += $entry->amount;
+            }
+
+            if ($journal->account_id == $accountPPn->id) {
+                $entry = JournalEntry::create([
+                    'transaction_id' => $paymentTransaction->id,
+                    'account_id' => $accountPPn->id,
+                    'type' => JournalEntryType::Debit,
+                    'amount' => $journal->amount,
+                    'description' => $paymentDescription,
+                ]);
+                $journalAmountTotal += $entry->amount;
+            }
+        }
+
+        if ($pph23Amount > 0) {
+            $pph23Entry = JournalEntry::create([
+                'transaction_id' => $paymentTransaction->id,
+                'account_id' => $accountPPh23->id,
+                'type' => JournalEntryType::Debit,
+                'amount' => $pph23Amount,
+                'description' => $paymentDescription,
+            ]);
+            $journalAmountTotal += $pph23Entry->amount;
+        }
+
+        $calculatedBankAmount = $remainingReceivable - $journalAmountTotal;
+        $cashAmount = (int) (
+            $paymentTransaction->meta['amount_in_document_currency_cents']
+            ?? $calculatedBankAmount
+        );
+
+        $bankAccountId = $paymentTransaction->bankAccount?->account_id;
+        if ($bankAccountId) {
+            JournalEntry::create([
+                'transaction_id' => $paymentTransaction->id,
+                'account_id' => $bankAccountId,
+                'type' => JournalEntryType::Debit,
+                'amount' => $cashAmount,
+                'description' => $paymentDescription,
+            ]);
+        }
+
+        JournalEntry::create([
+            'transaction_id' => $paymentTransaction->id,
+            'account_id' => $journalReceivable->account_id,
+            'type' => JournalEntryType::Credit,
+            'amount' => $remainingReceivable,
+            'description' => $paymentDescription,
+        ]);
+    }
+
+    public function rebuildPaymentJournalEntries(?Transaction $paymentTransaction = null): void
+    {
+        $payments = $paymentTransaction
+            ? collect([$paymentTransaction->load('bankAccount')])
+            : $this->payments()->with('bankAccount')->orderBy('id')->get();
+
+        foreach ($payments as $trx) {
+            $this->applyPaymentJournalEntriesForTransaction($trx);
+        }
+    }
+
+    public function journalTransactionIsBalanced(Transaction $transaction): bool
+    {
+        $debits = (int) JournalEntry::query()
+            ->where('transaction_id', $transaction->id)
+            ->where('type', JournalEntryType::Debit)
+            ->sum('amount');
+
+        $credits = (int) JournalEntry::query()
+            ->where('transaction_id', $transaction->id)
+            ->where('type', JournalEntryType::Credit)
+            ->sum('amount');
+
+        return $debits === $credits;
+    }
+
+    public function needsProfitJournalFix(): bool
+    {
+        if ($this->profit_total <= 0) {
+            return false;
+        }
+
+        if (in_array($this->status, [InvoiceStatus::Draft, InvoiceStatus::Cancelled], true)) {
+            return false;
+        }
+
+        $approvalTransaction = $this->approvalTransaction;
+        if (! $approvalTransaction) {
+            return false;
+        }
+
+        $receivableAccount = Account::getAccountsReceivableAccount($this->company_id);
+        $arDebit = (int) JournalEntry::query()
+            ->where('transaction_id', $approvalTransaction->id)
+            ->where('account_id', $receivableAccount->id)
+            ->where('type', JournalEntryType::Debit)
+            ->sum('amount');
+
+        $taxCredit = (int) JournalEntry::query()
+            ->where('transaction_id', $approvalTransaction->id)
+            ->where('account_id', $this->salesTaxAccountId())
+            ->where('type', JournalEntryType::Credit)
+            ->sum('amount');
+
+        $expectedAr = $this->formatAmountToDefaultCurrency((int) $this->total);
+        $expectedTax = $this->formatAmountToDefaultCurrency((int) $this->tax_total);
+
+        return $arDebit !== $expectedAr
+            || ($this->tax_total > 0 && $taxCredit !== $expectedTax);
+    }
+
+    public function fixProfitJournalEntries(): void
+    {
+        $this->refresh();
+        $this->loadMissing(['lineItems.adjustments', 'lineItems.offering', 'client']);
+
+        $this->updateApprovalTransaction();
+        $this->mergeTaxAndRevenueJournalEntries();
+        $this->rebuildPaymentJournalEntries();
+
+        $transactions = Transaction::query()
+            ->where('transactionable_type', Invoice::class)
+            ->where('transactionable_id', $this->id)
+            ->get();
+
+        foreach ($transactions as $transaction) {
+            if (! $this->journalTransactionIsBalanced($transaction)) {
+                throw new \RuntimeException(
+                    "Journal entries do not balance for transaction #{$transaction->id} on Invoice #{$this->invoice_number}."
+                );
+            }
+        }
     }
 
     public function client()
@@ -829,6 +923,8 @@ class Invoice extends Document
 
     public function createApprovalTransaction(): void
     {
+        $this->loadMissing(['lineItems.adjustments', 'lineItems.offering', 'client']);
+
         $baseDescription = "{$this->client->name}: Invoice #{$this->invoice_number}";
 
         $journalEntryData = [];
@@ -843,6 +939,7 @@ class Invoice extends Document
         $totalLineItemSubtotalInInvoiceCurrency = (int) $this->lineItems()->sum('subtotal');
         $invoiceDiscountTotalInInvoiceCurrency = (int) $this->discount_total;
         $remainingDiscountInInvoiceCurrency = $invoiceDiscountTotalInInvoiceCurrency;
+        $taxCreditedFromLineItems = 0;
 
         foreach ($this->lineItems as $index => $lineItem) {
             $lineItemDescription = "{$baseDescription} › {$lineItem->offering->name}";
@@ -859,6 +956,9 @@ class Invoice extends Document
             // adjusment (discount & tax)
             foreach ($lineItem->adjustments as $adjustment) {
                 $adjustmentAmountInInvoiceCurrency = $lineItem->calculateAdjustmentTotalAmount($adjustment);
+                if ($adjustment->category === AdjustmentCategory::Tax) {
+                    $taxCreditedFromLineItems += $adjustmentAmountInInvoiceCurrency;
+                }
                 $journalEntryData[] = [
                     'type' => $adjustment->category->isDiscount() ? JournalEntryType::Debit : JournalEntryType::Credit,
                     'account_id' => $adjustment->account_id,
@@ -902,15 +1002,12 @@ class Invoice extends Document
                 'description' => $profitDescription,
             ];
 
-            if ($this->tax_total > 0) {
-                $taxAccountId = Adjustment::companyHasPpnWapu($this->company_id)
-                    ? Account::getAccountsWapu($this->company_id)->id
-                    : Account::getAccountsPPn($this->company_id)->id;
-
+            $additionalTax = (int) $this->tax_total - $taxCreditedFromLineItems;
+            if ($additionalTax > 0) {
                 $journalEntryData[] = [
                     'type' => JournalEntryType::Credit,
-                    'account_id' => $taxAccountId,
-                    'amount_in_invoice_currency' => $this->tax_total,
+                    'account_id' => $this->salesTaxAccountId(),
+                    'amount_in_invoice_currency' => $additionalTax,
                     'description' => $profitDescription,
                 ];
             }
