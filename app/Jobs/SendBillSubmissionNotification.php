@@ -36,7 +36,10 @@ class SendBillSubmissionNotification implements ShouldQueue
             $requestor = User::find($bill->updated_by);
         }
 
-        $admins = $recipientService->getAdminUsersFor($bill->company_id);
+        $recipientResolution = $recipientService->getAdminRecipientResolutionFor($bill->company_id);
+        $admins = $recipientResolution['users'];
+        $recipientSource = $recipientResolution['source'];
+        $recipientSourceCompanyId = $recipientResolution['resolved_company_id'];
 
         foreach ($admins as $admin) {
             if ($admin->email) {
@@ -53,6 +56,10 @@ class SendBillSubmissionNotification implements ShouldQueue
                     recipientEmail: $admin->email,
                     requestorId: $requestor?->id,
                     requestorEmail: $requestor?->email,
+                    extraContext: [
+                        'recipient_source' => $recipientSource,
+                        'recipient_source_company_id' => $recipientSourceCompanyId,
+                    ],
                 );
             }
         }
