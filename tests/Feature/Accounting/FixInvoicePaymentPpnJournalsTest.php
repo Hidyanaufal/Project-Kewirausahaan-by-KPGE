@@ -321,14 +321,39 @@ function createHistoricalBrokenWapuPaidInvoice(int $companyId): array
     return [$invoice->fresh(['payments.bankAccount']), $payment->fresh()];
 }
 
+function createHistoricalSingleWrongTaxAccountWapuPaidInvoice(int $companyId): array
+{
+    [$invoice, $payment] = createHistoricalBrokenWapuPaidInvoice($companyId);
+
+    $ppnAccount = Account::getAccountsPPn($companyId);
+    $wapuAccount = Account::getAccountsWapu($companyId);
+
+    JournalEntry::query()
+        ->where('transaction_id', $payment->id)
+        ->where('account_id', $wapuAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->delete();
+
+    JournalEntry::query()
+        ->where('transaction_id', $payment->id)
+        ->where('account_id', $ppnAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->update([
+            'amount' => $invoice->tax_total,
+            'description' => 'Single wrong PPN payment entry',
+        ]);
+
+    return [$invoice->fresh(['payments.bankAccount']), $payment->fresh()];
+}
+
 it('requires company id when dry running historical payment ppn fix', function () {
     $this->artisan('fix:invoice-payment-ppn-journals', [
         '--dry-run' => true,
     ])->assertExitCode(SymfonyCommand::FAILURE);
 });
 
-it('dry runs historical payment ppn fix per company without changing journals', function () {
-    [$invoice, $payment] = createHistoricalBrokenNonWapuPaidInvoice($this->testCompany->id);
+it('dry runs historical payment ppn fix per company when payment tax account is wrong', function () {
+    [$invoice, $payment] = createHistoricalSingleWrongTaxAccountWapuPaidInvoice($this->testCompany->id);
 
     $ppnAccount = Account::getAccountsPPn($invoice->company_id);
     $wapuAccount = Account::getAccountsWapu($invoice->company_id);
@@ -345,7 +370,7 @@ it('dry runs historical payment ppn fix per company without changing journals', 
 
     expect($invoice->status)->toBe(InvoiceStatus::Paid)
         ->and($invoice->needsHistoricalPaymentTaxAccountFix())->toBeTrue()
-        ->and($invoice->journalTransactionIsBalanced($payment))->toBeFalse();
+        ->and($invoice->journalTransactionIsBalanced($payment))->toBeTrue();
 
     $this->artisan('fix:invoice-payment-ppn-journals', [
         '--dry-run' => true,
@@ -371,12 +396,12 @@ it('dry runs historical payment ppn fix per company without changing journals', 
     expect($ppnDebitAfter)->toBe($ppnDebitBefore)
         ->and($wapuDebitAfter)->toBe($wapuDebitBefore)
         ->and($invoice->fresh()->needsHistoricalPaymentTaxAccountFix())->toBeTrue()
-        ->and($invoice->fresh()->journalTransactionIsBalanced($payment->fresh()))->toBeFalse();
+        ->and($invoice->fresh()->journalTransactionIsBalanced($payment->fresh()))->toBeTrue();
 });
 
-it('fixes historical payment ppn journals by keeping only the expected tax account', function () {
+it('fixes historical payment ppn journals by keeping or switching to the expected tax account', function () {
     [$brokenInvoice, $brokenPayment] = createHistoricalBrokenNonWapuPaidInvoice($this->testCompany->id);
-    [$wapuInvoice, $wapuPayment] = createHistoricalBrokenWapuPaidInvoice($this->testCompany->id);
+    [$wapuInvoice, $wapuPayment] = createHistoricalSingleWrongTaxAccountWapuPaidInvoice($this->testCompany->id);
 
     $ppnAccount = Account::getAccountsPPn($brokenInvoice->company_id);
     $brokenWapuAccount = Account::getAccountsWapu($brokenInvoice->company_id);
@@ -441,12 +466,12 @@ it('fixes historical payment ppn journals by keeping only the expected tax accou
     expect($brokenPpnDebitBefore)->toBeGreaterThan(0)
         ->and($brokenWapuDebitBefore)->toBeGreaterThan(0)
         ->and($wapuPpnDebitBefore)->toBeGreaterThan(0)
-        ->and($wapuDebitBefore)->toBeGreaterThan(0)
+        ->and($wapuDebitBefore)->toBe(0)
         ->and($brokenPpnDebitAfter)->toBe($brokenPpnDebitBefore)
         ->and($brokenWapuDebitAfter)->toBe(0)
         ->and($brokenInvoice->needsHistoricalPaymentTaxAccountFix())->toBeFalse()
         ->and($brokenInvoice->journalTransactionIsBalanced($brokenPayment))->toBeTrue()
         ->and($wapuPpnDebitAfter)->toBe(0)
-        ->and($wapuDebitAfter)->toBe($wapuDebitBefore)
+        ->and($wapuDebitAfter)->toBe($wapuPpnDebitBefore)
         ->and($wapuInvoice->fresh()->journalTransactionIsBalanced($wapuPayment))->toBeTrue();
 });
