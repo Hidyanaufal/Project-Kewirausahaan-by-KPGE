@@ -119,6 +119,7 @@ class Invoice extends Document
         'profit_rate' => RateCast::class,
         'hide_offering_items' => 'boolean',
         'finalized_at' => 'datetime',
+        'is_imported' => 'boolean',
     ];
 
     protected $appends = [
