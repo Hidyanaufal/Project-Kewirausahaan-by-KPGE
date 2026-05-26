@@ -289,51 +289,56 @@ test('partial payment ke-2 di-journal incremental (cash & receivable tidak jadi 
     expect($payment2CashDebitDefault)->toBe($expectedCashDebitDefault);
 });
 
-test('record payment respects manual amount and pph23', function () {
-    $companyId = auth()->user()?->current_company_id ?? $this->testCompany->id;
+test('record payment non-wapu keeps ppn in cash and does not debit ppn journal', function () {
+    $companyId = $this->testCompany->id;
+    removePpnWapuConfigurationForCompany($companyId);
+
+    $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
+    $subtotal = 1_000_000;
+    $taxTotal = 110_000;
+    $total = $subtotal + $taxTotal;
+    $manualPph23 = 20_000;
 
     $invoice = Invoice::factory()
-        ->withLineItems()
+        ->withLineItems(1)
         ->state([
             'company_id' => $companyId,
+            'currency_code' => $defaultCurrency,
+            'due_date' => now()->addDays(30),
+            'profit_total' => 0,
+            'discount_method' => \App\Enums\Accounting\DocumentDiscountMethod::PerLineItem,
+            'discount_rate' => 0,
+            'discount_total' => 0,
         ])
         ->create();
 
     $invoice->refresh();
+    $lineItem = $invoice->lineItems->first();
+    $lineItem->updateQuietly([
+        'subtotal' => $subtotal,
+        'unit_price' => $subtotal,
+        'quantity' => 1,
+    ]);
+    attachElevenPercentPpnToInvoiceLineItem($invoice);
+    $invoice->updateQuietly([
+        'subtotal' => $subtotal,
+        'profit_total' => 0,
+        'discount_total' => 0,
+        'tax_total' => $taxTotal,
+        'total' => $total,
+    ]);
+
+    $invoice->refresh();
+    $invoice->load(['lineItems.adjustments', 'client']);
     $invoice->approveDraft();
     $invoice->refresh();
+    $invoice->update(['pph23' => $manualPph23]);
+    $invoice->refresh();
+
+    $manualCash = (int) $invoice->actual_total;
 
     $approvalTrx = $invoice->approvalTransaction;
     expect($approvalTrx)->not->toBeNull();
-
-    $receivableAccount = Account::getAccountsReceivableAccount($invoice->company_id);
-    $ppnAccount = Account::getAccountsPPn($invoice->company_id);
-    $pph23Account = Account::getAccountsPPh23($invoice->company_id);
-
-    $remainingReceivable = (int) JournalEntry::query()
-        ->where('transaction_id', $approvalTrx->id)
-        ->where('account_id', $receivableAccount->id)
-        ->sum('amount');
-
-    $ppnAmount = (int) JournalEntry::query()
-        ->where('transaction_id', $approvalTrx->id)
-        ->where('account_id', $ppnAccount->id)
-        ->sum('amount');
-
-    $wapuAmount = 0;
-    $wapuAccount = Account::getAccountsWapuIfConfigured($invoice->company_id);
-    if ($wapuAccount) {
-        $wapuAmount = (int) JournalEntry::query()
-            ->where('transaction_id', $approvalTrx->id)
-            ->where('account_id', $wapuAccount->id)
-            ->sum('amount');
-    }
-
-    $defaultPph23 = (int) round(($invoice->subtotal + $invoice->profit_total - ($invoice->discount_total ?? 0)) * 0.02);
-    $manualPph23 = max($defaultPph23 - 50_000, 1_000);
-    $manualCash = $remainingReceivable - $ppnAmount - $wapuAmount - $manualPph23;
-
-    expect($manualCash)->toBeGreaterThan(0);
 
     $bankAccount = BankAccount::query()
         ->where('company_id', $invoice->company_id)
@@ -341,21 +346,20 @@ test('record payment respects manual amount and pph23', function () {
         ->first();
     expect($bankAccount)->not->toBeNull();
 
-    $invoice->update(['pph23' => $manualPph23]);
-
     $invoice->recordPayment([
         'posted_at' => now()->toDateString(),
         'payment_method' => PaymentMethod::BankPayment,
         'bank_account_id' => $bankAccount->id,
         'amount' => $manualCash,
         'pph23' => $manualPph23,
-        'notes' => 'Manual amount and PPh23 test',
+        'notes' => 'Non-WAPU payment journal test',
     ]);
 
     $invoice->refresh();
 
     expect($invoice->status)->toBe(InvoiceStatus::Paid)
-        ->and((int) $invoice->pph23)->toBe($manualPph23);
+        ->and((int) $invoice->pph23)->toBe($manualPph23)
+        ->and((int) $invoice->actual_total)->toBe($manualCash);
 
     $paymentTrx = Transaction::query()
         ->where('transactionable_type', Invoice::class)
@@ -368,21 +372,188 @@ test('record payment respects manual amount and pph23', function () {
         ->and((int) ($paymentTrx->meta['pph23_cents'] ?? 0))->toBe($manualPph23)
         ->and((int) ($paymentTrx->meta['amount_in_document_currency_cents'] ?? 0))->toBe($manualCash);
 
-    $pph23JournalAmount = (int) JournalEntry::query()
+    $receivableAccount = Account::getAccountsReceivableAccount($invoice->company_id);
+    $ppnAccount = Account::getAccountsPPn($invoice->company_id);
+    $pph23Account = Account::getAccountsPPh23($invoice->company_id);
+
+    $approvalReceivable = (int) JournalEntry::query()
+        ->where('transaction_id', $approvalTrx->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $paymentPpnDebit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $ppnAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $paymentPph23Debit = (int) JournalEntry::query()
         ->where('transaction_id', $paymentTrx->id)
         ->where('account_id', $pph23Account->id)
         ->where('type', JournalEntryType::Debit)
         ->sum('amount');
 
-    $cashAccountId = $paymentTrx->bankAccount->account_id;
     $cashDebit = (int) JournalEntry::query()
         ->where('transaction_id', $paymentTrx->id)
-        ->where('account_id', $cashAccountId)
+        ->where('account_id', $paymentTrx->bankAccount->account_id)
         ->where('type', JournalEntryType::Debit)
         ->sum('amount');
 
-    expect($pph23JournalAmount)->toBe($manualPph23)
-        ->and($cashDebit)->toBe($manualCash);
+    $receivableCredit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+
+    expect($paymentPpnDebit)->toBe(0)
+        ->and($paymentPph23Debit)->toBe($manualPph23)
+        ->and($cashDebit)->toBe($manualCash)
+        ->and($receivableCredit)->toBe($approvalReceivable)
+        ->and($invoice->journalTransactionIsBalanced($paymentTrx))->toBeTrue();
+});
+
+test('record payment wapu keeps tax reclassification on payment journal', function () {
+    $companyId = $this->testCompany->id;
+    ensurePpnWapuConfigurationForCompany($companyId);
+
+    $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
+    $subtotal = 1_000_000_000;
+    $profitTotal = 100_000_000;
+    $taxTotal = 121_000_000;
+    $total = $subtotal + $profitTotal + $taxTotal;
+    $manualPph23 = 22_000_000;
+
+    $invoice = Invoice::factory()
+        ->withLineItems(1)
+        ->state([
+            'company_id' => $companyId,
+            'currency_code' => $defaultCurrency,
+            'due_date' => now()->addDays(30),
+            'profit_total' => $profitTotal,
+            'discount_method' => \App\Enums\Accounting\DocumentDiscountMethod::PerLineItem,
+            'discount_rate' => 0,
+            'discount_total' => 0,
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $lineItem = $invoice->lineItems->first();
+    $lineItem->updateQuietly([
+        'subtotal' => $subtotal,
+        'unit_price' => $subtotal,
+        'quantity' => 1,
+    ]);
+
+    $wapuAdjustment = Adjustment::query()
+        ->where('company_id', $companyId)
+        ->where('name', 'PPN WAPU')
+        ->first();
+    expect($wapuAdjustment)->not->toBeNull();
+
+    $lineItem->adjustments()->sync([$wapuAdjustment->id]);
+    $lineItem->updateQuietly([
+        'tax_total' => $lineItem->calculateTaxTotalAmount(),
+    ]);
+
+    $invoice->updateQuietly([
+        'subtotal' => $subtotal,
+        'profit_total' => $profitTotal,
+        'discount_total' => 0,
+        'tax_total' => $taxTotal,
+        'total' => $total,
+    ]);
+
+    $invoice->refresh();
+    $invoice->load(['lineItems.adjustments', 'client']);
+    $invoice->approveDraft();
+    $invoice->refresh();
+    $invoice->update(['pph23' => $manualPph23]);
+    $invoice->refresh();
+
+    $manualCash = (int) $invoice->actual_total;
+
+    $approvalTrx = $invoice->approvalTransaction;
+    expect($approvalTrx)->not->toBeNull()
+        ->and($invoice->isWapu())->toBeTrue();
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $invoice->company_id)
+        ->where('enabled', true)
+        ->first();
+    expect($bankAccount)->not->toBeNull();
+
+    $invoice->recordPayment([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $manualCash,
+        'pph23' => $manualPph23,
+        'notes' => 'WAPU payment journal test',
+    ]);
+
+    $invoice->refresh();
+
+    expect($invoice->status)->toBe(InvoiceStatus::Paid)
+        ->and((int) $invoice->pph23)->toBe($manualPph23)
+        ->and((int) $invoice->actual_total)->toBe($manualCash);
+
+    $paymentTrx = Transaction::query()
+        ->where('transactionable_type', Invoice::class)
+        ->where('transactionable_id', $invoice->id)
+        ->where('is_payment', true)
+        ->orderByDesc('id')
+        ->first();
+
+    expect($paymentTrx)->not->toBeNull();
+
+    $receivableAccount = Account::getAccountsReceivableAccount($invoice->company_id);
+    $ppnAccount = Account::getAccountsPPn($invoice->company_id);
+    $pph23Account = Account::getAccountsPPh23($invoice->company_id);
+    $wapuAccount = Account::getAccountsWapu($invoice->company_id);
+
+    $approvalReceivable = (int) JournalEntry::query()
+        ->where('transaction_id', $approvalTrx->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $paymentPpnDebit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $ppnAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $paymentWapuDebit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $wapuAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $paymentPph23Debit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $pph23Account->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $cashDebit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $paymentTrx->bankAccount->account_id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $receivableCredit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+
+    expect($paymentPpnDebit)->toBe(0)
+        ->and($paymentWapuDebit)->toBe($taxTotal)
+        ->and($paymentPph23Debit)->toBe($manualPph23)
+        ->and($cashDebit)->toBe($manualCash)
+        ->and($receivableCredit)->toBe($approvalReceivable)
+        ->and($invoice->journalTransactionIsBalanced($paymentTrx))->toBeTrue();
 });
 
 function removePpnWapuConfigurationForCompany(int $companyId): void
