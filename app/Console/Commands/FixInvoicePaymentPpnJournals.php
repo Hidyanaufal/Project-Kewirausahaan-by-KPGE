@@ -244,10 +244,7 @@ class FixInvoicePaymentPpnJournals extends Command
             return null;
         }
 
-        $taxAccountIds = array_values(array_unique(array_filter([
-            Account::getAccountsPPn($invoice->company_id)->id,
-            Account::getAccountsWapuIfConfigured($invoice->company_id)?->id,
-        ])));
+        $taxAccountIds = $invoice->historicalPaymentTaxAccountIds();
 
         if ($taxAccountIds === []) {
             return null;

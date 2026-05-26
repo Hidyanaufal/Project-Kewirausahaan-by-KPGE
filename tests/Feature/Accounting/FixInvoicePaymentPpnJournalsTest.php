@@ -124,6 +124,19 @@ function ensurePpnWapuPaymentFixConfigurationForCompany(int $companyId): Account
     return $wapuAccount;
 }
 
+function misconfigureWapuDefaultToPpnOutput(int $companyId): void
+{
+    $ppnAccount = Account::getAccountsPPn($companyId);
+
+    AccountDefault::query()
+        ->withoutGlobalScope(CurrentCompanyScope::class)
+        ->where('company_id', $companyId)
+        ->where('key', AccountDefaultKey::PPnWapu->value)
+        ->update([
+            'account_id' => $ppnAccount->id,
+        ]);
+}
+
 function attachElevenPercentPpnToPaymentFixInvoiceLineItem(Invoice $invoice): void
 {
     $ppnAccount = Account::getAccountsPPn($invoice->company_id);
@@ -354,9 +367,10 @@ it('requires company id when dry running historical payment ppn fix', function (
 
 it('dry runs historical payment ppn fix per company when payment tax account is wrong', function () {
     [$invoice, $payment] = createHistoricalSingleWrongTaxAccountWapuPaidInvoice($this->testCompany->id);
+    misconfigureWapuDefaultToPpnOutput($invoice->company_id);
 
     $ppnAccount = Account::getAccountsPPn($invoice->company_id);
-    $wapuAccount = Account::getAccountsWapu($invoice->company_id);
+    $wapuAccountId = $invoice->historicalWapuTaxAccountId();
     $ppnDebitBefore = (int) JournalEntry::query()
         ->where('transaction_id', $payment->id)
         ->where('account_id', $ppnAccount->id)
@@ -364,7 +378,7 @@ it('dry runs historical payment ppn fix per company when payment tax account is 
         ->sum('amount');
     $wapuDebitBefore = (int) JournalEntry::query()
         ->where('transaction_id', $payment->id)
-        ->where('account_id', $wapuAccount->id)
+        ->where('account_id', $wapuAccountId)
         ->where('type', JournalEntryType::Debit)
         ->sum('amount');
 
@@ -389,7 +403,7 @@ it('dry runs historical payment ppn fix per company when payment tax account is 
         ->sum('amount');
     $wapuDebitAfter = (int) JournalEntry::query()
         ->where('transaction_id', $payment->id)
-        ->where('account_id', $wapuAccount->id)
+        ->where('account_id', $wapuAccountId)
         ->where('type', JournalEntryType::Debit)
         ->sum('amount');
 
@@ -402,10 +416,11 @@ it('dry runs historical payment ppn fix per company when payment tax account is 
 it('fixes historical payment ppn journals by keeping or switching to the expected tax account', function () {
     [$brokenInvoice, $brokenPayment] = createHistoricalBrokenNonWapuPaidInvoice($this->testCompany->id);
     [$wapuInvoice, $wapuPayment] = createHistoricalSingleWrongTaxAccountWapuPaidInvoice($this->testCompany->id);
+    misconfigureWapuDefaultToPpnOutput($brokenInvoice->company_id);
 
     $ppnAccount = Account::getAccountsPPn($brokenInvoice->company_id);
-    $brokenWapuAccount = Account::getAccountsWapu($brokenInvoice->company_id);
-    $wapuAccount = Account::getAccountsWapu($wapuInvoice->company_id);
+    $brokenWapuAccountId = $brokenInvoice->historicalWapuTaxAccountId();
+    $wapuAccountId = $wapuInvoice->historicalWapuTaxAccountId();
 
     expect($brokenInvoice->needsHistoricalPaymentTaxAccountFix())->toBeTrue()
         ->and($brokenInvoice->journalTransactionIsBalanced($brokenPayment))->toBeFalse();
@@ -417,7 +432,7 @@ it('fixes historical payment ppn journals by keeping or switching to the expecte
         ->sum('amount');
     $brokenWapuDebitBefore = (int) JournalEntry::query()
         ->where('transaction_id', $brokenPayment->id)
-        ->where('account_id', $brokenWapuAccount->id)
+        ->where('account_id', $brokenWapuAccountId)
         ->where('type', JournalEntryType::Debit)
         ->sum('amount');
     $wapuPpnDebitBefore = (int) JournalEntry::query()
@@ -427,7 +442,7 @@ it('fixes historical payment ppn journals by keeping or switching to the expecte
         ->sum('amount');
     $wapuDebitBefore = (int) JournalEntry::query()
         ->where('transaction_id', $wapuPayment->id)
-        ->where('account_id', $wapuAccount->id)
+        ->where('account_id', $wapuAccountId)
         ->where('type', JournalEntryType::Debit)
         ->sum('amount');
 
@@ -448,7 +463,7 @@ it('fixes historical payment ppn journals by keeping or switching to the expecte
         ->sum('amount');
     $brokenWapuDebitAfter = (int) JournalEntry::query()
         ->where('transaction_id', $brokenPayment->id)
-        ->where('account_id', $brokenWapuAccount->id)
+        ->where('account_id', $brokenWapuAccountId)
         ->where('type', JournalEntryType::Debit)
         ->sum('amount');
 
@@ -459,7 +474,7 @@ it('fixes historical payment ppn journals by keeping or switching to the expecte
         ->sum('amount');
     $wapuDebitAfter = (int) JournalEntry::query()
         ->where('transaction_id', $wapuPayment->id)
-        ->where('account_id', $wapuAccount->id)
+        ->where('account_id', $wapuAccountId)
         ->where('type', JournalEntryType::Debit)
         ->sum('amount');
 
