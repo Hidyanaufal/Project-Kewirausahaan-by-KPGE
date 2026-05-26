@@ -474,11 +474,62 @@ class Invoice extends Document
 
     public function expectedHistoricalPaymentTaxAccountId(): ?int
     {
+        $taxAccountIds = $this->historicalPaymentTaxAccountIds();
+
+        if ($this->approvalTransaction && $taxAccountIds !== []) {
+            $approvalTaxAccountIds = JournalEntry::query()
+                ->where('transaction_id', $this->approvalTransaction->id)
+                ->whereIn('account_id', $taxAccountIds)
+                ->where('type', JournalEntryType::Credit)
+                ->pluck('account_id')
+                ->unique()
+                ->values();
+
+            if ($approvalTaxAccountIds->count() === 1) {
+                return (int) $approvalTaxAccountIds->first();
+            }
+        }
+
         if ((int) $this->tax_total <= 0) {
             return null;
         }
 
-        return $this->salesTaxAccountId();
+        if ($this->isWapu()) {
+            return $this->historicalWapuTaxAccountId();
+        }
+
+        return $this->historicalPpnTaxAccountId();
+    }
+
+    public function historicalPaymentTaxAccountIds(): array
+    {
+        return array_values(array_unique(array_filter([
+            $this->historicalPpnTaxAccountId(),
+            $this->historicalWapuTaxAccountId(),
+        ])));
+    }
+
+    public function historicalPpnTaxAccountId(): ?int
+    {
+        try {
+            return Account::getAccountsPPn($this->company_id)->id;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    public function historicalWapuTaxAccountId(): ?int
+    {
+        $adjustmentAccountId = Adjustment::findPpnWapuForCompany($this->company_id)?->account_id;
+        if ($adjustmentAccountId) {
+            return (int) $adjustmentAccountId;
+        }
+
+        try {
+            return Account::getAccountsWapuIfConfigured($this->company_id)?->id;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function needsHistoricalPaymentTaxAccountFix(): bool
@@ -488,11 +539,7 @@ class Invoice extends Document
             return false;
         }
 
-        $ppnAccountId = Account::getAccountsPPn($this->company_id)->id;
-        $taxAccountIds = array_values(array_filter([
-            $ppnAccountId,
-            Account::getAccountsWapuIfConfigured($this->company_id)?->id,
-        ]));
+        $taxAccountIds = $this->historicalPaymentTaxAccountIds();
 
         if ($taxAccountIds === []) {
             return false;
