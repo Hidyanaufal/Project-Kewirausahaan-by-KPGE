@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\LogsNotificationEmail;
 use App\Mail\InvoiceApprovedNotification;
 use App\Models\Accounting\Invoice;
 use App\Models\User;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Mail;
 
 class SendInvoiceApprovedNotification implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, LogsNotificationEmail, Queueable, SerializesModels;
 
     public function __construct(
         public int $invoiceId
@@ -39,5 +40,18 @@ class SendInvoiceApprovedNotification implements ShouldQueue
         }
 
         Mail::to($requestor->email)->send(new InvoiceApprovedNotification($invoice));
+
+        $this->logNotificationEmailSent(
+            notificationType: 'approved',
+            documentType: 'invoice',
+            documentId: $invoice->id,
+            documentNumber: $invoice->invoice_number,
+            companyId: $invoice->company_id,
+            projectId: $invoice->project_id,
+            recipientUserId: $requestor->id,
+            recipientEmail: $requestor->email,
+            requestorId: $requestor->id,
+            requestorEmail: $requestor->email,
+        );
     }
 }

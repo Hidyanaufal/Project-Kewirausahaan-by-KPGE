@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\LogsNotificationEmail;
 use App\Mail\InvoiceSubmissionNotification;
 use App\Models\Accounting\Invoice;
 use App\Models\User;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\Mail;
 
 class SendInvoiceSubmissionNotification implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, LogsNotificationEmail, Queueable, SerializesModels;
 
     public function __construct(
         public int $invoiceId
@@ -40,6 +41,19 @@ class SendInvoiceSubmissionNotification implements ShouldQueue
         foreach ($admins as $admin) {
             if ($admin->email) {
                 Mail::to($admin->email)->send(new InvoiceSubmissionNotification($invoice, $requestor));
+
+                $this->logNotificationEmailSent(
+                    notificationType: 'submission',
+                    documentType: 'invoice',
+                    documentId: $invoice->id,
+                    documentNumber: $invoice->invoice_number,
+                    companyId: $invoice->company_id,
+                    projectId: $invoice->project_id,
+                    recipientUserId: $admin->id,
+                    recipientEmail: $admin->email,
+                    requestorId: $requestor?->id,
+                    requestorEmail: $requestor?->email,
+                );
             }
         }
     }

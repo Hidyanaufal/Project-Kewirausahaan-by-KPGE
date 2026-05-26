@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\LogsNotificationEmail;
 use App\Mail\BillSubmissionNotification;
 use App\Models\Accounting\Bill;
 use App\Models\User;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\Mail;
 
 class SendBillSubmissionNotification implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, LogsNotificationEmail, Queueable, SerializesModels;
 
     public function __construct(
         public int $billId
@@ -40,6 +41,19 @@ class SendBillSubmissionNotification implements ShouldQueue
         foreach ($admins as $admin) {
             if ($admin->email) {
                 Mail::to($admin->email)->send(new BillSubmissionNotification($bill, $requestor));
+
+                $this->logNotificationEmailSent(
+                    notificationType: 'submission',
+                    documentType: 'bill',
+                    documentId: $bill->id,
+                    documentNumber: $bill->bill_number,
+                    companyId: $bill->company_id,
+                    projectId: $bill->project_id,
+                    recipientUserId: $admin->id,
+                    recipientEmail: $admin->email,
+                    requestorId: $requestor?->id,
+                    requestorEmail: $requestor?->email,
+                );
             }
         }
     }

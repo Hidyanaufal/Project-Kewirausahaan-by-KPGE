@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\LogsNotificationEmail;
 use App\Mail\BillApprovedNotification;
 use App\Models\Accounting\Bill;
 use App\Models\User;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Mail;
 
 class SendBillApprovedNotification implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, LogsNotificationEmail, Queueable, SerializesModels;
 
     public function __construct(
         public int $billId
@@ -39,5 +40,18 @@ class SendBillApprovedNotification implements ShouldQueue
         }
 
         Mail::to($requestor->email)->send(new BillApprovedNotification($bill));
+
+        $this->logNotificationEmailSent(
+            notificationType: 'approved',
+            documentType: 'bill',
+            documentId: $bill->id,
+            documentNumber: $bill->bill_number,
+            companyId: $bill->company_id,
+            projectId: $bill->project_id,
+            recipientUserId: $requestor->id,
+            recipientEmail: $requestor->email,
+            requestorId: $requestor->id,
+            requestorEmail: $requestor->email,
+        );
     }
 }
