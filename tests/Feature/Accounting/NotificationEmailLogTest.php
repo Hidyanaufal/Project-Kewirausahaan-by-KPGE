@@ -52,10 +52,14 @@ test('bill submission email writes a send log', function () {
     ]));
 
     $recipientService = Mockery::mock(NotificationRecipientService::class);
-    $recipientService->shouldReceive('getAdminUsersFor')
+    $recipientService->shouldReceive('getAdminRecipientResolutionFor')
         ->once()
         ->with($bill->company_id)
-        ->andReturn(collect([$user]));
+        ->andReturn([
+            'users' => collect([$user]),
+            'source' => 'target_company_admin',
+            'resolved_company_id' => $bill->company_id,
+        ]);
 
     (new SendBillSubmissionNotification($bill->id))->handle($recipientService);
 
@@ -73,6 +77,8 @@ test('bill submission email writes a send log', function () {
         'recipient_email' => $user->email,
         'requestor_id' => $user->id,
         'requestor_email' => $user->email,
+        'recipient_source' => 'target_company_admin',
+        'recipient_source_company_id' => $bill->company_id,
     ]);
 });
 
@@ -118,10 +124,14 @@ test('invoice submission email writes a send log', function () {
     ]));
 
     $recipientService = Mockery::mock(NotificationRecipientService::class);
-    $recipientService->shouldReceive('getAdminUsersFor')
+    $recipientService->shouldReceive('getAdminRecipientResolutionFor')
         ->once()
         ->with($invoice->company_id)
-        ->andReturn(collect([$user]));
+        ->andReturn([
+            'users' => collect([$user]),
+            'source' => 'target_company_admin',
+            'resolved_company_id' => $invoice->company_id,
+        ]);
 
     (new SendInvoiceSubmissionNotification($invoice->id))->handle($recipientService);
 
@@ -139,6 +149,8 @@ test('invoice submission email writes a send log', function () {
         'recipient_email' => $user->email,
         'requestor_id' => $user->id,
         'requestor_email' => $user->email,
+        'recipient_source' => 'target_company_admin',
+        'recipient_source_company_id' => $invoice->company_id,
     ]);
 });
 

@@ -29,10 +29,13 @@ class SendProjectSubmissionNotification implements ShouldQueue
             return;
         }
 
-        $admins = $recipientService->getAdminUsersFor($project->company_id);
+        $recipientResolution = $recipientService->getAdminRecipientResolutionFor($project->company_id);
+        $admins = $recipientResolution['users'];
+        $recipientSource = $recipientResolution['source'];
+        $recipientSourceCompanyId = $recipientResolution['resolved_company_id'];
 
         if ($admins->isEmpty()) {
-            Log::warning('SendProjectSubmissionNotification: tidak ada penerima (admin peran + super admin + owner company).', [
+            Log::warning('SendProjectSubmissionNotification: tidak ada penerima (admin company target, fallback company 1, atau super admin).', [
                 'project_id' => $project->id,
                 'company_id' => $project->company_id,
                 'requestor_id' => $project->requestor->id,
@@ -51,6 +54,8 @@ class SendProjectSubmissionNotification implements ShouldQueue
             'admin_count' => $admins->count(),
             'admin_user_ids' => $admins->pluck('id')->all(),
             'admin_emails' => $admins->pluck('email')->filter()->values()->all(),
+            'recipient_source' => $recipientSource,
+            'recipient_source_company_id' => $recipientSourceCompanyId,
         ]);
 
         foreach ($admins as $admin) {
@@ -68,6 +73,10 @@ class SendProjectSubmissionNotification implements ShouldQueue
                     recipientEmail: $admin->email,
                     requestorId: $project->requestor->id,
                     requestorEmail: $project->requestor->email,
+                    extraContext: [
+                        'recipient_source' => $recipientSource,
+                        'recipient_source_company_id' => $recipientSourceCompanyId,
+                    ],
                 );
             }
         }

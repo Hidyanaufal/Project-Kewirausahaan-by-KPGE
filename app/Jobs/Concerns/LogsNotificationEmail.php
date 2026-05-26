@@ -17,8 +17,9 @@ trait LogsNotificationEmail
         string $recipientEmail,
         ?int $requestorId = null,
         ?string $requestorEmail = null,
+        array $extraContext = [],
     ): void {
-        Log::info(class_basename(static::class) . ': notification email sent.', [
+        Log::info(class_basename(static::class) . ': notification email sent.', array_merge([
             'notification_type' => $notificationType,
             'document_type' => $documentType,
             'document_id' => $documentId,
@@ -29,6 +30,6 @@ trait LogsNotificationEmail
             'recipient_email' => $recipientEmail,
             'requestor_id' => $requestorId,
             'requestor_email' => $requestorEmail,
-        ]);
+        ], $extraContext));
     }
 }

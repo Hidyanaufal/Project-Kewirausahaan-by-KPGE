@@ -36,7 +36,10 @@ class SendInvoiceSubmissionNotification implements ShouldQueue
             $requestor = User::find($invoice->updated_by);
         }
 
-        $admins = $recipientService->getAdminUsersFor($invoice->company_id);
+        $recipientResolution = $recipientService->getAdminRecipientResolutionFor($invoice->company_id);
+        $admins = $recipientResolution['users'];
+        $recipientSource = $recipientResolution['source'];
+        $recipientSourceCompanyId = $recipientResolution['resolved_company_id'];
 
         foreach ($admins as $admin) {
             if ($admin->email) {
@@ -53,6 +56,10 @@ class SendInvoiceSubmissionNotification implements ShouldQueue
                     recipientEmail: $admin->email,
                     requestorId: $requestor?->id,
                     requestorEmail: $requestor?->email,
+                    extraContext: [
+                        'recipient_source' => $recipientSource,
+                        'recipient_source_company_id' => $recipientSourceCompanyId,
+                    ],
                 );
             }
         }
