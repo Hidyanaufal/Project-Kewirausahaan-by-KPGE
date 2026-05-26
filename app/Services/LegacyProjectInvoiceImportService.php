@@ -131,13 +131,15 @@ class LegacyProjectInvoiceImportService
                 $lastClientId = $clientId;
                 $lastClientName = $clientName;
 
+                $projectName = $mapped['name'] ?: $this->buildLegacyProjectName($mapped['number']);
+
                 $attributes = [
                     'company_id' => $this->companyId,
                     'project_type_id' => $projectType->id,
                     'client_id' => $clientId,
                     'pic_id' => $this->resolvePicId($mapped['pic_internal']),
                     'number' => $mapped['number'],
-                    'name' => $mapped['name'],
+                    'name' => $projectName,
                     'description' => $mapped['description'],
                     'request_number_date' => $mapped['request_number_date'],
                     'project_value' => $mapped['project_value'],
@@ -886,6 +888,11 @@ class LegacyProjectInvoiceImportService
         }
 
         return $projectNumber ? strtoupper($projectNumber) : null;
+    }
+
+    protected function buildLegacyProjectName(string $projectNumber): string
+    {
+        return "Data Lama - {$projectNumber}";
     }
 
     protected function normalizeDocumentNumber(mixed $value): ?string
