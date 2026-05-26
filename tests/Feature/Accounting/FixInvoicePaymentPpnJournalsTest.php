@@ -359,6 +359,52 @@ function createHistoricalSingleWrongTaxAccountWapuPaidInvoice(int $companyId): a
     return [$invoice->fresh(['payments.bankAccount']), $payment->fresh()];
 }
 
+function createHistoricalSplitApprovalAndWrongPaymentWapuInvoice(int $companyId): array
+{
+    [$invoice, $payment] = createHistoricalSingleWrongTaxAccountWapuPaidInvoice($companyId);
+
+    $approval = $invoice->approvalTransaction()->firstOrFail();
+    $ppnAccount = Account::getAccountsPPn($companyId);
+    $wapuAccountId = $invoice->historicalWapuTaxAccountId();
+
+    $wapuApprovalEntry = JournalEntry::query()
+        ->where('transaction_id', $approval->id)
+        ->where('account_id', $wapuAccountId)
+        ->where('type', JournalEntryType::Credit)
+        ->firstOrFail();
+
+    $splitAmount = 411_840;
+    $wapuApprovalEntry->update([
+        'amount' => (int) $wapuApprovalEntry->amount - $splitAmount,
+    ]);
+
+    JournalEntry::query()->create([
+        'company_id' => $companyId,
+        'transaction_id' => $approval->id,
+        'account_id' => $ppnAccount->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $splitAmount,
+        'description' => 'Legacy split PPN approval entry',
+    ]);
+
+    JournalEntry::query()
+        ->where('transaction_id', $payment->id)
+        ->where('account_id', $wapuAccountId)
+        ->where('type', JournalEntryType::Debit)
+        ->delete();
+
+    JournalEntry::query()->create([
+        'company_id' => $companyId,
+        'transaction_id' => $payment->id,
+        'account_id' => $ppnAccount->id,
+        'type' => JournalEntryType::Debit,
+        'amount' => 823_680,
+        'description' => 'Legacy wrong payment PPN entry',
+    ]);
+
+    return [$invoice->fresh(['payments.bankAccount']), $payment->fresh(), $approval->fresh()];
+}
+
 it('requires company id when dry running historical payment ppn fix', function () {
     $this->artisan('fix:invoice-payment-ppn-journals', [
         '--dry-run' => true,
@@ -482,11 +528,76 @@ it('fixes historical payment ppn journals by keeping or switching to the expecte
         ->and($brokenWapuDebitBefore)->toBeGreaterThan(0)
         ->and($wapuPpnDebitBefore)->toBeGreaterThan(0)
         ->and($wapuDebitBefore)->toBe(0)
-        ->and($brokenPpnDebitAfter)->toBe($brokenPpnDebitBefore)
+        ->and($brokenPpnDebitAfter)->toBe(0)
         ->and($brokenWapuDebitAfter)->toBe(0)
         ->and($brokenInvoice->needsHistoricalPaymentTaxAccountFix())->toBeFalse()
         ->and($brokenInvoice->journalTransactionIsBalanced($brokenPayment))->toBeTrue()
         ->and($wapuPpnDebitAfter)->toBe(0)
         ->and($wapuDebitAfter)->toBe($wapuPpnDebitBefore)
         ->and($wapuInvoice->fresh()->journalTransactionIsBalanced($wapuPayment))->toBeTrue();
+});
+
+it('fixes split approval tax and rebuilds payment tax amount for wapu invoices', function () {
+    [$invoice, $payment, $approval] = createHistoricalSplitApprovalAndWrongPaymentWapuInvoice($this->testCompany->id);
+    misconfigureWapuDefaultToPpnOutput($invoice->company_id);
+
+    $ppnAccount = Account::getAccountsPPn($invoice->company_id);
+    $wapuAccountId = $invoice->historicalWapuTaxAccountId();
+
+    $approvalPpnBefore = (int) JournalEntry::query()
+        ->where('transaction_id', $approval->id)
+        ->where('account_id', $ppnAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+    $approvalWapuBefore = (int) JournalEntry::query()
+        ->where('transaction_id', $approval->id)
+        ->where('account_id', $wapuAccountId)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+    $paymentPpnBefore = (int) JournalEntry::query()
+        ->where('transaction_id', $payment->id)
+        ->where('account_id', $ppnAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    expect($invoice->needsHistoricalPaymentTaxAccountFix())->toBeTrue()
+        ->and($invoice->journalTransactionIsBalanced($payment))->toBeFalse();
+
+    $this->artisan('fix:invoice-payment-ppn-journals', [
+        '--invoice-id' => $invoice->id,
+    ])->assertSuccessful();
+
+    $approval->refresh();
+    $payment->refresh();
+
+    $approvalPpnAfter = (int) JournalEntry::query()
+        ->where('transaction_id', $approval->id)
+        ->where('account_id', $ppnAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+    $approvalWapuAfter = (int) JournalEntry::query()
+        ->where('transaction_id', $approval->id)
+        ->where('account_id', $wapuAccountId)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+    $paymentPpnAfter = (int) JournalEntry::query()
+        ->where('transaction_id', $payment->id)
+        ->where('account_id', $ppnAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+    $paymentWapuAfter = (int) JournalEntry::query()
+        ->where('transaction_id', $payment->id)
+        ->where('account_id', $wapuAccountId)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    expect($approvalPpnBefore)->toBeGreaterThan(0)
+        ->and($approvalWapuBefore)->toBeGreaterThan(0)
+        ->and($paymentPpnBefore)->toBeGreaterThan(0)
+        ->and($approvalPpnAfter)->toBe(0)
+        ->and($approvalWapuAfter)->toBe($approvalPpnBefore + $approvalWapuBefore)
+        ->and($paymentPpnAfter)->toBe(0)
+        ->and($paymentWapuAfter)->toBe($approvalWapuAfter)
+        ->and($invoice->fresh()->journalTransactionIsBalanced($payment->fresh()))->toBeTrue()
+        ->and($invoice->fresh()->needsHistoricalPaymentTaxAccountFix())->toBeFalse();
 });

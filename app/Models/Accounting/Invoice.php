@@ -207,6 +207,18 @@ class Invoice extends Document
 
     public function salesTaxAccountId(): int
     {
+        if ($this->isWapu()) {
+            $wapuAccountId = $this->historicalWapuTaxAccountId();
+            if ($wapuAccountId) {
+                return $wapuAccountId;
+            }
+        }
+
+        $ppnAccountId = $this->historicalPpnTaxAccountId();
+        if ($ppnAccountId) {
+            return $ppnAccountId;
+        }
+
         return $this->isWapu()
             ? Account::getAccountsWapu($this->company_id)->id
             : Account::getAccountsPPn($this->company_id)->id;
@@ -328,10 +340,14 @@ class Invoice extends Document
 
     public function applyPaymentJournalEntriesForTransaction(Transaction $paymentTransaction): void
     {
-        $accountWapu = Adjustment::companyHasPpnWapu($this->company_id)
-            ? Account::getAccountsWapu($this->company_id)
+        $wapuAccountId = $this->historicalWapuTaxAccountId();
+        $accountWapu = ($this->isWapu() && $wapuAccountId)
+            ? Account::query()->withoutGlobalScopes()->find($wapuAccountId)
             : null;
-        $accountPPn = Account::getAccountsPPn($this->company_id);
+        $ppnAccountId = $this->historicalPpnTaxAccountId();
+        $accountPPn = $ppnAccountId
+            ? Account::query()->withoutGlobalScopes()->find($ppnAccountId)
+            : Account::getAccountsPPn($this->company_id);
         $accountPPh23 = Account::getAccountsPPh23($this->company_id);
         $receivableAccount = Account::getAccountsReceivableAccount($this->company_id);
 
@@ -391,10 +407,7 @@ class Invoice extends Document
         $previousNetReceivable = $previousReceivableCredits - $previousReceivableDebits;
         $remainingReceivable = $totalReceivable - $previousNetReceivable;
 
-        $taxAccountIds = array_filter([
-            $accountWapu?->id,
-            $accountPPn->id,
-        ]);
+        $taxAccountIds = $this->historicalPaymentTaxAccountIds();
 
         JournalEntry::query()
             ->where('transaction_id', $paymentTransaction->id)
@@ -475,27 +488,27 @@ class Invoice extends Document
     public function expectedHistoricalPaymentTaxAccountId(): ?int
     {
         $taxAccountIds = $this->historicalPaymentTaxAccountIds();
+        $hasHistoricalTaxEntries = false;
 
-        if ($this->approvalTransaction && $taxAccountIds !== []) {
-            $approvalTaxAccountIds = JournalEntry::query()
-                ->where('transaction_id', $this->approvalTransaction->id)
+        if ($taxAccountIds !== []) {
+            $approvalTransactionId = $this->approvalTransaction?->id;
+            $paymentIds = $this->payments()->select('id');
+
+            $hasHistoricalTaxEntries = JournalEntry::query()
+                ->when($approvalTransactionId, function ($query) use ($approvalTransactionId, $paymentIds) {
+                    $query->where('transaction_id', $approvalTransactionId)
+                        ->orWhereIn('transaction_id', $paymentIds);
+                }, fn ($query) => $query->whereIn('transaction_id', $paymentIds))
                 ->whereIn('account_id', $taxAccountIds)
-                ->where('type', JournalEntryType::Credit)
-                ->pluck('account_id')
-                ->unique()
-                ->values();
-
-            if ($approvalTaxAccountIds->count() === 1) {
-                return (int) $approvalTaxAccountIds->first();
-            }
+                ->exists();
         }
 
-        if ((int) $this->tax_total <= 0) {
+        if (! $hasHistoricalTaxEntries && (int) $this->tax_total <= 0) {
             return null;
         }
 
         if ($this->isWapu()) {
-            return $this->historicalWapuTaxAccountId();
+            return $this->historicalWapuTaxAccountId() ?? $this->historicalPpnTaxAccountId();
         }
 
         return $this->historicalPpnTaxAccountId();
