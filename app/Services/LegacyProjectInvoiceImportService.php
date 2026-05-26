@@ -133,6 +133,12 @@ class LegacyProjectInvoiceImportService
 
                 $projectName = $mapped['name'] ?: $this->buildLegacyProjectName($mapped['number']);
 
+                $legacyTimestamp = $this->legacyCreatedAt(
+                    $mapped['request_number_date'],
+                    $mapped['start_date'],
+                    $mapped['end_date'],
+                );
+
                 $attributes = [
                     'company_id' => $this->companyId,
                     'project_type_id' => $projectType->id,
@@ -148,6 +154,7 @@ class LegacyProjectInvoiceImportService
                     'work_basis' => $mapped['work_basis'],
                     'status' => ProjectStatus::Approved,
                     'pic_client_name' => $mapped['pic_client_name'],
+                    'updated_at' => $legacyTimestamp,
                     'is_imported' => true,
                 ];
 
@@ -171,7 +178,10 @@ class LegacyProjectInvoiceImportService
                     $this->summary['projects']['updated']++;
                 } else {
                     $project = new Project();
-                    $project->forceFill($attributes);
+                    $project->forceFill([
+                        ...$attributes,
+                        'created_at' => $legacyTimestamp,
+                    ]);
                     $project->saveQuietly();
                     $this->summary['projects']['inserted']++;
                 }
@@ -260,8 +270,9 @@ class LegacyProjectInvoiceImportService
     protected function persistImportedInvoice(Invoice $invoice, array $data, Project $project): void
     {
         $client = Client::query()->findOrFail($project->client_id);
+        $legacyTimestamp = $this->legacyCreatedAt($data['date'], $data['due_date']);
 
-        $invoice->forceFill([
+        $attributes = [
             'company_id' => $this->companyId,
             'client_id' => $client->id,
             'project_id' => $project->id,
@@ -286,8 +297,15 @@ class LegacyProjectInvoiceImportService
             'hide_offering_items' => true,
             'created_by' => $invoice->exists ? ($invoice->created_by ?: $this->actorId) : $this->actorId,
             'updated_by' => $this->actorId,
+            'updated_at' => $legacyTimestamp,
             'is_imported' => true,
-        ]);
+        ];
+
+        if (! $invoice->exists) {
+            $attributes['created_at'] = $legacyTimestamp;
+        }
+
+        $invoice->forceFill($attributes);
         $invoice->saveQuietly();
 
         $lineItem = $invoice->lineItems()->create([
@@ -302,6 +320,8 @@ class LegacyProjectInvoiceImportService
             'line_number' => 1,
             'created_by' => $this->actorId,
             'updated_by' => $this->actorId,
+            'created_at' => $legacyTimestamp,
+            'updated_at' => $legacyTimestamp,
         ]);
 
         $taxAdjustment = $this->resolveSalesTaxAdjustment($data['subtotal'], $data['profit_total'], $data['tax_total'], $data['total']);
@@ -311,6 +331,7 @@ class LegacyProjectInvoiceImportService
             $lineItem->salesTaxes()->sync([$taxAdjustment->id]);
             $lineItem->updateQuietly([
                 'tax_total' => $lineItem->calculateTaxTotalAmount(),
+                'updated_at' => $legacyTimestamp,
             ]);
         }
 
@@ -323,6 +344,7 @@ class LegacyProjectInvoiceImportService
             'total' => $data['total'],
             'pph23' => $data['pph23'],
             'updated_by' => $this->actorId,
+            'updated_at' => $legacyTimestamp,
             'is_imported' => true,
         ])->save();
 
@@ -340,6 +362,7 @@ class LegacyProjectInvoiceImportService
             $invoice->forceFill([
                 'is_imported' => true,
                 'updated_by' => $this->actorId,
+                'updated_at' => $legacyTimestamp,
             ])->saveQuietly();
 
             return;
@@ -353,6 +376,7 @@ class LegacyProjectInvoiceImportService
                 postedAt: $data['date'],
                 pph23: $data['pph23'],
             );
+            $this->syncInvoiceUpdatedAt($invoice, $legacyTimestamp);
 
             return;
         }
@@ -363,6 +387,7 @@ class LegacyProjectInvoiceImportService
                 'status' => InvoiceStatus::Partial,
                 'amount_paid' => $amountPaid,
                 'updated_by' => $this->actorId,
+                'updated_at' => $legacyTimestamp,
                 'is_imported' => true,
             ])->saveQuietly();
 
@@ -371,6 +396,7 @@ class LegacyProjectInvoiceImportService
 
         if ($finalStatus === InvoiceStatus::Viewed) {
             $invoice->markAsViewed($this->dateTimeOrNow($data['date']));
+            $this->syncInvoiceUpdatedAt($invoice, $legacyTimestamp);
 
             return;
         }
@@ -378,9 +404,12 @@ class LegacyProjectInvoiceImportService
         if ($finalStatus === InvoiceStatus::Sent) {
             $invoice->forceFill([
                 'updated_by' => $this->actorId,
+                'updated_at' => $legacyTimestamp,
                 'is_imported' => true,
             ])->saveQuietly();
         }
+
+        $this->syncInvoiceUpdatedAt($invoice, $legacyTimestamp);
     }
 
     protected function resetImportedInvoice(Invoice $invoice): void
@@ -494,6 +523,7 @@ class LegacyProjectInvoiceImportService
         $invoice->forceFill([
             'actual_total' => $amount,
             'updated_by' => $this->actorId,
+            'updated_at' => $this->dateTimeOrNow($postedAt),
             'is_imported' => true,
         ])->saveQuietly();
 
@@ -515,6 +545,7 @@ class LegacyProjectInvoiceImportService
             'amount_paid' => $amount,
             'paid_at' => $this->dateTimeOrNow($postedAt),
             'updated_by' => $this->actorId,
+            'updated_at' => $this->dateTimeOrNow($postedAt),
             'is_imported' => true,
         ])->saveQuietly();
     }
@@ -1015,6 +1046,24 @@ class LegacyProjectInvoiceImportService
     protected function dateTimeOrNow(?string $date): Carbon
     {
         return $date ? Carbon::parse($date)->startOfDay() : now();
+    }
+
+    protected function syncInvoiceUpdatedAt(Invoice $invoice, Carbon $timestamp): void
+    {
+        $invoice->forceFill([
+            'updated_at' => $timestamp,
+        ])->saveQuietly();
+    }
+
+    protected function legacyCreatedAt(?string ...$dates): Carbon
+    {
+        foreach ($dates as $date) {
+            if ($date) {
+                return Carbon::parse($date)->startOfDay();
+            }
+        }
+
+        return now();
     }
 
     protected function addWarning(string $message): void

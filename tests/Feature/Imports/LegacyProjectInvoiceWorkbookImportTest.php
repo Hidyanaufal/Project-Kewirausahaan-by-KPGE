@@ -60,8 +60,12 @@ it('imports legacy workbook into approved projects and invoice final states', fu
 
     expect($pengadaan->status)->toBe(\App\Enums\Addons\ProjectStatus::Approved)
         ->and($pengadaan->is_imported)->toBeTrue()
+        ->and($pengadaan->created_at?->toDateString())->toBe('2026-01-05')
+        ->and($pengadaan->updated_at?->toDateString())->toBe('2026-01-05')
         ->and($eo->status)->toBe(\App\Enums\Addons\ProjectStatus::Approved)
         ->and($eo->is_imported)->toBeTrue()
+        ->and($eo->created_at?->toDateString())->toBe('2026-01-08')
+        ->and($eo->updated_at?->toDateString())->toBe('2026-01-08')
         ->and($fallbackProject->name)->toBe('Data Lama - EO26-175');
 
     $paidInvoice = Invoice::query()->where('invoice_number', 'PG26-001')->firstOrFail();
@@ -70,6 +74,8 @@ it('imports legacy workbook into approved projects and invoice final states', fu
 
     expect($paidInvoice->status)->toBe(InvoiceStatus::Paid)
         ->and($paidInvoice->is_imported)->toBeTrue()
+        ->and($paidInvoice->created_at?->toDateString())->toBe('2026-01-10')
+        ->and($paidInvoice->updated_at?->toDateString())->toBe('2026-01-10')
         ->and($paidInvoice->approvalTransaction)->not->toBeNull()
         ->and($paidInvoice->payments()->count())->toBe(1)
         ->and($paidInvoice->project?->number)->toBe('EO26-001')
@@ -110,7 +116,9 @@ it('is idempotent on repeated import without creating duplicate records', functi
     expect(Project::query()->where('is_imported', true)->count())->toBe(3)
         ->and(Invoice::query()->where('is_imported', true)->count())->toBe(3)
         ->and(Project::query()->whereIn('number', ['KG26-001', 'EO26-001', 'EO26-175'])->pluck('id')->all())->toBe($projectIdsAfterFirstImport)
-        ->and(Invoice::query()->whereIn('invoice_number', ['PG26-001', 'PG26-002', 'PG26-003'])->pluck('id')->all())->toBe($invoiceIdsAfterFirstImport);
+        ->and(Invoice::query()->whereIn('invoice_number', ['PG26-001', 'PG26-002', 'PG26-003'])->pluck('id')->all())->toBe($invoiceIdsAfterFirstImport)
+        ->and(Project::query()->where('number', 'KG26-001')->value('updated_at')?->toDateString())->toBe('2026-01-05')
+        ->and(Invoice::query()->where('invoice_number', 'PG26-001')->value('updated_at')?->toDateString())->toBe('2026-01-10');
 });
 
 function ensureLegacyInvoiceImportDefaultsForCompany(int $companyId): void
