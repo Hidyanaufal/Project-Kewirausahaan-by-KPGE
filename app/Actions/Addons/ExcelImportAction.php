@@ -83,11 +83,28 @@ class ExcelImportAction
                         'full_path' => $filePath,
                         'context' => $resolvedContext,
                     ]);
-                    Excel::import(new $importClass(...$resolvedContext), $filePath);
+                    $importer = new $importClass(...$resolvedContext);
+
+                    if (method_exists($importer, 'importFile')) {
+                        $importer->importFile($filePath);
+                    } else {
+                        Excel::import($importer, $filePath);
+                    }
+
+                    $notificationStatus = method_exists($importer, 'notificationStatus')
+                        ? $importer->notificationStatus()
+                        : 'success';
+                    $notificationTitle = method_exists($importer, 'notificationTitle')
+                        ? $importer->notificationTitle()
+                        : 'Import Queued';
+                    $notificationBody = method_exists($importer, 'notificationBody')
+                        ? $importer->notificationBody()
+                        : $successMessage;
+
                     Notification::make()
-                        ->success()
-                        ->title('Import Queued')
-                        ->body($successMessage)
+                        ->{$notificationStatus}()
+                        ->title($notificationTitle)
+                        ->body($notificationBody)
                         ->send();
                 } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {
                     $failures = $e->failures();
