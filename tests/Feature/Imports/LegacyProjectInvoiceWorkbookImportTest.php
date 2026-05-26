@@ -52,15 +52,17 @@ it('imports legacy workbook into approved projects and invoice final states', fu
     );
 
     $importer->importFile($this->legacyWorkbookPath);
-    expect(Project::query()->where('is_imported', true)->count())->toBe(2);
+    expect(Project::query()->where('is_imported', true)->count())->toBe(3);
 
     $pengadaan = Project::query()->where('number', 'KG26-001')->firstOrFail();
     $eo = Project::query()->where('number', 'EO26-001')->firstOrFail();
+    $fallbackProject = Project::query()->where('number', 'EO26-175')->firstOrFail();
 
     expect($pengadaan->status)->toBe(\App\Enums\Addons\ProjectStatus::Approved)
         ->and($pengadaan->is_imported)->toBeTrue()
         ->and($eo->status)->toBe(\App\Enums\Addons\ProjectStatus::Approved)
-        ->and($eo->is_imported)->toBeTrue();
+        ->and($eo->is_imported)->toBeTrue()
+        ->and($fallbackProject->name)->toBe('Data Lama - EO26-175');
 
     $paidInvoice = Invoice::query()->where('invoice_number', 'PG26-001')->firstOrFail();
     $cancelledInvoice = Invoice::query()->where('invoice_number', 'PG26-002')->firstOrFail();
@@ -95,7 +97,7 @@ it('is idempotent on repeated import without creating duplicate records', functi
 
     $importer->importFile($this->legacyWorkbookPath);
     $projectIdsAfterFirstImport = Project::query()
-        ->whereIn('number', ['KG26-001', 'EO26-001'])
+        ->whereIn('number', ['KG26-001', 'EO26-001', 'EO26-175'])
         ->pluck('id')
         ->all();
     $invoiceIdsAfterFirstImport = Invoice::query()
@@ -105,9 +107,9 @@ it('is idempotent on repeated import without creating duplicate records', functi
 
     $importer->importFile($this->legacyWorkbookPath);
 
-    expect(Project::query()->where('is_imported', true)->count())->toBe(2)
+    expect(Project::query()->where('is_imported', true)->count())->toBe(3)
         ->and(Invoice::query()->where('is_imported', true)->count())->toBe(3)
-        ->and(Project::query()->whereIn('number', ['KG26-001', 'EO26-001'])->pluck('id')->all())->toBe($projectIdsAfterFirstImport)
+        ->and(Project::query()->whereIn('number', ['KG26-001', 'EO26-001', 'EO26-175'])->pluck('id')->all())->toBe($projectIdsAfterFirstImport)
         ->and(Invoice::query()->whereIn('invoice_number', ['PG26-001', 'PG26-002', 'PG26-003'])->pluck('id')->all())->toBe($invoiceIdsAfterFirstImport);
 });
 
@@ -176,6 +178,7 @@ function createLegacyWorkbook(string $path): void
     $projectEo->fromArray([
         ['Nama Projek', 'Tanggal Permintaan', 'Nomor Prefix', 'Nomor Registrasi', 'Nomor Projek', 'Dasar Pekerjaan', 'Nilai Projek', 'Tanggal Mulai', 'Tanggal Selesai', 'Client', 'PIC Client', 'PIC Internal'],
         ['Workshop Well Surveillance', '08/01/2026', 'EO26-', '001', '001', 'SPK EO', '99,220,000', '10/01/2026', '12/01/2026', 'PT Client EO', 'Sari', 'FOUNDRA'],
+        ['', '09/01/2026', 'EO26-', '175', '175', '', '', '', '', '', '', ''],
     ]);
 
     $invoice = new Worksheet($spreadsheet, 'Invoice');
