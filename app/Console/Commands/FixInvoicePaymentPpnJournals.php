@@ -22,7 +22,7 @@ class FixInvoicePaymentPpnJournals extends Command
                             {--all-companies : Proses seluruh company yang terdampak}
                             {--stop-on-error : Hentikan pada invoice pertama yang gagal}';
 
-    protected $description = 'Memperbaiki jurnal payment invoice historis yang memiliki debit PPN WAPU dan PPN keluaran sekaligus';
+    protected $description = 'Memperbaiki akun pajak pada jurnal payment invoice historis agar sesuai rule WAPU vs PPN keluaran';
 
     public function handle(): int
     {
@@ -116,7 +116,7 @@ class FixInvoicePaymentPpnJournals extends Command
 
                 try {
                     DB::transaction(function () use ($invoice) {
-                        $this->deleteUnexpectedPaymentTaxEntries($invoice);
+                        $this->fixUnexpectedPaymentTaxEntries($invoice);
                     });
 
                     $invoice->refresh()->load('payments.bankAccount');
@@ -157,12 +157,9 @@ class FixInvoicePaymentPpnJournals extends Command
      */
     private function snapshotPaymentJournals(Invoice $invoice): array
     {
-        $expectedTaxAccountId = $invoice->expectedHistoricalPaymentTaxAccountId();
-        $wapuAccountId = Account::getAccountsWapuIfConfigured($invoice->company_id)?->id;
-        $ppnAccountId = Account::getAccountsPPn($invoice->company_id)->id;
-        $paymentIds = $invoice->payments->pluck('id');
+        $context = $this->buildPaymentTaxContext($invoice);
 
-        if ($paymentIds->isEmpty() || ! $expectedTaxAccountId || ! $wapuAccountId) {
+        if (! $context) {
             return [
                 'affected_payment_count' => 0,
                 'unexpected_tax_debit_total' => 0,
@@ -170,21 +167,18 @@ class FixInvoicePaymentPpnJournals extends Command
             ];
         }
 
-        $taxDebitEntries = JournalEntry::query()
-            ->whereIn('transaction_id', $paymentIds)
-            ->whereIn('account_id', [$ppnAccountId, $wapuAccountId])
-            ->where('type', JournalEntryType::Debit)
-            ->get();
+        $affectedGroups = $context['groups']->filter(function (Collection $entries) use ($context) {
+            $accountIds = $entries->pluck('account_id')->unique()->values();
 
-        $affectedPaymentIds = $taxDebitEntries
-            ->groupBy('transaction_id')
-            ->filter(fn (Collection $entries) => $entries->pluck('account_id')->unique()->count() >= 2)
-            ->keys()
-            ->values();
+            return $accountIds->count() > 1
+                || ($accountIds->count() === 1 && (int) $accountIds->first() !== $context['expected_tax_account_id']);
+        });
 
-        $unexpectedTaxDebitTotal = (int) $taxDebitEntries
-            ->whereIn('transaction_id', $affectedPaymentIds)
-            ->reject(fn (JournalEntry $entry) => $entry->account_id === $expectedTaxAccountId)
+        $affectedPaymentIds = $affectedGroups->keys()->values();
+
+        $unexpectedTaxDebitTotal = (int) $affectedGroups
+            ->flatten(1)
+            ->reject(fn (JournalEntry $entry) => (int) $entry->account_id === $context['expected_tax_account_id'])
             ->sum('amount');
 
         return [
@@ -209,35 +203,73 @@ class FixInvoicePaymentPpnJournals extends Command
             ->value('name') ?? 'Tidak diketahui';
     }
 
-    private function deleteUnexpectedPaymentTaxEntries(Invoice $invoice): void
+    private function fixUnexpectedPaymentTaxEntries(Invoice $invoice): void
     {
-        $expectedTaxAccountId = $invoice->expectedHistoricalPaymentTaxAccountId();
-        $wapuAccountId = Account::getAccountsWapuIfConfigured($invoice->company_id)?->id;
-
-        if (! $expectedTaxAccountId || ! $wapuAccountId) {
+        $context = $this->buildPaymentTaxContext($invoice);
+        if (! $context) {
             return;
         }
 
-        $ppnAccountId = Account::getAccountsPPn($invoice->company_id)->id;
-        $affectedPaymentIds = JournalEntry::query()
-            ->whereIn('transaction_id', $invoice->payments()->select('id'))
-            ->whereIn('account_id', [$ppnAccountId, $wapuAccountId])
+        $expectedTaxAccountId = $context['expected_tax_account_id'];
+
+        $context['groups']->each(function (Collection $entries) use ($expectedTaxAccountId) {
+            $uniqueAccountIds = $entries->pluck('account_id')->unique()->values();
+
+            if ($uniqueAccountIds->count() === 1 && (int) $uniqueAccountIds->first() !== $expectedTaxAccountId) {
+                $entry = $entries->first();
+                $entry->update([
+                    'account_id' => $expectedTaxAccountId,
+                ]);
+
+                return;
+            }
+
+            $entries
+                ->reject(fn (JournalEntry $entry) => (int) $entry->account_id === $expectedTaxAccountId)
+                ->each(function (JournalEntry $entry) {
+                    $entry->delete();
+                });
+        });
+    }
+
+    /**
+     * @return array{expected_tax_account_id:int, groups: Collection<int, Collection<int, JournalEntry>>}|null
+     */
+    private function buildPaymentTaxContext(Invoice $invoice): ?array
+    {
+        $expectedTaxAccountId = $invoice->expectedHistoricalPaymentTaxAccountId();
+        $paymentIds = $invoice->payments->pluck('id');
+
+        if (! $expectedTaxAccountId || $paymentIds->isEmpty()) {
+            return null;
+        }
+
+        $taxAccountIds = array_values(array_unique(array_filter([
+            Account::getAccountsPPn($invoice->company_id)->id,
+            Account::getAccountsWapuIfConfigured($invoice->company_id)?->id,
+        ])));
+
+        if ($taxAccountIds === []) {
+            return null;
+        }
+
+        $groups = JournalEntry::query()
+            ->whereIn('transaction_id', $paymentIds)
+            ->whereIn('account_id', $taxAccountIds)
             ->where('type', JournalEntryType::Debit)
             ->get()
             ->groupBy('transaction_id')
-            ->filter(fn (Collection $entries) => $entries->pluck('account_id')->unique()->count() >= 2)
-            ->keys();
+            ->filter(function (Collection $entries) use ($expectedTaxAccountId) {
+                $accountIds = $entries->pluck('account_id')->unique()->values();
 
-        if ($affectedPaymentIds->isEmpty()) {
-            return;
-        }
+                return $accountIds->count() > 1
+                    || ($accountIds->count() === 1 && (int) $accountIds->first() !== $expectedTaxAccountId);
+            });
 
-        JournalEntry::query()
-            ->whereIn('transaction_id', $affectedPaymentIds)
-            ->whereIn('account_id', [$ppnAccountId, $wapuAccountId])
-            ->where('type', JournalEntryType::Debit)
-            ->where('account_id', '!=', $expectedTaxAccountId)
-            ->delete();
+        return [
+            'expected_tax_account_id' => $expectedTaxAccountId,
+            'groups' => $groups,
+        ];
     }
 
     private function countImbalancedPayments(Invoice $invoice, Collection $paymentIds): int

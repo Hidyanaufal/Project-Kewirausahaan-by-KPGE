@@ -484,23 +484,33 @@ class Invoice extends Document
     public function needsHistoricalPaymentTaxAccountFix(): bool
     {
         $expectedTaxAccountId = $this->expectedHistoricalPaymentTaxAccountId();
-        $wapuAccountId = Account::getAccountsWapuIfConfigured($this->company_id)?->id;
-
-        if (! $expectedTaxAccountId || ! $wapuAccountId) {
+        if (! $expectedTaxAccountId) {
             return false;
         }
 
         $ppnAccountId = Account::getAccountsPPn($this->company_id)->id;
+        $taxAccountIds = array_values(array_filter([
+            $ppnAccountId,
+            Account::getAccountsWapuIfConfigured($this->company_id)?->id,
+        ]));
 
-        return JournalEntry::query()
+        if ($taxAccountIds === []) {
+            return false;
+        }
+
+        $taxEntriesByPayment = JournalEntry::query()
             ->whereIn('transaction_id', $this->payments()->select('id'))
-            ->whereIn('account_id', [$ppnAccountId, $wapuAccountId])
+            ->whereIn('account_id', $taxAccountIds)
             ->where('type', JournalEntryType::Debit)
-            ->select('transaction_id')
-            ->groupBy('transaction_id')
-            ->havingRaw('COUNT(DISTINCT account_id) >= 2')
-            ->limit(1)
-            ->exists();
+            ->get(['transaction_id', 'account_id'])
+            ->groupBy('transaction_id');
+
+        return $taxEntriesByPayment->contains(function ($entries) use ($expectedTaxAccountId) {
+            $taxAccountIds = $entries->pluck('account_id')->unique()->values();
+
+            return $taxAccountIds->count() > 1
+                || ($taxAccountIds->count() === 1 && (int) $taxAccountIds->first() !== $expectedTaxAccountId);
+        });
     }
 
     public function journalTransactionIsBalanced(Transaction $transaction): bool
