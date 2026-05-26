@@ -410,21 +410,12 @@ class Invoice extends Document
         $paymentDescription = "Invoice #{$this->invoice_number}: Payment from {$this->client->name}";
 
         foreach ($approvalJournalEntries as $journal) {
-            if ($accountWapu && $journal->account_id == $accountWapu->id) {
+            // Non-WAPU invoice payments already collect cash inclusive of PPN,
+            // so only WAPU tax should be reclassified at payment time.
+            if ($this->isWapu() && $accountWapu && $journal->account_id == $accountWapu->id) {
                 $entry = JournalEntry::create([
                     'transaction_id' => $paymentTransaction->id,
                     'account_id' => $accountWapu->id,
-                    'type' => JournalEntryType::Debit,
-                    'amount' => $journal->amount,
-                    'description' => $paymentDescription,
-                ]);
-                $journalAmountTotal += $entry->amount;
-            }
-
-            if ($journal->account_id == $accountPPn->id) {
-                $entry = JournalEntry::create([
-                    'transaction_id' => $paymentTransaction->id,
-                    'account_id' => $accountPPn->id,
                     'type' => JournalEntryType::Debit,
                     'amount' => $journal->amount,
                     'description' => $paymentDescription,
@@ -479,6 +470,37 @@ class Invoice extends Document
         foreach ($payments as $trx) {
             $this->applyPaymentJournalEntriesForTransaction($trx);
         }
+    }
+
+    public function expectedHistoricalPaymentTaxAccountId(): ?int
+    {
+        if ((int) $this->tax_total <= 0) {
+            return null;
+        }
+
+        return $this->salesTaxAccountId();
+    }
+
+    public function needsHistoricalPaymentTaxAccountFix(): bool
+    {
+        $expectedTaxAccountId = $this->expectedHistoricalPaymentTaxAccountId();
+        $wapuAccountId = Account::getAccountsWapuIfConfigured($this->company_id)?->id;
+
+        if (! $expectedTaxAccountId || ! $wapuAccountId) {
+            return false;
+        }
+
+        $ppnAccountId = Account::getAccountsPPn($this->company_id)->id;
+
+        return JournalEntry::query()
+            ->whereIn('transaction_id', $this->payments()->select('id'))
+            ->whereIn('account_id', [$ppnAccountId, $wapuAccountId])
+            ->where('type', JournalEntryType::Debit)
+            ->select('transaction_id')
+            ->groupBy('transaction_id')
+            ->havingRaw('COUNT(DISTINCT account_id) >= 2')
+            ->limit(1)
+            ->exists();
     }
 
     public function journalTransactionIsBalanced(Transaction $transaction): bool
