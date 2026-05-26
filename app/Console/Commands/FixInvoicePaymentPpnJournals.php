@@ -157,7 +157,7 @@ class FixInvoicePaymentPpnJournals extends Command
      */
     private function snapshotPaymentJournals(Invoice $invoice): array
     {
-        $context = $this->buildPaymentTaxContext($invoice);
+        $context = $this->buildHistoricalTaxContext($invoice);
 
         if (! $context) {
             return [
@@ -167,16 +167,9 @@ class FixInvoicePaymentPpnJournals extends Command
             ];
         }
 
-        $affectedGroups = $context['groups']->filter(function (Collection $entries) use ($context) {
-            $accountIds = $entries->pluck('account_id')->unique()->values();
+        $affectedPaymentIds = $context['payment_groups']->keys()->values();
 
-            return $accountIds->count() > 1
-                || ($accountIds->count() === 1 && (int) $accountIds->first() !== $context['expected_tax_account_id']);
-        });
-
-        $affectedPaymentIds = $affectedGroups->keys()->values();
-
-        $unexpectedTaxDebitTotal = (int) $affectedGroups
+        $unexpectedTaxDebitTotal = (int) $context['payment_groups']
             ->flatten(1)
             ->reject(fn (JournalEntry $entry) => (int) $entry->account_id === $context['expected_tax_account_id'])
             ->sum('amount');
@@ -205,37 +198,35 @@ class FixInvoicePaymentPpnJournals extends Command
 
     private function fixUnexpectedPaymentTaxEntries(Invoice $invoice): void
     {
-        $context = $this->buildPaymentTaxContext($invoice);
+        $context = $this->buildHistoricalTaxContext($invoice);
         if (! $context) {
             return;
         }
 
-        $expectedTaxAccountId = $context['expected_tax_account_id'];
+        $this->normalizeApprovalTaxEntries($invoice, $context);
 
-        $context['groups']->each(function (Collection $entries) use ($expectedTaxAccountId) {
-            $uniqueAccountIds = $entries->pluck('account_id')->unique()->values();
+        $invoice->refresh()->loadMissing(['payments.bankAccount', 'client']);
+        $invoice->rebuildPaymentJournalEntries();
 
-            if ($uniqueAccountIds->count() === 1 && (int) $uniqueAccountIds->first() !== $expectedTaxAccountId) {
-                $entry = $entries->first();
-                $entry->update([
-                    'account_id' => $expectedTaxAccountId,
-                ]);
-
-                return;
+        foreach ($invoice->payments as $payment) {
+            if (! $invoice->journalTransactionIsBalanced($payment)) {
+                throw new \RuntimeException(
+                    "Journal payment #{$payment->id} pada Invoice #{$invoice->invoice_number} masih belum balance setelah rebuild."
+                );
             }
-
-            $entries
-                ->reject(fn (JournalEntry $entry) => (int) $entry->account_id === $expectedTaxAccountId)
-                ->each(function (JournalEntry $entry) {
-                    $entry->delete();
-                });
-        });
+        }
     }
 
     /**
-     * @return array{expected_tax_account_id:int, groups: Collection<int, Collection<int, JournalEntry>>}|null
+     * @return array{
+     *   expected_tax_account_id:int,
+     *   approval_transaction_id:int|null,
+     *   approval_entries: Collection<int, JournalEntry>,
+     *   approval_tax_total:int,
+     *   payment_groups: Collection<int, Collection<int, JournalEntry>>
+     * }|null
      */
-    private function buildPaymentTaxContext(Invoice $invoice): ?array
+    private function buildHistoricalTaxContext(Invoice $invoice): ?array
     {
         $expectedTaxAccountId = $invoice->expectedHistoricalPaymentTaxAccountId();
         $paymentIds = $invoice->payments->pluck('id');
@@ -250,7 +241,18 @@ class FixInvoicePaymentPpnJournals extends Command
             return null;
         }
 
-        $groups = JournalEntry::query()
+        $approvalTransactionId = $invoice->approvalTransaction?->id;
+
+        $approvalEntries = collect();
+        if ($approvalTransactionId) {
+            $approvalEntries = JournalEntry::query()
+                ->where('transaction_id', $approvalTransactionId)
+                ->whereIn('account_id', $taxAccountIds)
+                ->where('type', JournalEntryType::Credit)
+                ->get();
+        }
+
+        $paymentGroups = JournalEntry::query()
             ->whereIn('transaction_id', $paymentIds)
             ->whereIn('account_id', $taxAccountIds)
             ->where('type', JournalEntryType::Debit)
@@ -263,10 +265,60 @@ class FixInvoicePaymentPpnJournals extends Command
                     || ($accountIds->count() === 1 && (int) $accountIds->first() !== $expectedTaxAccountId);
             });
 
+        $approvalNeedsFix = false;
+        if ($approvalEntries->isNotEmpty()) {
+            $approvalAccountIds = $approvalEntries->pluck('account_id')->unique()->values();
+            $approvalNeedsFix = $approvalAccountIds->count() > 1
+                || ($approvalAccountIds->count() === 1 && (int) $approvalAccountIds->first() !== $expectedTaxAccountId);
+        }
+
+        if (! $approvalNeedsFix && $paymentGroups->isEmpty()) {
+            return null;
+        }
+
         return [
             'expected_tax_account_id' => $expectedTaxAccountId,
-            'groups' => $groups,
+            'approval_transaction_id' => $approvalTransactionId,
+            'approval_entries' => $approvalEntries,
+            'approval_tax_total' => (int) $approvalEntries->sum('amount'),
+            'payment_groups' => $paymentGroups,
         ];
+    }
+
+    /**
+     * @param array{
+     *   expected_tax_account_id:int,
+     *   approval_transaction_id:int|null,
+     *   approval_entries: Collection<int, JournalEntry>,
+     *   approval_tax_total:int,
+     *   payment_groups: Collection<int, Collection<int, JournalEntry>>
+     * } $context
+     */
+    private function normalizeApprovalTaxEntries(Invoice $invoice, array $context): void
+    {
+        if (! $context['approval_transaction_id'] || $context['approval_entries']->isEmpty()) {
+            return;
+        }
+
+        JournalEntry::query()
+            ->whereIn('id', $context['approval_entries']->pluck('id'))
+            ->delete();
+
+        if ($context['approval_tax_total'] <= 0) {
+            return;
+        }
+
+        $description = $context['approval_entries']->first()?->description
+            ?? "Tax entry for Invoice #{$invoice->invoice_number}";
+
+        JournalEntry::create([
+            'company_id' => $invoice->company_id,
+            'transaction_id' => $context['approval_transaction_id'],
+            'account_id' => $context['expected_tax_account_id'],
+            'type' => JournalEntryType::Credit,
+            'amount' => $context['approval_tax_total'],
+            'description' => $description,
+        ]);
     }
 
     private function countImbalancedPayments(Invoice $invoice, Collection $paymentIds): int
