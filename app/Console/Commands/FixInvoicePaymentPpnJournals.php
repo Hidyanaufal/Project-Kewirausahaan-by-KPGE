@@ -94,13 +94,14 @@ class FixInvoicePaymentPpnJournals extends Command
                 session(['current_company_id' => $invoice->company_id]);
 
                 $invoice->refresh()->load(['payments.bankAccount', 'client']);
+                $context = $this->buildHistoricalTaxContext($invoice);
 
-                if (! $invoice->needsHistoricalPaymentTaxAccountFix()) {
+                if (! $context) {
                     $skipped++;
                     continue;
                 }
 
-                $before = $this->snapshotPaymentJournals($invoice);
+                $before = $this->snapshotPaymentJournals($invoice, $context);
                 $targetAccountName = $this->expectedTaxAccountName($invoice);
 
                 $this->line("Invoice <comment>{$invoice->invoice_number}</comment> (ID {$invoice->id}, company {$invoice->company_id})");
@@ -155,9 +156,9 @@ class FixInvoicePaymentPpnJournals extends Command
     /**
      * @return array{affected_payment_count:int, unexpected_tax_debit_total:int, imbalanced_payment_count:int}
      */
-    private function snapshotPaymentJournals(Invoice $invoice): array
+    private function snapshotPaymentJournals(Invoice $invoice, ?array $context = null): array
     {
-        $context = $this->buildHistoricalTaxContext($invoice);
+        $context ??= $this->buildHistoricalTaxContext($invoice);
 
         if (! $context) {
             return [
