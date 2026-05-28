@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\Accounting\Estimate;
 use App\Models\User;
+use App\Support\MailCompanyBranding;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -26,8 +27,11 @@ class QuotationSubmissionNotification extends Mailable
 
     public function envelope(): Envelope
     {
+        $companyName = MailCompanyBranding::resolveCompanyName($this->estimate->company_id);
+
         return new Envelope(
-            subject: 'Ada pengajuan quotation baru',
+            from: MailCompanyBranding::companyFromAddress($companyName),
+            subject: MailCompanyBranding::prefixSubject('Ada pengajuan quotation baru', $companyName),
         );
     }
 

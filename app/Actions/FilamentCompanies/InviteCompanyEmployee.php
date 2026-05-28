@@ -2,6 +2,7 @@
 
 namespace App\Actions\FilamentCompanies;
 
+use App\Mail\CompanyEmployeeInvitationNotification;
 use App\Models\Company;
 use App\Models\User;
 use Closure;
@@ -14,7 +15,6 @@ use Illuminate\Validation\Rule;
 use Wallo\FilamentCompanies\Contracts\InvitesCompanyEmployees;
 use Wallo\FilamentCompanies\Events\InvitingCompanyEmployee;
 use Wallo\FilamentCompanies\FilamentCompanies;
-use Wallo\FilamentCompanies\Mail\CompanyInvitation;
 use Wallo\FilamentCompanies\Rules\Role;
 
 class InviteCompanyEmployee implements InvitesCompanyEmployees
@@ -37,7 +37,7 @@ class InviteCompanyEmployee implements InvitesCompanyEmployees
             'role' => $role,
         ]);
 
-        Mail::to($email)->send(new CompanyInvitation($invitation));
+        Mail::to($email)->send(new CompanyEmployeeInvitationNotification($invitation));
     }
 
     /**

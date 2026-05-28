@@ -64,7 +64,9 @@ test('bill submission email writes a send log', function () {
     (new SendBillSubmissionNotification($bill->id))->handle($recipientService);
 
     Mail::assertSent(BillSubmissionNotification::class, fn (BillSubmissionNotification $mail) => $mail->hasTo($user->email)
-        && $mail->bill->is($bill));
+        && $mail->bill->is($bill)
+        && str_contains($mail->envelope()->subject, '[' . $company->name . ']')
+        && ($mail->envelope()->from?->name === $company->name));
 
     assertNotificationEmailLog('SendBillSubmissionNotification: notification email sent.', [
         'notification_type' => 'submission',
@@ -96,7 +98,9 @@ test('bill approval email writes a send log', function () {
     (new SendBillApprovedNotification($bill->id))->handle();
 
     Mail::assertSent(BillApprovedNotification::class, fn (BillApprovedNotification $mail) => $mail->hasTo($user->email)
-        && $mail->bill->is($bill));
+        && $mail->bill->is($bill)
+        && str_contains($mail->envelope()->subject, '[' . $company->name . ']')
+        && ($mail->envelope()->from?->name === $company->name));
 
     assertNotificationEmailLog('SendBillApprovedNotification: notification email sent.', [
         'notification_type' => 'approved',
@@ -136,7 +140,9 @@ test('invoice submission email writes a send log', function () {
     (new SendInvoiceSubmissionNotification($invoice->id))->handle($recipientService);
 
     Mail::assertSent(InvoiceSubmissionNotification::class, fn (InvoiceSubmissionNotification $mail) => $mail->hasTo($user->email)
-        && $mail->invoice->is($invoice));
+        && $mail->invoice->is($invoice)
+        && str_contains($mail->envelope()->subject, '[' . $company->name . ']')
+        && ($mail->envelope()->from?->name === $company->name));
 
     assertNotificationEmailLog('SendInvoiceSubmissionNotification: notification email sent.', [
         'notification_type' => 'submission',
@@ -168,7 +174,9 @@ test('invoice approval email writes a send log', function () {
     (new SendInvoiceApprovedNotification($invoice->id))->handle();
 
     Mail::assertSent(InvoiceApprovedNotification::class, fn (InvoiceApprovedNotification $mail) => $mail->hasTo($user->email)
-        && $mail->invoice->is($invoice));
+        && $mail->invoice->is($invoice)
+        && str_contains($mail->envelope()->subject, '[' . $company->name . ']')
+        && ($mail->envelope()->from?->name === $company->name));
 
     assertNotificationEmailLog('SendInvoiceApprovedNotification: notification email sent.', [
         'notification_type' => 'approved',

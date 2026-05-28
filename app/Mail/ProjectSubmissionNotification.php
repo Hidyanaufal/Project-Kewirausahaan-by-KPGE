@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\Addons\Project;
 use App\Models\User;
+use App\Support\MailCompanyBranding;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -29,8 +30,14 @@ class ProjectSubmissionNotification extends Mailable
 
     public function envelope(): Envelope
     {
+        $companyName = MailCompanyBranding::resolveCompanyName($this->project->company_id);
+
         return new Envelope(
-            subject: 'Pengajuan project baru oleh ' . $this->requestor->name,
+            from: MailCompanyBranding::companyFromAddress($companyName),
+            subject: MailCompanyBranding::prefixSubject(
+                'Pengajuan project baru oleh ' . $this->requestor->name,
+                $companyName
+            ),
         );
     }
 
