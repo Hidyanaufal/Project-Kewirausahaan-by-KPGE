@@ -23,6 +23,13 @@ class GenerateYearlyForAsset
         ?int $targetYear = null,
         bool $force = false
     ): array {
+        // Pastikan selalu pakai data terbaru dari DB (terutama setelah edit acquisition_cost di UI),
+        // karena pemanggil bisa mengirim instance Asset yang stale.
+        $fresh = $asset->fresh(['group.assetAccount', 'group.contraAsset']);
+        if ($fresh instanceof Asset) {
+            $asset = $fresh;
+        }
+
         $now = Carbon::now();
         $currentYear = (int) $now->format('Y');
         $currentMonth = (int) $now->format('m');
@@ -151,6 +158,73 @@ class GenerateYearlyForAsset
 
                 // Jika ada record existing dan tidak force, coba extend untuk bulan yang belum ada.
                 if ($existing && !$force) {
+                    // Kalau opening book value tahun ini berubah (umumnya karena acquisition_cost berubah atau
+                    // ada koreksi di tahun sebelumnya), maka monthly breakdown yang sudah ada harus
+                    // dihitung ulang agar angka depresiasi & jurnal ikut menyesuaikan.
+                    $mustRecalculate = (float) ($existing->opening_fiscal_book_value ?? 0) !== (float) $yearOpening;
+
+                    // Defensive: jika data existing sudah tidak konsisten (mis. akibat perubahan acquisition_cost
+                    // di masa lalu tapi bulan-bulan tidak dihitung ulang), paksa hitung ulang.
+                    if (! $mustRecalculate) {
+                        $existingExpense = (float) ($existing->depreciation_expense ?? 0);
+                        $existingClosing = (float) ($existing->closing_fiscal_book_value ?? 0);
+
+                        if ($existingExpense > (float) $yearOpening) {
+                            $mustRecalculate = true;
+                        } elseif ($existingClosing > (float) $yearOpening) {
+                            $mustRecalculate = true;
+                        } elseif ($method === 'garis_lurus') {
+                            $existingMonthly = $normalizeExistingMonthly((array) $existing->monthly_breakdown);
+                            if (! empty($existingMonthly)) {
+                                $baseNow = max(0, $asset->acquisition_cost - $asset->salvage_value);
+                                $perMonthNow = $lifeMonths > 0 ? round((float) ($baseNow / $lifeMonths), 2) : 0.0;
+                                $firstExisting = (float) (reset($existingMonthly) ?: 0);
+
+                                if (round($firstExisting, 2) !== $perMonthNow) {
+                                    $mustRecalculate = true;
+                                }
+                            }
+                        }
+                    }
+
+                    if ($mustRecalculate) {
+                        $monthly = [];
+                        $book = $yearOpening;
+
+                        if ($method === 'garis_lurus') {
+                            $base = max(0, $asset->acquisition_cost - $asset->salvage_value);
+                            $perMonth = $lifeMonths > 0 ? ($base / $lifeMonths) : 0.0;
+
+                            for ($i = 0; $i < $monthsToRunTotal; $i++) {
+                                $m = $yearStartMonth + $i;
+                                if ($book > $asset->salvage_value) {
+                                    $charge = round($perMonth, 2);
+                                    $charge = min($charge, max(0, $book - $asset->salvage_value));
+                                    $monthly[$m] = $charge;
+                                    $book = round($book - $charge, 2);
+                                } else {
+                                    $monthly[$m] = 0.0;
+                                }
+                            }
+                        } else {
+                            $annualRate = (float) ($asset->group->declining_rate ?? 0.25);
+                            $monthlyRate = $annualRate / 12;
+
+                            for ($i = 0; $i < $monthsToRunTotal; $i++) {
+                                $m = $yearStartMonth + $i;
+                                if ($book > $asset->salvage_value) {
+                                    $charge = round($book * $monthlyRate, 2);
+                                    $charge = min($charge, max(0, $book - $asset->salvage_value));
+                                    $book = round($book - $charge, 2);
+                                    $monthly[$m] = $charge;
+                                } else {
+                                    $monthly[$m] = 0.0;
+                                }
+                            }
+                        }
+
+                        $didChange = true;
+                    } else {
                     $monthly = $normalizeExistingMonthly((array) $existing->monthly_breakdown);
 
                     // Trim jika existing punya bulan melebihi batas useful life untuk tahun ini.
@@ -238,6 +312,7 @@ class GenerateYearlyForAsset
 
                     $didChange = $monthly !== $existingNormalized
                         || (float) $existing->opening_fiscal_book_value !== (float) $yearOpening;
+                    }
                 } else {
                     // Hitung ulang penuh (force atau belum ada record).
                     $book = $yearOpening;
@@ -301,7 +376,7 @@ class GenerateYearlyForAsset
                 $created[] = $record;
                 if ($asset->group && $asset->group->contraAsset && $asset->group->assetAccount) {
                     if ($didChange || $force || $existing) {
-                        self::deleteMonthlyDepreciationJournals(assetId: $asset->id, fiscalYear: $year);
+                        self::deleteMonthlyDepreciationJournals(companyId: $asset->company_id, assetId: $asset->id, fiscalYear: $year);
                     }
 
                     self::createMonthlyDepreciationJournals(
@@ -321,13 +396,14 @@ class GenerateYearlyForAsset
         return compact('created', 'skipped');
     }
 
-    private static function deleteMonthlyDepreciationJournals(int $assetId, int $fiscalYear): void
+    private static function deleteMonthlyDepreciationJournals(int $companyId, int $assetId, int $fiscalYear): void
     {
         Transaction::query()
+            ->where('company_id', $companyId)
             ->where('type', 'journal')
             ->where("meta->" . self::META_ADDON_KEY, self::META_ADDON_VALUE)
-            ->where("meta->" . self::META_ASSET_ID_KEY, $assetId)
-            ->where("meta->" . self::META_FISCAL_YEAR_KEY, $fiscalYear)
+            ->whereIn("meta->" . self::META_ASSET_ID_KEY, [$assetId, (string) $assetId])
+            ->whereIn("meta->" . self::META_FISCAL_YEAR_KEY, [$fiscalYear, (string) $fiscalYear])
             ->with('journalEntries')
             ->get()
             ->each(function (Transaction $transaction) {
@@ -353,6 +429,23 @@ class GenerateYearlyForAsset
             if ($amountInCents <= 0) {
                 continue;
             }
+
+            // Defensive idempotency per bulan:
+            // Jika ada data historis/inkonsistensi yang menyebabkan jurnal bulan tertentu sudah ada,
+            // bersihkan dulu supaya tidak terjadi double.
+            Transaction::query()
+                ->where('type', 'journal')
+                ->where('company_id', $asset->company_id)
+                ->where("meta->" . self::META_ADDON_KEY, self::META_ADDON_VALUE)
+                ->whereIn("meta->" . self::META_ASSET_ID_KEY, [$asset->id, (string) $asset->id])
+                ->whereIn("meta->" . self::META_FISCAL_YEAR_KEY, [$fiscalYear, (string) $fiscalYear])
+                ->whereIn("meta->" . self::META_FISCAL_MONTH_KEY, [$calendarMonth, (string) $calendarMonth])
+                ->with('journalEntries')
+                ->get()
+                ->each(function (Transaction $transaction) {
+                    $transaction->journalEntries()->delete();
+                    $transaction->delete();
+                });
 
             $postedAt = Carbon::create($fiscalYear, $calendarMonth, 1)->endOfMonth();
 
