@@ -130,15 +130,27 @@ class DepreciationRecordResource extends Resource
                             ->required(),
                     ])
                     ->action(function (array $data) {
-                        $company = Company::find(AuthHelper::currentCompany());
+                        $companyId = AuthHelper::currentCompany();
+                        $company = Company::find($companyId);
 
                         $template = (string) ($data['template'] ?? 'summary');
 
-                        $records = \App\Models\Addons\DepreciationRecord::with('asset.group')
-                            ->where('company_id', $company->id)
-                            ->orderBy('fiscal_year', 'desc')
-                            ->orderBy('asset_id')
-                            ->get();
+                        $records = \App\Models\Addons\DepreciationRecord::query()
+                            ->with('asset.group')
+                            ->where('company_id', $companyId)
+                            ->orderByDesc('updated_at')
+                            ->orderByDesc('id')
+                            ->get()
+                            // Defensive: jika ada duplikasi historis per (asset_id, fiscal_year),
+                            // pastikan export selalu memakai record yang paling baru.
+                            ->unique(fn ($r) => ((string) $r->asset_id) . ':' . ((string) $r->fiscal_year))
+                            ->values()
+                            // Untuk output yang stabil (matching tampilan tabel)
+                            ->sortBy([
+                                ['fiscal_year', 'desc'],
+                                ['asset_id', 'asc'],
+                            ])
+                            ->values();
 
                         $now = now()->format('Y-m-d_H-i-s');
 
