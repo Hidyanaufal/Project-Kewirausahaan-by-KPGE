@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Addons\Project;
+use App\Support\MailCompanyBranding;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -27,8 +28,14 @@ class ProjectApprovedNotification extends Mailable
 
     public function envelope(): Envelope
     {
+        $companyName = MailCompanyBranding::resolveCompanyName($this->project->company_id);
+
         return new Envelope(
-            subject: 'Project disetujui – Nomor ' . $this->project->number,
+            from: MailCompanyBranding::companyFromAddress($companyName),
+            subject: MailCompanyBranding::prefixSubject(
+                'Project disetujui – Nomor ' . $this->project->number,
+                $companyName
+            ),
         );
     }
 

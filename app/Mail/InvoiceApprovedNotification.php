@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Accounting\Invoice;
+use App\Support\MailCompanyBranding;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -27,8 +28,14 @@ class InvoiceApprovedNotification extends Mailable
 
     public function envelope(): Envelope
     {
+        $companyName = MailCompanyBranding::resolveCompanyName($this->invoice->company_id);
+
         return new Envelope(
-            subject: 'Invoice disetujui – Nomor ' . ($this->invoice->invoice_number ?? 'Draft'),
+            from: MailCompanyBranding::companyFromAddress($companyName),
+            subject: MailCompanyBranding::prefixSubject(
+                'Invoice disetujui – Nomor ' . ($this->invoice->invoice_number ?? 'Draft'),
+                $companyName
+            ),
         );
     }
 
