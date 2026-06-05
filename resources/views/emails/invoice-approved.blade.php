@@ -14,9 +14,21 @@
 </head>
 <body>
     <h2>Invoice disetujui</h2>
-    <p>Pengajuan invoice Anda telah disetujui.</p>
+    <p>
+        @if($recipientName)
+            Halo {{ $recipientName }},
+        @else
+            Halo,
+        @endif
+    </p>
+    <p>Pengajuan invoice Anda telah disetujui pada tahap persetujuan final.</p>
     <div class="highlight">
-        <p style="margin: 0;"><strong>Nomor invoice:</strong> {{ $invoice->invoice_number ?? 'Draft' }}</p>
+        <p style="margin: 0;"><strong>Modul:</strong> Invoice</p>
+        <p style="margin: 8px 0 0 0;"><strong>Nomor invoice:</strong> {{ $invoice->invoice_number ?? 'Draft' }}</p>
+        <p style="margin: 8px 0 0 0;"><strong>Status:</strong> {{ $approvalStatus }}</p>
+        @if($approvalDate)
+            <p style="margin: 8px 0 0 0;"><strong>Tanggal disetujui:</strong> {{ $approvalDate->timezone(config('app.timezone'))->format('d M Y H:i') }}</p>
+        @endif
         @if($invoice->client)
             <p style="margin: 8px 0 0 0;"><strong>Client:</strong> {{ $invoice->client->name }}</p>
         @endif
@@ -26,5 +38,6 @@
         <a href="{{ $viewUrl }}" class="button">Lihat detail invoice</a>
     </p>
     <p class="muted" style="margin-top: 24px;">Jika tombol tidak berfungsi, salin tautan ini ke browser: {{ $viewUrl }}</p>
+    <p class="muted" style="margin-top: 24px;">Pesan ini dikirim otomatis oleh sistem. Mohon tidak membalas email ini.</p>
 </body>
 </html>

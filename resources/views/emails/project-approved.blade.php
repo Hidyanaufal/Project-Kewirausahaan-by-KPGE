@@ -14,15 +14,28 @@
 </head>
 <body>
     <h2>Project disetujui</h2>
+    <p>
+        @if($recipientName)
+            Halo {{ $recipientName }},
+        @else
+            Halo,
+        @endif
+    </p>
     <p>Pengajuan project Anda telah disetujui.</p>
     <div class="highlight">
-        <p style="margin: 0;"><strong>Nomor project:</strong> {{ $project->number }}</p>
+        <p style="margin: 0;"><strong>Modul:</strong> Project</p>
+        <p style="margin: 8px 0 0 0;"><strong>Nomor project:</strong> {{ $project->number }}</p>
         <p style="margin: 8px 0 0 0;"><strong>Nama project:</strong> {{ $project->name }}</p>
+        <p style="margin: 8px 0 0 0;"><strong>Status:</strong> {{ $approvalStatus }}</p>
+        @if($approvalDate)
+            <p style="margin: 8px 0 0 0;"><strong>Tanggal disetujui:</strong> {{ $approvalDate->timezone(config('app.timezone'))->format('d M Y H:i') }}</p>
+        @endif
     </div>
     <p class="muted">Anda dapat melihat detail project di aplikasi setelah login.</p>
     <p>
         <a href="{{ $viewUrl }}" class="button">Lihat detail project</a>
     </p>
     <p class="muted" style="margin-top: 24px;">Jika tombol tidak berfungsi, salin tautan ini ke browser: {{ $viewUrl }}</p>
+    <p class="muted" style="margin-top: 24px;">Pesan ini dikirim otomatis oleh sistem. Mohon tidak membalas email ini.</p>
 </body>
 </html>

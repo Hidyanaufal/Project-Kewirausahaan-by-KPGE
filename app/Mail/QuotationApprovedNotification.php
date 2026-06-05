@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Accounting\Estimate;
+use App\Models\User;
 use App\Support\MailCompanyBranding;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -15,7 +16,8 @@ class QuotationApprovedNotification extends Mailable
     use Queueable, SerializesModels;
 
     public function __construct(
-        public Estimate $estimate
+        public Estimate $estimate,
+        public ?User $recipient = null,
     ) {}
 
     /**
@@ -43,7 +45,12 @@ class QuotationApprovedNotification extends Mailable
     {
         return new Content(
             view: 'emails.quotation-approved',
-            with: ['viewUrl' => $this->viewUrl()],
+            with: [
+                'viewUrl' => $this->viewUrl(),
+                'recipientName' => $this->recipient?->name,
+                'approvalStatus' => 'Disetujui',
+                'approvalDate' => $this->estimate->approved_at,
+            ],
         );
     }
 

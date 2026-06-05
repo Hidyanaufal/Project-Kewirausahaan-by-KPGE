@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Mail;
+use Throwable;
 
 class SendInvoiceApprovedNotification implements ShouldQueue
 {
@@ -24,22 +25,49 @@ class SendInvoiceApprovedNotification implements ShouldQueue
     public function handle(): void
     {
         $invoice = Invoice::find($this->invoiceId);
-        if (! $invoice) {
+        if (! $invoice || ! $invoice->isFinalized()) {
             return;
         }
 
-        $requestor = null;
-        if ($invoice->created_by) {
-            $requestor = User::find($invoice->created_by);
-        } elseif ($invoice->updated_by) {
-            $requestor = User::find($invoice->updated_by);
-        }
+        $requestor = $this->resolveRequestor($invoice->created_by, $invoice->updated_by);
 
         if (! $requestor || ! $requestor->email) {
+            $this->logNotificationEmailSkipped(
+                notificationType: 'approved',
+                documentType: 'invoice',
+                documentId: $invoice->id,
+                reason: 'requestor_email_missing',
+                extraContext: [
+                    'document_number' => $invoice->invoice_number,
+                    'company_id' => $invoice->company_id,
+                    'project_id' => $invoice->project_id,
+                    'requestor_id' => $requestor?->id,
+                ],
+            );
+
             return;
         }
 
-        Mail::to($requestor->email)->send(new InvoiceApprovedNotification($invoice));
+        try {
+            Mail::to($requestor->email)->send(new InvoiceApprovedNotification($invoice, $requestor));
+        } catch (Throwable $exception) {
+            $this->logNotificationEmailFailed(
+                notificationType: 'approved',
+                documentType: 'invoice',
+                documentId: $invoice->id,
+                recipientEmail: $requestor->email,
+                errorMessage: $exception->getMessage(),
+                extraContext: [
+                    'document_number' => $invoice->invoice_number,
+                    'company_id' => $invoice->company_id,
+                    'project_id' => $invoice->project_id,
+                    'recipient_user_id' => $requestor->id,
+                    'requestor_id' => $requestor->id,
+                ],
+            );
+
+            throw $exception;
+        }
 
         $this->logNotificationEmailSent(
             notificationType: 'approved',
@@ -53,5 +81,18 @@ class SendInvoiceApprovedNotification implements ShouldQueue
             requestorId: $requestor->id,
             requestorEmail: $requestor->email,
         );
+    }
+
+    protected function resolveRequestor(?int $createdBy, ?int $updatedBy): ?User
+    {
+        if ($createdBy) {
+            return User::find($createdBy);
+        }
+
+        if ($updatedBy) {
+            return User::find($updatedBy);
+        }
+
+        return null;
     }
 }

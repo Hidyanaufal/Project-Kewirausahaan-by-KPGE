@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Accounting\Invoice;
+use App\Models\User;
 use App\Support\MailCompanyBranding;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -15,7 +16,8 @@ class InvoiceApprovedNotification extends Mailable
     use Queueable, SerializesModels;
 
     public function __construct(
-        public Invoice $invoice
+        public Invoice $invoice,
+        public ?User $recipient = null,
     ) {}
 
     /**
@@ -43,7 +45,12 @@ class InvoiceApprovedNotification extends Mailable
     {
         return new Content(
             view: 'emails.invoice-approved',
-            with: ['viewUrl' => $this->viewUrl()],
+            with: [
+                'viewUrl' => $this->viewUrl(),
+                'recipientName' => $this->recipient?->name,
+                'approvalStatus' => 'Disetujui (Final)',
+                'approvalDate' => $this->invoice->finalized_at,
+            ],
         );
     }
 
