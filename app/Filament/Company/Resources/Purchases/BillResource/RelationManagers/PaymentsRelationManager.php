@@ -40,6 +40,9 @@ class PaymentsRelationManager extends RelationManager
         return $form
             ->columns(1)
             ->schema([
+                Forms\Components\TextInput::make('transaction_code')
+                    ->label('Transaction code')
+                    ->default(fn () => Transaction::getNextDocumentNumber(TransactionType::Withdrawal)),
                 Forms\Components\DatePicker::make('posted_at')
                     ->label('Date'),
                 Forms\Components\Grid::make()
@@ -237,6 +240,7 @@ class PaymentsRelationManager extends RelationManager
                         $defaultPph23 = $record->defaultPph23FromInitialTransaction();
 
                         $form->fill([
+                            'transaction_code' => Transaction::getNextDocumentNumber(TransactionType::Withdrawal),
                             'posted_at' => company_today()->toDateString(),
                             'amount' => max($record->amount_due, 0),
                             'pph23' => $defaultPph23 ?: null,
