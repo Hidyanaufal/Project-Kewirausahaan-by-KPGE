@@ -10,6 +10,7 @@ use App\Services\ReportService;
 use App\Support\Column;
 use App\Transformers\AccountBalanceReportTransformer;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Support\Enums\Alignment;
 use Guava\FilamentClusters\Forms\Cluster;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -109,6 +110,40 @@ class AccountBalances extends BaseReportPage
 
     public function exportXLSX(): BinaryFileResponse
     {
-        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
+        try {
+            // Force include account_code for export-only account_number column.
+            $columns = $this->getToggledColumns();
+            $hasAccountCode = collect($columns)->contains(fn (Column $c) => $c->getName() === 'account_code');
+            if (! $hasAccountCode) {
+                $all = $this->getTable();
+                $accountCodeColumn = collect($all)->first(fn (Column $c) => $c->getName() === 'account_code');
+                if ($accountCodeColumn) {
+                    array_unshift($columns, $accountCodeColumn);
+                }
+            }
+
+            $exportReportDTO = $this->buildReport($columns);
+            $exportReport = $this->getTransformer($exportReportDTO);
+
+            return $this->exportService->exportToExcelEnhancedFromReport(
+                $this->company,
+                $exportReport,
+                $this->getFilterState('startDate'),
+                $this->getFilterState('endDate'),
+            );
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->danger()
+                ->title('Export XLSX dibatalkan (fallback)')
+                ->body($e->getMessage())
+                ->send();
+
+            return $this->exportService->exportToExcel(
+                $this->company,
+                $this->report,
+                $this->getFilterState('startDate'),
+                $this->getFilterState('endDate'),
+            );
+        }
     }
 }

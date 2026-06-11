@@ -138,13 +138,12 @@ class ReportService
 
     public function calculateAccountBalances(Account $account): array
     {
-        $category = $account->category;
         $balances = [
             'debit_balance' => $account->total_debit ?? 0,
             'credit_balance' => $account->total_credit ?? 0,
         ];
 
-        if ($category->isNormalDebitBalance()) {
+        if ($account->type->isNormalDebitBalance()) {
             $balances['net_movement'] = $balances['debit_balance'] - $balances['credit_balance'];
         } else {
             $balances['net_movement'] = $balances['credit_balance'] - $balances['debit_balance'];
@@ -168,12 +167,12 @@ class ReportService
 
         foreach ($revenueAccounts as $account) {
             $revenueBalances = $this->calculateAccountBalances($account);
-            $revenueTotal += $revenueBalances['net_movement'];
+            $revenueTotal += $revenueBalances['ending_balance'] ?? $revenueBalances['net_movement'];
         }
 
         foreach ($expenseAccounts as $account) {
             $expenseBalances = $this->calculateAccountBalances($account);
-            $expenseTotal += $expenseBalances['net_movement'];
+            $expenseTotal += $expenseBalances['ending_balance'] ?? $expenseBalances['net_movement'];
         }
 
         $retainedEarnings = $revenueTotal - $expenseTotal;
@@ -210,7 +209,7 @@ class ReportService
         $currentBalance = $account->starting_balance;
         foreach ($account->journalEntries as $journalEntry) {
             $signedAmount = $journalEntry->signed_amount;
-            if ($account->category->isNormalDebitBalance()) {
+            if ($account->type->isNormalDebitBalance()) {
                 $currentBalance += $signedAmount;
             } else {
                 $currentBalance -= $signedAmount;
@@ -299,7 +298,7 @@ class ReportService
             );
 
             foreach ($account->journalEntries as $journalEntry) {
-                $transaction = $journalEntry->transaction;
+                $transaction = $journalEntry->transaction()->withoutGlobalScopes()->first();
                 $signedAmount = $journalEntry->signed_amount;
                 $amount = $journalEntry->amount;
 
@@ -309,7 +308,7 @@ class ReportService
                     $periodCreditTotal += $amount;
                 }
 
-                if ($account->category->isNormalDebitBalance()) {
+                if ($account->type->isNormalDebitBalance()) {
                     $currentBalance += $signedAmount;
                 } else {
                     $currentBalance -= $signedAmount;
@@ -393,7 +392,7 @@ class ReportService
 
                 $endingBalance = $accountBalances['ending_balance'] ?? $accountBalances['net_movement'];
 
-                $trialBalance = $this->calculateTrialBalances($account->category, $endingBalance);
+                $trialBalance = $this->calculateTrialBalancesForAccount($account, $endingBalance);
 
                 foreach ($trialBalance as $balanceType => $balance) {
                     $categorySummaryBalances[$balanceType] += $balance;
@@ -463,7 +462,17 @@ class ReportService
 
     public function calculateTrialBalances(AccountCategory $category, int $endingBalance): array
     {
-        if ($category->isNormalDebitBalance()) {
+        return $this->calculateTrialBalancesByNormalDebit($category->isNormalDebitBalance(), $endingBalance);
+    }
+
+    public function calculateTrialBalancesForAccount(Account $account, int $endingBalance): array
+    {
+        return $this->calculateTrialBalancesByNormalDebit($account->type->isNormalDebitBalance(), $endingBalance);
+    }
+
+    private function calculateTrialBalancesByNormalDebit(bool $isNormalDebitBalance, int $endingBalance): array
+    {
+        if ($isNormalDebitBalance) {
             if ($endingBalance >= 0) {
                 return ['debit_balance' => $endingBalance, 'credit_balance' => 0];
             }
@@ -809,6 +818,10 @@ class ReportService
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
+        $excludedFromTotals = $companyId !== null
+            ? Account::balanceSheetExcludedAccountIdsForCompany((int) $companyId)->flip()
+            : collect();
+
         $accountCategories = [];
         $reportTotalBalances = [
             'assets' => 0,
@@ -822,14 +835,14 @@ class ReportService
             $categoryAccountsByType = [];
             $categoryAccounts = [];
             $subCategoryTotals = [];
+            $retainedEarningsAmount = 0;
+            $retainedEarningsDTO = null;
 
             /** @var Account $account */
             foreach ($accounts as $account) {
                 if ($account->type->getCategory() === $category) {
                     $accountBalances = $this->calculateAccountBalances($account);
                     $endingBalance = $accountBalances['ending_balance'] ?? $accountBalances['net_movement'];
-
-                    $categorySummaryBalances['ending_balance'] += $endingBalance;
 
                     $formattedAccountBalances = $this->formatBalances($accountBalances);
 
@@ -842,11 +855,11 @@ class ReportService
                         endDate: $asOfDateCarbon->toDateString(),
                     );
 
-                    if ($category === AccountCategory::Equity && $account->type === AccountType::Equity) {
-                        $categoryAccounts[] = $accountDTO;
-                    } else {
-                        $accountType = $account->type->getPluralLabel();
-                        $categoryAccountsByType[$accountType][] = $accountDTO;
+                    $accountType = $account->type->getPluralLabel();
+                    $categoryAccountsByType[$accountType][] = $accountDTO;
+
+                    if (! $excludedFromTotals->has($account->id)) {
+                        $categorySummaryBalances['ending_balance'] += $endingBalance;
                         $subCategoryTotals[$accountType] = ($subCategoryTotals[$accountType] ?? 0) + $endingBalance;
                     }
                 }
@@ -855,18 +868,21 @@ class ReportService
             if ($category === AccountCategory::Equity) {
                 $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), $projectId, $companyId)->getAmount();
 
-                $categorySummaryBalances['ending_balance'] += $retainedEarningsAmount;
+                $addComputedRetainedEarnings = $companyId === null
+                    || Account::shouldAddComputedRetainedEarningsToBalanceSheet((int) $companyId);
 
-                $retainedEarningsDTO = new AccountDTO(
-                    'Retained Earnings',
-                    'RE',
-                    null,
-                    $this->formatBalances(['ending_balance' => $retainedEarningsAmount]),
-                    startDate: $startDateCarbon->toDateString(),
-                    endDate: $asOfDateCarbon->toDateString(),
-                );
+                if ($addComputedRetainedEarnings) {
+                    $categorySummaryBalances['ending_balance'] += $retainedEarningsAmount;
 
-                $categoryAccounts[] = $retainedEarningsDTO;
+                    $retainedEarningsDTO = new AccountDTO(
+                        'Retained Earnings',
+                        'RE',
+                        null,
+                        $this->formatBalances(['ending_balance' => $retainedEarningsAmount]),
+                        startDate: $startDateCarbon->toDateString(),
+                        endDate: $asOfDateCarbon->toDateString(),
+                    );
+                }
             }
 
             $subCategories = [];
@@ -878,6 +894,13 @@ class ReportService
                 $subCategories[$accountType] = new AccountTypeDTO(
                     accounts: $accountsInType,
                     summary: $subCategorySummary
+                );
+            }
+
+            if ($category === AccountCategory::Equity && $retainedEarningsAmount != 0 && $retainedEarningsDTO !== null) {
+                $subCategories['Retained Earnings'] = new AccountTypeDTO(
+                    accounts: [$retainedEarningsDTO],
+                    summary: $this->formatBalances(['ending_balance' => $retainedEarningsAmount]),
                 );
             }
 
@@ -921,15 +944,16 @@ class ReportService
             ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)->with(['client:id,name'])->get()->groupBy('client_id')
             : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)->with(['vendor:id,name'])->get()->groupBy('vendor_id');
 
-        $categories = [];
-        $totalAging = [
-            'current' => 0,
-        ];
+        $totalAging = ['current' => 0];
         for ($i = 1; $i <= $numberOfPeriods; $i++) {
             $totalAging["period_{$i}"] = 0;
         }
         $totalAging['over_periods'] = 0;
         $totalAging['total'] = 0;
+
+        // Kumpulkan aging per nama entity — client dengan nama sama di-merge jadi satu baris
+        $agingByName = [];
+        $idByName    = [];
 
         /** @var DocumentCollection<int,Invoice|Bill> $entityDocuments */
         foreach ($documents as $entityId => $entityDocuments) {
@@ -957,20 +981,47 @@ class ReportService
 
             $aging['total'] = array_sum($aging);
 
+            $entity     = $entityDocuments->first()->{$entityType->value};
+            $entityName = $entity->name;
+
+
+            if (! isset($agingByName[$entityName])) {
+                // Pertama kali ketemu nama ini — simpan langsung
+                $agingByName[$entityName] = $aging;
+                $idByName[$entityName]    = $entityId;
+            } else {
+                // Nama sudah ada — jumlahkan setiap bucket (kecuali total)
+                foreach ($aging as $bucket => $amount) {
+                    if ($bucket !== 'total') {
+                        $agingByName[$entityName][$bucket] += $amount;
+                    }
+                }
+                // Hitung ulang total dari bucket yang sudah digabung
+                $tmp = $agingByName[$entityName];
+                unset($tmp['total']);
+                $agingByName[$entityName]['total'] = array_sum($tmp);
+            }
+        }
+
+        // Bangun categories & akumulasi grand total dari data yang sudah di-merge
+        $categories = [];
+
+        foreach ($agingByName as $entityName => $aging) {
             foreach ($aging as $bucket => $amount) {
                 $totalAging[$bucket] += $amount;
             }
 
-            $entity = $entityDocuments->first()->{$entityType->value};
-
             $categories[] = new EntityReportDTO(
-                name: $entity->name,
-                id: $entityId,
+                name: $entityName,
+                id: $idByName[$entityName],
                 aging: $this->formatBalances($aging, AgingBucketDTO::class, false),
             );
         }
 
-        $totalAging['total'] = array_sum($totalAging);
+        // Hitung ulang grand total agar tidak double-count dari field 'total' yang terakumulasi
+        $tmp = $totalAging;
+        unset($tmp['total']);
+        $totalAging['total'] = array_sum($tmp);
 
         return new ReportDTO(
             categories: ['Entities' => $categories],
@@ -1131,16 +1182,23 @@ class ReportService
 
         $documents = $entityType === DocumentEntityType::Client
             ? $this->accountService->getUnpaidClientInvoices($asOfDate, $companyId)
-                ->with(['client:id,name'])
+                ->with([
+                    'client:id,name',
+                    'project:id,name',
+                    'lineItems' => function ($query) {
+                        $query->orderBy('line_number')->with('offering:id,name');
+                    },
+                ])
                 ->get()
             : $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
-                ->with(['vendor:id,name'])
+                ->with(['vendor:id,name', 'project:id,name'])
                 ->get();
 
         $rows = [];
 
         foreach ($documents as $doc) {
             $entity = $entityType === DocumentEntityType::Client ? $doc->client : $doc->vendor;
+            $projectName = $doc->project?->name ?? null;
 
             $invoiceAmount = $doc->total ?? 0;
             $primeOwing = $doc->amount_due ?? 0;
@@ -1155,9 +1213,23 @@ class ReportService
                 $ageFromDue = $due->diffInDays($asOfDateCarbon, false);
             }
 
+            $itemNames = [];
+            if ($entityType === DocumentEntityType::Client) {
+                foreach ($doc->lineItems ?? [] as $lineItem) {
+                    $name = trim((string) ($lineItem->offering?->name ?? ''));
+                    if ($name === '') {
+                        $name = trim((string) ($lineItem->description ?? ''));
+                    }
+                    $itemNames[] = $name !== '' ? $name : '-';
+                }
+            }
+
             $rows[] = [
+                'invoice_id' => $doc->id,
                 'customer_name' => $entity->name ?? '-',
                 'invoice_number' => $doc->code ?? '-',
+                'project_name' => $projectName,
+                'item_names' => $itemNames,
                 'invoice_date' => $invoiceDate,
                 'due_date' => $dueDate,
                 'invoice_amount' => $invoiceAmount,
@@ -1171,6 +1243,8 @@ class ReportService
             'columns' => [
                 'Invoice',
                 'No. Invoice',
+                'Project',
+                'Items',
                 'Date',
                 'Due Date',
                 'Invoice Amount',
@@ -1191,17 +1265,18 @@ class ReportService
 
         // Ambil semua vendor bills yang belum dibayar hingga tanggal tertentu
         $bills = $this->accountService->getUnpaidVendorBills($asOfDate, $companyId)
-            ->with(['vendor:id,name'])
+            ->with(['vendor:id,name', 'project:id,name'])
             ->get();
 
         $rows = [];
 
         foreach ($bills as $bill) {
             $vendor = $bill->vendor;
+            $projectName = $bill->project?->name ?? null;
 
-            $billAmount = $bill->amount ?? 0;
-            $primeOwing = $bill->total ?? 0;
-            $taxOwing = $bill->tax_amount ?? 0;
+            $billAmount = $bill->total ?? 0;
+            $primeOwing = $bill->amount_due ?? 0;
+            $taxOwing = $bill->tax_total ?? 0;
 
             $dueDate = optional($bill->due_date)->format('d M Y');
             $billDate = optional($bill->date)->format('d M Y');
@@ -1215,6 +1290,7 @@ class ReportService
             $rows[] = [
                 'vendor_name' => $vendor->name ?? '-',
                 'bill_number' => $bill->code ?? '-',
+                'project_name' => $projectName,
                 'bill_date' => $billDate,
                 'due_date' => $dueDate,
                 'bill_amount' => $billAmount,
@@ -1228,6 +1304,7 @@ class ReportService
             'columns' => [
                 'Vendor',
                 'No. Bill',
+                'Project',
                 'Date',
                 'Due Date',
                 'Bill Amount',

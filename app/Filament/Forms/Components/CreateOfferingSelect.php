@@ -49,16 +49,13 @@ class CreateOfferingSelect extends Select
 
         $this->createOptionUsing(function (array $data, Form $form) {
             if ($this->isSellableAndPurchasable()) {
-                $attributes = array_flip($data['attributes'] ?? []);
-
-                $data['sellable'] = isset($attributes['Sellable']);
-                $data['purchasable'] = isset($attributes['Purchasable']);
+                $data = OfferingResource::applyAttributeChoices($data);
             } else {
                 $data['sellable'] = $this->isSellable;
                 $data['purchasable'] = $this->isPurchasable;
-            }
 
-            unset($data['attributes']);
+                unset($data['attributes']);
+            }
 
             $offering = Offering::create($data);
 
@@ -74,12 +71,12 @@ class CreateOfferingSelect extends Select
             OfferingResource::getGeneralSection($this->isSellableAndPurchasable()),
             OfferingResource::getSellableSection()->visible(
                 fn(Get $get) => $this->isSellableAndPurchasable()
-                    ? in_array('Sellable', $get('attributes') ?? [])
+                    ? OfferingResource::hasSellableAttribute($get('attributes'))
                     : $this->isSellable()
             ),
             OfferingResource::getPurchasableSection()->visible(
                 fn(Get $get) => $this->isSellableAndPurchasable()
-                    ? in_array('Purchasable', $get('attributes') ?? [])
+                    ? OfferingResource::hasPurchasableAttribute($get('attributes'))
                     : $this->isPurchasable()
             ),
         ]);

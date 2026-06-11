@@ -90,7 +90,16 @@ class RecordPayments extends ListRecords
 
         if ($invoiceId = (int) $this->invoiceId) {
             $invoice = Invoice::find($invoiceId);
-            if ($invoice && $invoice->client_id == $preservedClientId) {
+
+            if ($invoice) {
+                if (! $preservedClientId) {
+                    $this->tableFilters['client_id'] = ['value' => $invoice->client_id];
+                } elseif ($invoice->client_id != $preservedClientId) {
+                    $invoice = null;
+                }
+            }
+
+            if ($invoice) {
                 $this->paymentAmounts[$invoiceId] = $invoice->amount_due;
             }
         }
@@ -203,7 +212,7 @@ class RecordPayments extends ListRecords
             ->schema([
                 Forms\Components\TextInput::make('transaction_code')
                     ->default(fn() => Transaction::getNextDocumentNumber()),
-                Forms\Components\Grid::make(2) // Changed from 3 to 4
+                Forms\Components\Grid::make(3) // Changed from 3 to 4
                     ->schema([
                         Forms\Components\Select::make('bank_account_id')
                             ->label('Account')
@@ -224,26 +233,26 @@ class RecordPayments extends ListRecords
                             ->options(PaymentMethod::class)
                             ->default(PaymentMethod::BankPayment)
                             ->softRequired(),
-                        Forms\Components\TextInput::make('allocation_amount')
-                            ->label('Allocate Payment Amount')
-                            ->default(array_sum($this->paymentAmounts))
-                            ->money($this->getTableFilterState('currency_code')['value'])
-                            ->extraAlpineAttributes([
-                                'x-on:keydown.enter.prevent' => '$refs.allocate.click()',
-                            ])
-                            ->suffixAction(
-                                Forms\Components\Actions\Action::make('allocate')
-                                    ->icon('heroicon-m-calculator')
-                                    ->extraAttributes([
-                                        'x-ref' => 'allocate',
-                                    ])
-                                    ->action(function ($state) {
-                                        $this->allocationAmount = CurrencyConverter::convertToCents($state, 'USD');
-                                        if ($this->allocationAmount && $this->hasSelectedClient()) {
-                                            $this->allocateOldestFirst($this->getTableRecords(), $this->allocationAmount);
-                                        }
-                                    }),
-                            ),
+                        // Forms\Components\TextInput::make('allocation_amount')
+                        //     ->label('Allocate Payment Amount')
+                        //     ->default(array_sum($this->paymentAmounts))
+                        //     ->money($this->getTableFilterState('currency_code')['value'])
+                        //     ->extraAlpineAttributes([
+                        //         'x-on:keydown.enter.prevent' => '$refs.allocate.click()',
+                        //     ])
+                            // ->suffixAction(
+                            //     Forms\Components\Actions\Action::make('allocate')
+                            //         ->icon('heroicon-m-calculator')
+                            //         ->extraAttributes([
+                            //             'x-ref' => 'allocate',
+                            //         ])
+                            //         ->action(function ($state) {
+                            //             $this->allocationAmount = CurrencyConverter::convertToCents($state, 'USD');
+                            //             if ($this->allocationAmount && $this->hasSelectedClient()) {
+                            //                 $this->allocateOldestFirst($this->getTableRecords(), $this->allocationAmount);
+                            //             }
+                            //         }),
+                            // ),
                     ]),
             ])->statePath('data');
     }
@@ -259,22 +268,29 @@ class RecordPayments extends ListRecords
             ->recordClasses(['is-spreadsheet'])
             ->defaultSort('due_date')
             ->paginated(false)
-            ->emptyStateHeading('No client selected')
-            ->emptyStateDescription('Select a client from the filters above to view and process invoice payments.')
+            ->emptyStateHeading(fn () => $this->hasTableSearch()
+                ? 'No invoices found'
+                : 'No client selected')
+            ->emptyStateDescription(fn () => $this->hasTableSearch()
+                ? 'Try adjusting your search or filters.'
+                : 'Select a client from the filters, or search by invoice number or client name to find unpaid invoices.')
             ->columns([
                 TextColumn::make('client.name')
                     ->label('Client')
-                    ->sortable(),
+                    ->sortable()
+                    ->searchable(),
                 TextColumn::make('invoice_number')
                     ->label('Invoice number')
-                    ->sortable(),
+                    ->sortable()
+                    ->searchable(),
                 TextColumn::make('due_date')
                     ->label('Due date')
                     ->defaultDateFormat()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
-                    ->sortable(),
+                    ->sortable()
+                    ->searchable(),
                 TextColumn::make('amount_due')
                     ->label('Amount due')
                     ->currency(static fn(Invoice $record) => $record->currency_code)
@@ -422,56 +438,20 @@ class RecordPayments extends ListRecords
                     }),
                 Tables\Filters\SelectFilter::make('client_id')
                     ->label('Client')
-                    ->selectablePlaceholder(false)
+                    ->placeholder('All clients')
                     ->options(fn() => Client::query()->pluck('name', 'id')->toArray())
                     ->searchable()
                     ->query(function (EloquentBuilder $query, array $data) {
-                        if (blank($data['value'] ?? null)) {
-                            return $query->whereRaw('1 = 0'); // No results if no client is selected
+                        if (filled($data['value'] ?? null)) {
+                            return $query->where('client_id', $data['value']);
                         }
 
-                        return $query->where('client_id', $data['value']);
+                        if ($this->hasTableSearch()) {
+                            return $query;
+                        }
+
+                        return $query->whereRaw('1 = 0');
                     }),
-                Tables\Filters\Filter::make('invoice_lookup')
-                    ->label('Find Invoice')
-                    ->form([
-                        Forms\Components\TextInput::make('invoice_number')
-                            ->label('Invoice Number')
-                            ->placeholder('Enter invoice number')
-                            ->suffixAction(
-                                Forms\Components\Actions\Action::make('findInvoice')
-                                    ->icon('heroicon-m-magnifying-glass')
-                                    ->keyBindings(['enter'])
-                                    ->action(function ($state, Forms\Set $set) {
-                                        if (blank($state)) {
-                                            return;
-                                        }
-
-                                        $invoice = Invoice::byNumber($state)
-                                            ->unpaid()
-                                            ->first();
-
-                                        if ($invoice) {
-                                            $set('tableFilters.client_id.value', $invoice->client_id, true);
-                                            $this->paymentAmounts[$invoice->id] = $invoice->amount_due;
-
-                                            Notification::make()
-                                                ->title('Invoice found')
-                                                ->body("Found invoice {$invoice->invoice_number} for {$invoice->client->name}")
-                                                ->success()
-                                                ->send();
-                                        } else {
-                                            Notification::make()
-                                                ->title('Invoice not found')
-                                                ->body("No unpaid invoice found with number: {$state}")
-                                                ->warning()
-                                                ->send();
-                                        }
-                                    })
-                            ),
-                    ])
-                    ->query(null)
-                    ->indicateUsing(null),
                 Tables\Filters\SelectFilter::make('status')
                     ->multiple()
                     ->options(InvoiceStatus::getUnpaidOptions()),
@@ -520,10 +500,32 @@ class RecordPayments extends ListRecords
         $this->allocationAmount = null;
     }
 
+    public function updatedTableSearch(): void
+    {
+        if ($this->getTable()->persistsSearchInSession()) {
+            session()->put(
+                $this->getTableSearchSessionKey(),
+                $this->tableSearch,
+            );
+        }
+
+        if ($this->getTable()->shouldDeselectAllRecordsWhenFiltered()) {
+            $this->deselectAllTableRecords();
+        }
+
+        $this->resetPage();
+        $this->prunePaymentAmountsToVisibleRecords();
+    }
+
     protected function handleTableFilterUpdates(): void
     {
         parent::handleTableFilterUpdates();
 
+        $this->prunePaymentAmountsToVisibleRecords();
+    }
+
+    protected function prunePaymentAmountsToVisibleRecords(): void
+    {
         $visibleInvoiceIds = $this->getTableRecords()->pluck('id')->toArray();
         $visibleInvoiceKeys = array_flip($visibleInvoiceIds);
 

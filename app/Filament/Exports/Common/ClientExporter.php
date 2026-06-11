@@ -2,12 +2,12 @@
 
 namespace App\Filament\Exports\Common;
 
+use App\Filament\Exports\BaseExporter;
 use App\Models\Common\Client;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
 
-class ClientExporter extends Exporter
+class ClientExporter extends BaseExporter
 {
     protected static ?string $model = Client::class;
 
@@ -25,20 +25,20 @@ class ClientExporter extends Exporter
             ExportColumn::make('currency_code'),
             ExportColumn::make('balance') // TODO: Potentially find an easier way to calculate this
                 ->state(function (Client $record) {
-                    return $record->invoices()
+                    $amount = $record->invoices()
                         ->unpaid()
                         ->get()
                         ->sumMoneyInDefaultCurrency('amount_due');
+                    return self::excelMoney($amount);
                 })
-                ->money(),
             ExportColumn::make('overdue_amount')
                 ->state(function (Client $record) {
-                    return $record->invoices()
+                    $amount = $record->invoices()
                         ->overdue()
                         ->get()
                         ->sumMoneyInDefaultCurrency('amount_due');
+                    return self::excelMoney($amount);
                 })
-                ->money(),
             ExportColumn::make('billingAddress.address_string')
                 ->label('Billing address')
                 ->enabledByDefault(false),

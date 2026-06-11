@@ -13,8 +13,7 @@ use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
-
-use function PHPSTORM_META\type;
+use Illuminate\Support\Str;
 
 class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedReport
 {
@@ -73,12 +72,12 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
             return $this->__buildReportDetail();
         }
         if ($template == 'outstanding') {
-            return $this->__buildReportOutstanding();
+            return $this->__buildReportOutstanding($format);
         }
         return $this->__buildReportDefault();
     }
 
-    public function __buildReportOutstanding(): array
+    public function __buildReportOutstanding(string $format = 'pdf'): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $asOfDate = $this->report->getStartDate();
@@ -90,11 +89,16 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
             $this->company->id
         );
 
-        $columns = array_filter($data['columns'], fn($col) => strtolower($col) !== 'invoice');
+        $columns = array_filter($data['columns'], fn ($col) => strtolower($col) !== 'invoice');
         $columns = array_values($columns);
 
         $rows = collect();
         $grouped = collect($data['rows'])->groupBy('customer_name');
+        $grand = [
+            'invoice_amount' => 0,
+            'prime_owing' => 0,
+            'tax_owing' => 0,
+        ];
 
         foreach ($grouped as $customerName => $invoices) {
             $headerRow = array_fill(0, count($columns), null);
@@ -114,8 +118,21 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
             ];
 
             foreach ($invoices as $inv) {
-                $rowData = [
-                    $inv['invoice_number'],
+                $project = $inv['project_name'] ?? '';
+                if ($format === 'pdf') {
+                    $project = $project ? preg_replace("/\s+/", ' ', trim((string) $project)) : '';
+                    $project = $project ? Str::words($project, 4, '…') : '';
+                }
+
+                $itemNames = $inv['item_names'] ?? [];
+                $invoiceNumber = $format === 'pdf'
+                    ? '__str' . ($inv['invoice_number'] ?? '-')
+                    : ($inv['invoice_number'] ?? '-');
+
+                $baseRowData = [
+                    $invoiceNumber,
+                    $project,
+                    null,
                     $inv['invoice_date'],
                     $inv['due_date'],
                     number_format($inv['invoice_amount'] / 100, 2, ',', '.'),
@@ -127,13 +144,49 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                 $subtotal['invoice_amount'] += $inv['invoice_amount'];
                 $subtotal['prime_owing'] += $inv['prime_owing'];
                 $subtotal['tax_owing'] += $inv['tax_owing'];
+                $grand['invoice_amount'] += $inv['invoice_amount'];
+                $grand['prime_owing'] += $inv['prime_owing'];
+                $grand['tax_owing'] += $inv['tax_owing'];
 
-                $rows->push([
-                    'data' => $rowData,
-                ]);
+                if ($format === 'xlsx' && count($itemNames) > 1) {
+                    $mergeKey = 'inv_' . ($inv['invoice_id'] ?? $inv['invoice_number']);
+                    $firstItem = array_shift($itemNames);
+                    $firstRow = $baseRowData;
+                    $firstRow[2] = $firstItem;
+
+                    $rows->push([
+                        'data' => $firstRow,
+                        'excel_merge' => true,
+                        'excel_merge_key' => $mergeKey,
+                    ]);
+
+                    foreach ($itemNames as $itemName) {
+                        $continuationRow = array_fill(0, count($columns), null);
+                        $continuationRow[2] = $itemName;
+                        $rows->push([
+                            'data' => $continuationRow,
+                            'excel_merge' => true,
+                            'excel_merge_key' => $mergeKey,
+                        ]);
+                    }
+                } else {
+                    $singleRow = $baseRowData;
+                    $singleRow[2] = $format === 'pdf'
+                        ? $this->formatOutstandingItemsForPdf($itemNames)
+                        : $this->formatOutstandingItemsForExcel($itemNames);
+
+                    $rowPayload = ['data' => $singleRow];
+                    if ($format === 'pdf') {
+                        $rowPayload['cell_styles'] = $this->outstandingInvoicePdfCellStyles();
+                    }
+
+                    $rows->push($rowPayload);
+                }
             }
 
             $subtotalRow = [
+                'Total ' . $customerName,
+                '',
                 '',
                 '',
                 '',
@@ -152,13 +205,119 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
             ]);
         }
 
-        return [
+        $grandRow = [
+            'Total',
+            '',
+            '',
+            '',
+            '',
+            number_format($grand['invoice_amount'] / 100, 2, ',', '.'),
+            number_format($grand['prime_owing'] / 100, 2, ',', '.'),
+            number_format($grand['tax_owing'] / 100, 2, ',', '.'),
+            '',
+        ];
+        $rows->push([
+            'data' => $grandRow,
+            'style' => [
+                'font-weight' => 'bold',
+                'color' => 'rgb(6, 6, 174)',
+            ],
+        ]);
+
+        $reportData = [
             'filename' => "{$company->name} Outstanding Invoice {$now}.pdf",
             'company_name' => $company->name,
             'report_title' => 'Outstanding Invoice',
-            'report_period' => "As of " . Carbon::parse($asOfDate)->format('d M Y'),
+            'report_period' => 'As of ' . Carbon::parse($asOfDate)->format('d M Y'),
             'columns' => $columns,
             'rows' => $rows->toArray(),
+            'numeric_columns' => ['F', 'G', 'H'],
+            'excel_merge_columns' => ['A', 'B', 'D', 'E', 'F', 'G', 'H', 'I'],
+            'excel_wrap_columns' => ['B', 'C'],
+        ];
+
+        if ($format === 'pdf') {
+            $reportData['pdf_table'] = [
+                'layout' => 'fixed',
+                'width' => '100%',
+                'orientation' => 'landscape',
+                'column_widths' => ['10%', '12%', '20%', '8%', '8%', '10%', '10%', '10%', '12%'],
+            ];
+        }
+
+        return $reportData;
+    }
+
+    /**
+     * @param  array<int, string>  $itemNames
+     */
+    private function formatOutstandingItemsForPdf(array $itemNames): string
+    {
+        if ($itemNames === []) {
+            return '-';
+        }
+
+        $displayed = array_slice($itemNames, 0, 4);
+        $truncated = array_map(
+            fn (string $name) => Str::limit($name, 12, '…'),
+            $displayed
+        );
+
+        $remaining = count($itemNames) - count($displayed);
+        if ($remaining > 0) {
+            $truncated[] = "(+{$remaining} lainnya)";
+        }
+
+        return Str::limit(implode(', ', $truncated), 55, '…');
+    }
+
+    /**
+     * @param  array<int, string>  $itemNames
+     */
+    private function formatOutstandingItemsForExcel(array $itemNames): string
+    {
+        if ($itemNames === []) {
+            return '-';
+        }
+
+        return implode("\n", $itemNames);
+    }
+
+    /**
+     * @return array<int, array<string, string>>
+     */
+    private function outstandingInvoicePdfCellStyles(): array
+    {
+        return [
+            0 => [
+                'word-break' => 'break-all',
+                'font-size' => '8px',
+            ],
+            1 => [
+                'word-wrap' => 'break-word',
+            ],
+            2 => [
+                'word-wrap' => 'break-word',
+                'font-size' => '8px',
+                'line-height' => '1.2',
+            ],
+            5 => [
+                'white-space' => 'nowrap',
+                'text-align' => 'right',
+            ],
+            6 => [
+                'white-space' => 'nowrap',
+                'text-align' => 'right',
+            ],
+            7 => [
+                'white-space' => 'nowrap',
+                'text-align' => 'right',
+            ],
+            8 => [
+                'white-space' => 'nowrap',
+                'text-align' => 'center',
+                'font-size' => '8px',
+            ],
         ];
     }
 
@@ -182,6 +341,7 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
         $columns = $dataDetail['columns'];
         $rows = collect();
         $grouped = collect($dataDetail['rows'])->groupBy('customer_name');
+        $grand = ['total_prime' => 0];
 
         foreach ($grouped as $customerName => $invoices) {
             $companyHeader = array_fill(0, count($columns), null);
@@ -201,6 +361,7 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
             $agingKeys = array_keys($invoices->first()['aging']);
             foreach ($agingKeys as $key) {
                 $subtotal[$key] = 0;
+                $grand[$key] = $grand[$key] ?? 0;
             }
 
             foreach ($invoices as $r) {
@@ -218,6 +379,10 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                 foreach ($r['aging'] as $key => $value) {
                     $subtotal[$key] += $value;
                 }
+                $grand['total_prime'] += $r['total_prime'];
+                foreach ($r['aging'] as $key => $value) {
+                    $grand[$key] += $value;
+                }
 
                 $rows->push([
                     'data' => $rowData,
@@ -225,7 +390,7 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
             }
 
             $subtotalRow = [
-                "",
+                'Total ' . $customerName,
                 "",
                 number_format($subtotal['total_prime'] / 100, 2, ',', '.'),
             ];
@@ -240,6 +405,24 @@ class AccountsReceivableAging extends BaseAgingReportPage implements EnhancedRep
                     'font-weight' => 'bold',
                     'color' => 'rgb(6, 6, 174)'
                 ],
+            ]);
+        }
+
+        // Grand total at the end (matches UI total across all customers).
+        if (! empty($grand)) {
+            // Do NOT sort — PHP preserves insertion order for associative arrays.
+            // Sorting alphabetically would scramble the aging period columns
+            // (e.g. over_periods would end up before period_1, period_2, etc.).
+            $agingKeys = array_keys(array_filter($grand, fn ($k) => $k !== 'total_prime', ARRAY_FILTER_USE_KEY));
+
+            $grandRow = ['Total', '', number_format(($grand['total_prime'] ?? 0) / 100, 2, ',', '.')];
+            foreach ($agingKeys as $key) {
+                $grandRow[] = number_format(($grand[$key] ?? 0) / 100, 2, ',', '.');
+            }
+
+            $rows->push([
+                'data' => $grandRow,
+                'style' => ['font-weight' => 'bold', 'color' => 'rgb(6, 6, 174)'],
             ]);
         }
 

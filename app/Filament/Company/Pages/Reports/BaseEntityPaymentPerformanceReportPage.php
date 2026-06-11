@@ -12,6 +12,7 @@ use App\Services\ReportService;
 use App\Support\Column;
 use App\Transformers\EntityPaymentPerformanceReportTransformer;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Support\Enums\Alignment;
 use Guava\FilamentClusters\Forms\Cluster;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -126,6 +127,26 @@ abstract class BaseEntityPaymentPerformanceReportPage extends BaseReportPage
 
     public function exportXLSX(): BinaryFileResponse
     {
-        return $this->exportService->exportToExcel($this->company, $this->report, $this->getFilterState('startDate'), $this->getFilterState('endDate'));
+        try {
+            return $this->exportService->exportToExcelEnhancedFromReport(
+                $this->company,
+                $this->report,
+                $this->getFilterState('startDate'),
+                $this->getFilterState('endDate'),
+            );
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->danger()
+                ->title('Export XLSX dibatalkan (fallback)')
+                ->body($e->getMessage())
+                ->send();
+
+            return $this->exportService->exportToExcel(
+                $this->company,
+                $this->report,
+                $this->getFilterState('startDate'),
+                $this->getFilterState('endDate'),
+            );
+        }
     }
 }

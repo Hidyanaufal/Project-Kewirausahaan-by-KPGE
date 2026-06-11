@@ -50,6 +50,7 @@ class Project extends Model
         'start_date' => 'date',
         'end_date' => 'date',
         'status' => ProjectStatus::class,
+        'is_imported' => 'boolean',
     ];
 
     public function getActivitylogOptions(): LogOptions

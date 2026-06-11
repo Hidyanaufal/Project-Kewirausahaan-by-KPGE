@@ -2,16 +2,28 @@
 
 namespace App\Filament\Exports\Accounting;
 
+use App\Filament\Exports\BaseExporter;
 use App\Models\Accounting\JournalEntry;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
-use App\Utilities\Currency\CurrencyAccessor;
-use App\Utilities\Currency\CurrencyConverter;
+use Illuminate\Database\Eloquent\Builder;
 
-class JournalEntryExporter extends Exporter
+class JournalEntryExporter extends BaseExporter
 {
     protected static ?string $model = JournalEntry::class;
+
+    public static function modifyQuery(Builder $query): Builder
+    {
+        $query = parent::modifyQuery($query);
+
+        return $query->where(function (Builder $q): void {
+            $q->whereNull('journal_entries.description')
+                ->orWhere(function (Builder $q2): void {
+                    $q2->where('journal_entries.description', '!=', 'Auto Import')
+                        ->where('journal_entries.description', 'not like', 'Saldo Awal FY-%');
+                });
+        });
+    }
 
     public static function getColumns(): array
     {
@@ -28,16 +40,12 @@ class JournalEntryExporter extends Exporter
             ExportColumn::make('debit')
                 ->label('Debit')
                 ->state(static function (JournalEntry $record): ?string {
-                    return $record->type->value === 'debit'
-                        ? CurrencyConverter::convertCentsToFormatSimple($record->amount, CurrencyAccessor::getDefaultCurrency())
-                        : null;
+                    return $record->type->value === 'debit' ? ($record->amount / 100) : null;
                 }),
             ExportColumn::make('credit')
                 ->label('Credit')
                 ->state(static function (JournalEntry $record): ?string {
-                    return $record->type->value === 'credit'
-                        ? CurrencyConverter::convertCentsToFormatSimple($record->amount, CurrencyAccessor::getDefaultCurrency())
-                        : null;
+                    return $record->type->value === 'credit' ? ($record->amount / 100) : null;
                 }),
             ExportColumn::make('transaction.transactionable.invoice_number')
                 ->label('Invoice Number')
@@ -72,4 +80,3 @@ class JournalEntryExporter extends Exporter
         return $body;
     }
 }
-

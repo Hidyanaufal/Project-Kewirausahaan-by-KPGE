@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\LogsNotificationEmail;
 use App\Mail\InvoiceSubmissionNotification;
 use App\Models\Accounting\Invoice;
 use App\Models\User;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\Mail;
 
 class SendInvoiceSubmissionNotification implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, LogsNotificationEmail, Queueable, SerializesModels;
 
     public function __construct(
         public int $invoiceId
@@ -35,11 +36,31 @@ class SendInvoiceSubmissionNotification implements ShouldQueue
             $requestor = User::find($invoice->updated_by);
         }
 
-        $admins = $recipientService->getAdminUsersFor($invoice->company_id);
+        $recipientResolution = $recipientService->getAdminRecipientResolutionFor($invoice->company_id);
+        $admins = $recipientResolution['users'];
+        $recipientSource = $recipientResolution['source'];
+        $recipientSourceCompanyId = $recipientResolution['resolved_company_id'];
 
         foreach ($admins as $admin) {
             if ($admin->email) {
                 Mail::to($admin->email)->send(new InvoiceSubmissionNotification($invoice, $requestor));
+
+                $this->logNotificationEmailSent(
+                    notificationType: 'submission',
+                    documentType: 'invoice',
+                    documentId: $invoice->id,
+                    documentNumber: $invoice->invoice_number,
+                    companyId: $invoice->company_id,
+                    projectId: $invoice->project_id,
+                    recipientUserId: $admin->id,
+                    recipientEmail: $admin->email,
+                    requestorId: $requestor?->id,
+                    requestorEmail: $requestor?->email,
+                    extraContext: [
+                        'recipient_source' => $recipientSource,
+                        'recipient_source_company_id' => $recipientSourceCompanyId,
+                    ],
+                );
             }
         }
     }

@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 #[ObservedBy(AccountObserver::class)]
@@ -144,6 +145,94 @@ class Account extends Model
         return $this->type->isUncategorized();
     }
 
+    /**
+     * Whether this account is a parent/header in the chart of accounts (has child accounts).
+     * Parent balances must not be aggregated alongside children to avoid double-counting in reports.
+     */
+    public function isParentAccount(): bool
+    {
+        if ($this->relationLoaded('children')) {
+            if ($this->children->isNotEmpty()) {
+                return true;
+            }
+        } elseif ($this->children()->exists()) {
+            return true;
+        }
+
+        $code = trim((string) $this->code);
+
+        if ($code === '') {
+            return false;
+        }
+
+        return static::query()
+            ->where('company_id', $this->company_id)
+            ->whereKeyNot($this->getKey())
+            ->where(function (Builder $query) use ($code) {
+                $query->where('code', 'like', $code . '.%')
+                    ->orWhere('code', 'like', $code . '-%');
+
+                if (ctype_digit($code) && strlen($code) >= 3) {
+                    $query->orWhere(function (Builder $nested) use ($code) {
+                        $nested->where('code', 'like', $code . '%')
+                            ->whereRaw('LENGTH(code) > ?', [strlen($code)]);
+                    });
+                }
+            })
+            ->exists();
+    }
+
+    /**
+     * Account IDs that should be excluded from balance-sheet category totals (parent/header accounts).
+     *
+     * @return Collection<int, int>
+     */
+    public static function parentAccountIdsForCompany(int $companyId): Collection
+    {
+        return static::query()
+            ->where('company_id', $companyId)
+            ->get(['id', 'code', 'company_id'])
+            ->filter(static fn (self $account): bool => $account->isParentAccount())
+            ->pluck('id');
+    }
+
+    /**
+     * Account IDs excluded from balance sheet totals: parent/header accounts and system clearing accounts
+     * (e.g. Open Balance Equity) whose balances are already reflected in other balance sheet lines.
+     *
+     * @return Collection<int, int>
+     */
+    public static function balanceSheetExcludedAccountIdsForCompany(int $companyId): Collection
+    {
+        $excluded = static::parentAccountIdsForCompany($companyId);
+
+        $clearingAccountIds = AccountDefault::query()
+            ->where('company_id', $companyId)
+            ->whereIn('key', [
+                AccountDefaultKey::OpenBalance,
+            ])
+            ->pluck('account_id');
+
+        return $excluded->merge($clearingAccountIds)->unique()->values();
+    }
+
+    /**
+     * Whether computed retained earnings (Revenue − Expense) should be added to balance sheet equity totals.
+     * When a dedicated retained earnings GL account exists, cumulative P&L is already reflected there and
+     * adding the computed figure would double-count.
+     */
+    public static function shouldAddComputedRetainedEarningsToBalanceSheet(int $companyId): bool
+    {
+        return ! static::query()
+            ->where('company_id', $companyId)
+            ->where('category', AccountCategory::Equity)
+            ->where(function (Builder $query): void {
+                $query->where('code', 'like', '3200%')
+                    ->orWhereRaw('LOWER(name) LIKE ?', ['%retained earn%']);
+            })
+            ->exists();
+    }
+
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class, 'account_id');
@@ -248,6 +337,29 @@ class Account extends Model
     public static function getAccountsWapu(?int $companyId = null): self
     {
         return self::findAccountByNameOrFail(AccountDefaultKey::PPnWapu, $companyId);
+    }
+
+    public static function getAccountsWapuIfConfigured(?int $companyId = null): ?self
+    {
+        if (! $companyId) {
+            return null;
+        }
+
+        $accountDefault = AccountDefault::query()
+            ->withoutGlobalScope(CurrentCompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('key', AccountDefaultKey::PPnWapu->value)
+            ->first();
+
+        if (! $accountDefault) {
+            return null;
+        }
+
+        return self::query()
+            ->withoutGlobalScope(CurrentCompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('id', $accountDefault->account_id)
+            ->first();
     }
 
     public static function getAccountsProfit(?int $companyId = null): self

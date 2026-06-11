@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Accounting\Bill;
+use App\Support\MailCompanyBranding;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -27,8 +28,14 @@ class BillApprovedNotification extends Mailable
 
     public function envelope(): Envelope
     {
+        $companyName = MailCompanyBranding::resolveCompanyName($this->bill->company_id);
+
         return new Envelope(
-            subject: 'Bill disetujui – Nomor ' . ($this->bill->bill_number ?? 'Draft'),
+            from: MailCompanyBranding::companyFromAddress($companyName),
+            subject: MailCompanyBranding::prefixSubject(
+                'Bill disetujui – Nomor ' . ($this->bill->bill_number ?? 'Draft'),
+                $companyName
+            ),
         );
     }
 

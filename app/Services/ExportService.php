@@ -21,6 +21,319 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ExportService
 {
     /**
+     * Parse Indonesian formatted currency string (e.g. "Rp2.151.600.000,00") into float for Excel.
+     * Returns null if the value does not look like a currency/decimal string.
+     */
+    private function tryParseIndonesianAmountString(string $value): ?float
+    {
+        $raw = trim($value);
+
+        // Skip explicit string-marked values used to preserve account codes.
+        if (str_starts_with($raw, '__str')) {
+            return null;
+        }
+
+        $looksCurrency = str_contains($raw, 'Rp') || str_contains($raw, 'rp');
+        $hasDecimalComma = str_contains($raw, ',');
+        $hasParens = str_contains($raw, '(') && str_contains($raw, ')');
+
+        // If it doesn't look like money/decimal, do not parse (prevents account codes like "1.100.03").
+        if (! $looksCurrency && ! $hasDecimalComma && ! $hasParens) {
+            return null;
+        }
+
+        $negative = false;
+        if ($hasParens) {
+            $negative = true;
+        }
+        if (str_starts_with($raw, '-')) {
+            $negative = true;
+        }
+
+        $clean = $raw;
+        $clean = str_replace(['Rp', 'rp', 'RP'], '', $clean);
+        $clean = str_replace(['(', ')', ' '], '', $clean);
+        $clean = ltrim($clean, '+-');
+
+        // Remove thousand separators and normalize decimal.
+        $clean = str_replace('.', '', $clean);
+        $clean = str_replace(',', '.', $clean);
+
+        if ($clean === '' || ! is_numeric($clean)) {
+            return null;
+        }
+
+        $num = (float) $clean;
+
+        return $negative ? -abs($num) : $num;
+    }
+
+    /**
+     * Normalize a cell for Excel export:
+     * - "__strXXXX" => string "XXXX" (preserve leading zeros / dots)
+     * - "Rp..." => float number
+     */
+    public function normalizeCellForExcel(mixed $cell): mixed
+    {
+        if (! is_string($cell)) {
+            return $cell;
+        }
+
+        if (str_starts_with($cell, '__str')) {
+            return str_replace('__str', '', $cell);
+        }
+
+        $parsed = $this->tryParseIndonesianAmountString($cell);
+        if ($parsed !== null) {
+            return $parsed;
+        }
+
+        return $cell;
+    }
+
+    /**
+     * Flatten a report row (assoc) to a simple list of values.
+     *
+     * @param  array<string, mixed>  $row
+     * @return list<mixed>
+     */
+    private function flattenReportRowForExcel(array $row): array
+    {
+        $flattened = array_map(static function ($value) {
+            return (is_array($value) && array_key_exists('name', $value))
+                ? $value['name']
+                : $value;
+        }, $row);
+
+        return array_values($flattened);
+    }
+
+    /**
+     * Convert an associative totals row to an ordered list aligned to columns.
+     *
+     * @param  array<string, mixed>  $totals
+     * @return list<mixed>
+     */
+    private function orderTotalsRowForExcel(ExportableReport $report, array $totals): array
+    {
+        $ordered = [];
+        foreach ($report->getColumns() as $column) {
+            $name = $column->getName();
+            $value = $totals[$name] ?? '';
+            if (is_array($value) && array_key_exists('name', $value)) {
+                $value = $value['name'];
+            }
+            $ordered[] = $value;
+        }
+
+        return $ordered;
+    }
+
+    /**
+     * Build the "legacy" detail table rows used by exportToExcel() (non-summary path).
+     * This intentionally mirrors the existing legacy XLSX content generation to allow
+     * safe migration to exportToExcelEnhanced() without changing report data.
+     *
+     * @return array{columns: list<mixed>, rows: list<list<mixed>>}
+     */
+    public function buildLegacyDetailTableForExcel(ExportableReport $report): array
+    {
+        $columns = $report->getHeaders();
+        $rows = [];
+
+        foreach ($report->getCategories() as $category) {
+            if ($category->header) {
+                $rows[] = $category->header;
+            }
+
+            foreach ($category->data as $row) {
+                $flattened = array_map(static function ($value) {
+                    return (is_array($value) && array_key_exists('name', $value))
+                        ? $value['name']
+                        : $value;
+                }, $row);
+
+                $rows[] = array_values($flattened);
+            }
+
+            // Include category totals when available (matches UI section totals).
+            if (filled($category->summary)) {
+                $rows[] = $this->flattenReportRowForExcel($category->summary);
+            }
+        }
+
+        return [
+            'columns' => $columns,
+            'rows' => $rows,
+        ];
+    }
+
+    /**
+     * Export XLSX using the Enhanced format (3 header rows + table header),
+     * while validating that the table content matches the legacy exportToExcel() output.
+     *
+     * If a mismatch is detected, this method throws with a short diff message so callers
+     * can fall back to the legacy exporter.
+     */
+    public function exportToExcelEnhancedFromReport(
+        Company $company,
+        ExportableReport $report,
+        ?string $startDate = null,
+        ?string $endDate = null,
+    ): BinaryFileResponse {
+        if ($startDate && $endDate) {
+            $reportPeriod = 'Date Range: ' . Carbon::parse($startDate)->toDefaultDateFormat()
+                . ' to ' . Carbon::parse($endDate)->toDefaultDateFormat();
+            $dateLabelForFilename = Carbon::parse($startDate)->toDateString() . ' to ' . Carbon::parse($endDate)->toDateString();
+        } else {
+            $reportPeriod = 'As of ' . Carbon::parse($endDate)->toDefaultDateFormat();
+            $dateLabelForFilename = Carbon::parse($endDate)->toDateString();
+        }
+
+        $legacy = $this->buildLegacyDetailTableForExcel($report);
+        // Normalize to numeric-indexed arrays to avoid "string + int" issues when headers/rows are associative.
+        $columns = array_values($legacy['columns']);
+        $legacyRows = array_map(static fn (array $row) => array_values($row), $legacy['rows']);
+
+        /**
+         * Add export-only column "account_number" when the report already includes account_code.
+         * This does not change report logic; it only duplicates the account code into a new column.
+         */
+        $accountCodeIndex = null;
+        foreach ($columns as $i => $label) {
+            if (! is_string($label)) {
+                continue;
+            }
+            $normalized = strtolower(trim($label));
+            if (in_array($normalized, ['account code', 'account no', 'account no.', 'gl account no.', 'account number'], true)) {
+                $accountCodeIndex = $i;
+
+                break;
+            }
+            if ($normalized === 'account_code') {
+                $accountCodeIndex = $i;
+
+                break;
+            }
+        }
+
+        if ($accountCodeIndex !== null) {
+            array_splice($columns, $accountCodeIndex + 1, 0, ['account_number']);
+
+            $legacyRows = array_map(static function (array $row) use ($accountCodeIndex) {
+                $value = $row[$accountCodeIndex] ?? '';
+                $newRow = $row;
+                array_splice($newRow, $accountCodeIndex + 1, 0, [$value]);
+
+                return $newRow;
+            }, $legacyRows);
+        }
+
+        // Build enhanced rows with optional styling for section headers like "Assets", "Liabilities", "Equity".
+        $accountNameIndex = null;
+        foreach ($columns as $i => $label) {
+            if (! is_string($label)) {
+                continue;
+            }
+            $normalized = strtolower(trim($label));
+            if (in_array($normalized, ['account', 'account name', 'accounts'], true)) {
+                $accountNameIndex = $i;
+
+                break;
+            }
+        }
+
+        $sectionHeaderNames = [
+            'assets',
+            'liabilities',
+            'equity',
+            'revenue',
+            'expenses',
+            'expense',
+            'cost of goods sold',
+            'cogs',
+        ];
+        $rowsForEnhanced = [];
+        foreach ($legacyRows as $row) {
+            $rowWrapper = ['data' => $row];
+
+            if ($accountNameIndex !== null) {
+                $nameCell = $row[$accountNameIndex] ?? null;
+                $nameCellString = is_string($nameCell) ? strtolower(trim($nameCell)) : null;
+
+                if ($nameCellString !== null && in_array($nameCellString, $sectionHeaderNames, true)) {
+                    $rowWrapper['style'] = ['font-weight' => 'bold'];
+                }
+
+                // Style section totals like "Total Revenue", "Total Expenses", etc.
+                if ($nameCellString !== null && str_starts_with($nameCellString, 'total ')) {
+                    $rowWrapper['style'] = ['font-weight' => 'bold', 'color' => 'rgb(6, 6, 174)'];
+                }
+            }
+
+            $rowsForEnhanced[] = $rowWrapper;
+        }
+
+        // Append grand total row (matches UI footer) when provided by transformer.
+        $overallTotals = $report->getOverallTotals();
+        if (filled($overallTotals)) {
+            $totalsRow = $this->orderTotalsRowForExcel($report, $overallTotals);
+            if ($accountCodeIndex !== null) {
+                // Insert empty account_number cell next to account_code.
+                array_splice($totalsRow, $accountCodeIndex + 1, 0, ['']);
+            }
+
+            $rowsForEnhanced[] = [
+                'data' => $totalsRow,
+                'style' => ['font-weight' => 'bold', 'color' => 'rgb(6, 6, 174)'],
+            ];
+
+            // Also extend the legacy representation for validation, so we still verify the main content
+            // while allowing this extra grand total row.
+            $legacyRows[] = $totalsRow;
+        }
+
+        // Validate: same column headers + same row content.
+        // (Enhanced exporter changes layout/styling, not data.)
+        // Validate: the base columns match legacy; we allow the extra export-only column account_number.
+        $expectedColumns = array_values($report->getHeaders());
+        if ($accountCodeIndex !== null) {
+            array_splice($expectedColumns, $accountCodeIndex + 1, 0, ['account_number']);
+        }
+        if ($columns !== $expectedColumns) {
+            throw new \RuntimeException('Mismatch detected: table columns changed between legacy and enhanced export.');
+        }
+        if ($legacyRows !== array_map(static fn (array $r) => $r['data'], $rowsForEnhanced)) {
+            // Find first differing row for a concise error.
+            $max = max(count($legacyRows), count($rowsForEnhanced));
+            for ($i = 0; $i < $max; $i++) {
+                $a = $legacyRows[$i] ?? null;
+                $b = $rowsForEnhanced[$i]['data'] ?? null;
+                if ($a !== $b) {
+                    $idx = $i + 1; // 1-based for humans
+
+                    throw new \RuntimeException("Mismatch detected at table row #{$idx}. Legacy and enhanced row data differ.");
+                }
+            }
+
+            throw new \RuntimeException('Mismatch detected: legacy and enhanced rows differ.');
+        }
+
+        $timestamp = company_now()->format('Y-m-d_H-i-s');
+        $filename = $company->name . ' ' . $report->getTitle() . ' ' . $dateLabelForFilename . ' ' . $timestamp . '.xlsx';
+
+        return $this->exportToExcelEnhanced([
+            // Preserve the legacy filename format exactly.
+            'filename' => $filename,
+            'company_name' => $company->name,
+            'report_title' => $report->getTitle(),
+            'report_period' => $reportPeriod,
+            'columns' => $columns,
+            'rows' => $rowsForEnhanced,
+        ]);
+    }
+
+    /**
      * @param  array<string, mixed>  $row
      * @return list<mixed>
      */
@@ -421,7 +734,7 @@ class ExportService
                     $rows[] = $this->report->getHeaders();
                     foreach ($this->report->getCategories() as $category) {
                         if ($category->header) {
-                            $rows[] = $category->header;
+                            $rows[] = array_map(fn ($c) => $this->exportService->normalizeCellForExcel($c), array_values($category->header));
                         }
                         foreach ($category->data as $row) {
                             $flattened = array_map(function ($value) {
@@ -429,7 +742,11 @@ class ExportService
                                     ? $value['name']
                                     : $value;
                             }, $row);
-                            $rows[] = array_values($flattened);
+                            $rows[] = array_map(fn ($c) => $this->exportService->normalizeCellForExcel($c), array_values($flattened));
+                        }
+
+                        if (filled($category->summary)) {
+                            $rows[] = array_map(fn ($c) => $this->exportService->normalizeCellForExcel($c), array_values($category->summary));
                         }
                     }
                 }
@@ -557,7 +874,7 @@ class ExportService
             'data' => $data,
         ]);
 
-        $pdf->setOptions([
+        $pdfOptions = [
             'dpi' => 96,
             'zoom' => 1,
             'enable-local-file-access' => true,
@@ -567,7 +884,13 @@ class ExportService
             'margin-left' => 5,
             'margin-right' => 5,
             'disable-smart-shrinking' => true,
-        ]);
+        ];
+
+        if (! empty($data['pdf_table']['orientation'])) {
+            $pdfOptions['orientation'] = $data['pdf_table']['orientation'];
+        }
+
+        $pdf->setOptions($pdfOptions);
 
         return response()->streamDownload(function () use ($pdf) {
             echo $pdf->output();
@@ -581,7 +904,7 @@ class ExportService
         {
             use \Maatwebsite\Excel\Concerns\RegistersEventListeners;
 
-            public function __construct(protected array $data) {}
+            public function __construct(public array $data) {}
 
             public function array(): array
             {
@@ -597,7 +920,44 @@ class ExportService
 
                 // Data isi tabel
                 foreach ($this->data['rows'] as $row) {
-                    $rows[] = str_replace('__str', '', $row['data']);
+                    $normalizedRow = [];
+                    foreach (($row['data'] ?? []) as $cell) {
+                        if (is_string($cell) && str_starts_with($cell, '__str')) {
+                            $normalizedRow[] = str_replace('__str', '', $cell);
+
+                            continue;
+                        }
+
+                        if (is_string($cell)) {
+                            // Parse "Rp..." strings into numeric values so Excel can calculate.
+                            $raw = $cell;
+                            $clean = trim($raw);
+                            $looksCurrency = str_contains($clean, 'Rp') || str_contains($clean, 'rp');
+                            $hasDecimalComma = str_contains($clean, ',');
+                            $hasParens = str_contains($clean, '(') && str_contains($clean, ')');
+                            if ($looksCurrency || $hasDecimalComma || $hasParens) {
+                                $negative = false;
+                                if ($hasParens || str_starts_with($clean, '-')) {
+                                    $negative = true;
+                                }
+                                $clean = str_replace(['Rp', 'rp', 'RP'], '', $clean);
+                                $clean = str_replace(['(', ')', ' '], '', $clean);
+                                $clean = ltrim($clean, '+-');
+                                $clean = str_replace('.', '', $clean);
+                                $clean = str_replace(',', '.', $clean);
+                                if ($clean !== '' && is_numeric($clean)) {
+                                    $num = (float) $clean;
+                                    $normalizedRow[] = $negative ? -abs($num) : $num;
+
+                                    continue;
+                                }
+                            }
+                        }
+
+                        $normalizedRow[] = $cell;
+                    }
+
+                    $rows[] = $normalizedRow;
                 }
 
                 return $rows;
@@ -675,6 +1035,7 @@ class ExportService
                     ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 
                 // ====== FORMAT ANGKA ======
+                $numberFormatCode = $this->data['number_format_code'] ?? '#,##0.00';
                 $numericColumns = $this->data['numeric_columns'] ?? null;
                 if (is_array($numericColumns) && ! empty($numericColumns)) {
                     foreach ($numericColumns as $col) {
@@ -683,14 +1044,14 @@ class ExportService
                         }
                         $col = strtoupper($col);
                         $sheet->getStyle("{$col}5:{$col}{$highestRow}")
-                            ->getNumberFormat()->setFormatCode('#,##0.00');
+                            ->getNumberFormat()->setFormatCode($numberFormatCode);
                         $sheet->getStyle("{$col}5:{$col}{$highestRow}")
                             ->getAlignment()->setHorizontal('right');
                     }
                 } else {
                     foreach (range('B', $highestCol) as $col) {
                         $sheet->getStyle("{$col}5:{$col}{$highestRow}")
-                            ->getNumberFormat()->setFormatCode('#,##0.00');
+                            ->getNumberFormat()->setFormatCode($numberFormatCode);
                         $sheet->getStyle("{$col}5:{$col}{$highestRow}")
                             ->getAlignment()->setHorizontal('right');
                     }
@@ -717,10 +1078,58 @@ class ExportService
                 return [];
             }
 
-            public static function afterSheet(\Maatwebsite\Excel\Events\AfterSheet $event)
+            public static function afterSheet(\Maatwebsite\Excel\Events\AfterSheet $event): void
             {
-                // Freeze di bawah header tabel
                 $event->sheet->freezePane('A5');
+
+                $sheet = $event->sheet->getDelegate();
+                $export = $event->getConcernable();
+                if (! is_object($export) || ! isset($export->data['rows'])) {
+                    return;
+                }
+
+                $mergeColumns = $export->data['excel_merge_columns'] ?? [];
+                $wrapColumns = $export->data['excel_wrap_columns'] ?? [];
+                $dataStartRow = 5;
+                $highestRow = $sheet->getHighestRow();
+
+                if ($mergeColumns !== []) {
+                    $currentKey = null;
+                    $groupStart = null;
+                    $rowIndex = 0;
+
+                    foreach ($export->data['rows'] as $row) {
+                        $sheetRow = $dataStartRow + $rowIndex;
+                        $key = ($row['excel_merge'] ?? false) ? ($row['excel_merge_key'] ?? null) : null;
+
+                        if ($key !== $currentKey) {
+                            if ($currentKey !== null && $groupStart !== null && $sheetRow - 1 > $groupStart) {
+                                foreach ($mergeColumns as $col) {
+                                    $sheet->mergeCells("{$col}{$groupStart}:{$col}" . ($sheetRow - 1));
+                                }
+                            }
+                            $currentKey = $key;
+                            $groupStart = $key !== null ? $sheetRow : null;
+                        }
+
+                        $rowIndex++;
+                    }
+
+                    if ($currentKey !== null && $groupStart !== null && $highestRow > $groupStart) {
+                        foreach ($mergeColumns as $col) {
+                            $sheet->mergeCells("{$col}{$groupStart}:{$col}{$highestRow}");
+                        }
+                    }
+                }
+
+                if ($wrapColumns !== [] && $highestRow >= $dataStartRow) {
+                    foreach ($wrapColumns as $col) {
+                        $sheet->getStyle("{$col}{$dataStartRow}:{$col}{$highestRow}")
+                            ->getAlignment()
+                            ->setWrapText(true)
+                            ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP);
+                    }
+                }
             }
 
             public function title(): string

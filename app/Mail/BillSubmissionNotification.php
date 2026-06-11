@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\Accounting\Bill;
 use App\Models\User;
+use App\Support\MailCompanyBranding;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -26,8 +27,11 @@ class BillSubmissionNotification extends Mailable
 
     public function envelope(): Envelope
     {
+        $companyName = MailCompanyBranding::resolveCompanyName($this->bill->company_id);
+
         return new Envelope(
-            subject: 'Ada pengajuan bill baru',
+            from: MailCompanyBranding::companyFromAddress($companyName),
+            subject: MailCompanyBranding::prefixSubject('Ada pengajuan bill baru', $companyName),
         );
     }
 

@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Enums\Accounting\AccountCategory;
+use App\Enums\Accounting\AccountType;
+use App\Enums\Accounting\InvoiceStatus;
 use App\Helpers\AuthHelper;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\Bill;
@@ -55,8 +57,8 @@ class AccountService
     {
         $query = $this->getAccountBalances($startDate, $endDate, [$account->id], $projectId, $companyId)->first();
 
-        $netMovement = $this->calculateNetMovementByCategory(
-            $account->category,
+        $netMovement = $this->calculateNetMovementByAccountType(
+            $account->type,
             $query->total_debit ?? 0,
             $query->total_credit ?? 0
         );
@@ -87,8 +89,8 @@ class AccountService
     {
         $query = $this->getAccountBalances($startDate, $endDate, [$account->id], $projectId, $companyId)->first();
 
-        $netMovement = $this->calculateNetMovementByCategory(
-            $account->category,
+        $netMovement = $this->calculateNetMovementByAccountType(
+            $account->type,
             $query->total_debit ?? 0,
             $query->total_credit ?? 0
         );
@@ -111,6 +113,13 @@ class AccountService
         }
     }
 
+    public function calculateNetMovementByAccountType(AccountType $type, int $debitBalance, int $creditBalance): int
+    {
+        return $type->isNormalDebitBalance()
+            ? $debitBalance - $creditBalance
+            : $creditBalance - $debitBalance;
+    }
+
     /**
      * @param  int|null  $projectId
      * @param  int|null  $companyId
@@ -121,8 +130,8 @@ class AccountService
 
         $needStartingBalances = $account->category->isReal();
 
-        $netMovement = $this->calculateNetMovementByCategory(
-            $account->category,
+        $netMovement = $this->calculateNetMovementByAccountType(
+            $account->type,
             $query->total_debit ?? 0,
             $query->total_credit ?? 0
         );
@@ -281,6 +290,8 @@ class AccountService
     ): Builder {
         $accountIds = array_map('intval', $accountIds);
 
+        $debitNormalTypeSqlList = implode("','", AccountType::debitNormalBalanceTypeValues());
+
         $query = Account::query()
             ->select([
                 'accounts.id',
@@ -295,7 +306,7 @@ class AccountService
                 DB::raw("
                 COALESCE(
                     CASE
-                        WHEN accounts.category IN ('asset', 'expense') THEN
+                        WHEN accounts.type IN ('{$debitNormalTypeSqlList}') THEN
                             SUM(CASE WHEN journal_entries.type = 'debit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END) -
                             SUM(CASE WHEN journal_entries.type = 'credit' AND transactions.posted_at < ? THEN journal_entries.amount ELSE 0 END)
                         ELSE
@@ -365,12 +376,27 @@ class AccountService
         if ($projectId !== null || $companyId !== null || $projectTypeId !== null) {
             $this->joinInvoicesBillsProjectsForMultichannelScope($query);
 
+            // Exclude invoice journals when invoice is cancelled (keep data for audit, exclude from reports).
+            $query->where(function (Builder $q) {
+                $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                    ->orWhereNull('invoices.id')
+                    ->orWhere('invoices.status', '!=', InvoiceStatus::Cancelled->value);
+            });
+
             $this->applyMultichannelScopeAfterDocumentJoins(
                 $query,
                 $projectId !== null && $projectId !== '' ? (int) $projectId : null,
                 $companyId !== null && $companyId !== '' ? (int) $companyId : null,
                 $projectTypeId !== null && $projectTypeId !== '' ? (int) $projectTypeId : null,
             );
+        } else {
+            // Still exclude cancelled invoices even when no multichannel filters are applied.
+            $this->joinInvoicesBillsProjectsForMultichannelScope($query);
+            $query->where(function (Builder $q) {
+                $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                    ->orWhereNull('invoices.id')
+                    ->orWhere('invoices.status', '!=', InvoiceStatus::Cancelled->value);
+            });
         }
 
         $query->addBinding([$startDate, $startDate, $startDate, $startDate, $startDate, $endDate, $startDate, $endDate], 'select');
@@ -442,15 +468,21 @@ class AccountService
                 $endDate,
             ]);
 
-        if ($projectId !== null || $companyId !== null) {
-            $query->leftJoin('invoices', function ($join) {
-                $join->on('invoices.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Invoice::class);
-            })->leftJoin('bills', function ($join) {
-                $join->on('bills.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Bill::class);
-            });
+        $query->leftJoin('invoices', function ($join) {
+            $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                ->where('transactions.transactionable_type', '=', Invoice::class);
+        })->leftJoin('bills', function ($join) {
+            $join->on('bills.id', '=', 'transactions.transactionable_id')
+                ->where('transactions.transactionable_type', '=', Bill::class);
+        });
 
+        $query->where(function ($q) {
+            $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                ->orWhereNull('invoices.id')
+                ->orWhere('invoices.status', '!=', InvoiceStatus::Cancelled->value);
+        });
+
+        if ($projectId !== null || $companyId !== null) {
             if ($projectId !== null) {
                 $query->where(function ($q) use ($projectId) {
                     $q->where('invoices.project_id', $projectId)
@@ -508,15 +540,21 @@ class AccountService
                 $startDate,
             ]);
 
-        if ($projectId !== null || $companyId !== null) {
-            $query->leftJoin('invoices', function ($join) {
-                $join->on('invoices.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Invoice::class);
-            })->leftJoin('bills', function ($join) {
-                $join->on('bills.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Bill::class);
-            });
+        $query->leftJoin('invoices', function ($join) {
+            $join->on('invoices.id', '=', 'transactions.transactionable_id')
+                ->where('transactions.transactionable_type', '=', Invoice::class);
+        })->leftJoin('bills', function ($join) {
+            $join->on('bills.id', '=', 'transactions.transactionable_id')
+                ->where('transactions.transactionable_type', '=', Bill::class);
+        });
 
+        $query->where(function ($q) {
+            $q->where('transactions.transactionable_type', '!=', Invoice::class)
+                ->orWhereNull('invoices.id')
+                ->orWhere('invoices.status', '!=', InvoiceStatus::Cancelled->value);
+        });
+
+        if ($projectId !== null || $companyId !== null) {
             if ($projectId !== null) {
                 $query->where(function ($q) use ($projectId) {
                     $q->where('invoices.project_id', $projectId)
@@ -589,6 +627,7 @@ class AccountService
             ->select([
                 'invoices.id',
                 'invoices.client_id',
+                'invoices.project_id',
                 'invoices.invoice_number as code',
                 'invoices.date',
                 'invoices.due_date',
@@ -636,8 +675,12 @@ class AccountService
                 'bills.id',
                 'bills.bill_number as code',
                 'bills.vendor_id',
+                'bills.project_id',
                 'bills.date',
                 'bills.due_date',
+                // 'bills.amount',
+                'bills.total',
+                // 'bills.tax_amount',
                 'bills.amount_due',
                 'bills.currency_code',
                 DB::raw("{$datediff} as days_overdue"),

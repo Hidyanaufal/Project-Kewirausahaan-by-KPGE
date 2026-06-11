@@ -34,6 +34,7 @@ class FixServiceInvoices extends Command
             ->where('offerings.type', 'service')
             ->select(
                 'invoices.id',
+                'invoices.status',
                 'invoices.subtotal',
                 'invoices.profit_total',
                 'invoices.discount_total',
@@ -65,7 +66,8 @@ class FixServiceInvoices extends Command
             $newPph23 = (int) round($base * 0.02);
 
             // Cek apakah WAPU (total > 1 Miliar)
-            $isWapu = true; // Asumsi semua invoice service termasuk WAPU, karena sudah tidak draft dan punya line item service
+            // Rule: jika subtotal < 10 juta => WAPU, jika >= 10 juta => non-WAPU
+            $isWapu = (int) $invoice->subtotal < 10000000000;
             
             $newActualTotal = $isWapu
                 ? $base - $newPph23
@@ -75,21 +77,30 @@ class FixServiceInvoices extends Command
             $newAmountDue = $newActualTotal - ($invoice->amount_paid ?? 0);
 
             if ($isDryRun) {
+                $newStatus = $newAmountDue < 0
+                    ? 'overpaid'
+                    : ($newAmountDue == 0 ? 'paid' : 'partial');
+
                 // Tampilkan preview perubahan tanpa update database
                 $this->line("Invoice ID <comment>{$invoice->id}</comment>");
                 $this->line("  pph23        : {$invoice->pph23} → <comment>{$newPph23}</comment>");
                 $this->line("  actual_total : {$invoice->actual_total} → <comment>{$newActualTotal}</comment>");
                 $this->line("  amount_due   : " . ($invoice->actual_total - $invoice->amount_paid) . " → <comment>{$newAmountDue}</comment>");
                 $this->line(" amount_paid   : {$invoice->amount_paid} (tidak berubah)");
+                $this->line("  status       : {$invoice->status} → <comment>{$newStatus}</comment>");
                 $this->newLine();
             } else {
+                $newStatus = $newAmountDue < 0
+                    ? 'overpaid'
+                    : ($newAmountDue == 0 ? 'paid' : 'partial');
+
                 // Update invoice ke database
                 DB::table('invoices')
                     ->where('id', $invoice->id)
                     ->update([
                         'pph23'        => $newPph23,
                         'actual_total' => $newActualTotal,
-                        'status'       => $newAmountDue <= 0 ? 'paid' : 'partial', // update status jika sudah lunas
+                        'status'       => $newStatus, // update status jika sudah lunas/overpaid
                     ]);
 
                 $this->line("✓ Invoice ID {$invoice->id} berhasil diupdate.");

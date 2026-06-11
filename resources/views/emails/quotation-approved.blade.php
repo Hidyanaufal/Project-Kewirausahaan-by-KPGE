@@ -14,9 +14,21 @@
 </head>
 <body>
     <h2>Quotation disetujui</h2>
+    <p>
+        @if($recipientName)
+            Halo {{ $recipientName }},
+        @else
+            Halo,
+        @endif
+    </p>
     <p>Pengajuan quotation (penawaran) Anda telah disetujui.</p>
     <div class="highlight">
-        <p style="margin: 0;"><strong>Nomor quotation:</strong> {{ $estimate->estimate_number ?? 'Draft' }}</p>
+        <p style="margin: 0;"><strong>Modul:</strong> Quotation</p>
+        <p style="margin: 8px 0 0 0;"><strong>Nomor quotation:</strong> {{ $estimate->estimate_number ?? 'Draft' }}</p>
+        <p style="margin: 8px 0 0 0;"><strong>Status:</strong> {{ $approvalStatus }}</p>
+        @if($approvalDate)
+            <p style="margin: 8px 0 0 0;"><strong>Tanggal disetujui:</strong> {{ $approvalDate->timezone(config('app.timezone'))->format('d M Y H:i') }}</p>
+        @endif
         @if($estimate->client)
             <p style="margin: 8px 0 0 0;"><strong>Client:</strong> {{ $estimate->client->name }}</p>
         @endif
@@ -26,5 +38,6 @@
         <a href="{{ $viewUrl }}" class="button">Lihat detail quotation</a>
     </p>
     <p class="muted" style="margin-top: 24px;">Jika tombol tidak berfungsi, salin tautan ini ke browser: {{ $viewUrl }}</p>
+    <p class="muted" style="margin-top: 24px;">Pesan ini dikirim otomatis oleh sistem. Mohon tidak membalas email ini.</p>
 </body>
 </html>

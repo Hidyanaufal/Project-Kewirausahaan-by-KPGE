@@ -43,6 +43,7 @@ use Guava\FilamentClusters\Forms\Cluster;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class BillResource extends Resource
 {
@@ -463,9 +464,13 @@ class BillResource extends Resource
                             })
                             ->mountUsing(function (Bill $record, Form $form) {
                                 $record = $record->fresh();
+                                $defaultPph23 = $record->defaultPph23FromInitialTransaction();
+
                                 $form->fill([
                                     'posted_at' => company_today()->toDateString(),
-                                    'amount' => $record->amount_due,
+                                    'amount' => max($record->amount_due, 0),
+                                    'pph23' => $defaultPph23 ?: null,
+                                    'payment_method' => PaymentMethod::BankPayment,
                                 ]);
                             })
                             ->databaseTransaction()
@@ -530,7 +535,11 @@ class BillResource extends Resource
                                                     }
                                                 },
                                             ]),
-                                    ])->columns(2),
+                                        Forms\Components\TextInput::make('pph23')
+                                            ->label('PPh 23')
+                                            ->nullable()
+                                            ->money(fn (Bill $record) => $record->currency_code),
+                                    ])->columns(3),
                                 Forms\Components\Placeholder::make('currency_conversion')
                                     ->label('Currency Conversion')
                                     ->content(function (Forms\Get $get, Bill $record) {
@@ -593,7 +602,18 @@ class BillResource extends Resource
                                     ->label('Notes'),
                             ])
                             ->action(function (Bill $record, Tables\Actions\Action $action, array $data) {
-                                $record->recordPayment($data);
+                                DB::transaction(function () use ($record, $data) {
+                                    $pph23Cents = ! empty($data['pph23']) ? (int) $data['pph23'] : null;
+
+                                    $record->update([
+                                        'pph23' => $pph23Cents,
+                                    ]);
+
+                                    $record->recordPayment([
+                                        ...$data,
+                                        'pph23' => $pph23Cents,
+                                    ]);
+                                });
 
                                 $action->success();
                             }),

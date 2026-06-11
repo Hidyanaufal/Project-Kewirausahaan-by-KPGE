@@ -25,6 +25,7 @@ use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Str;
@@ -67,9 +68,15 @@ class PayBills extends ListRecords
             $this->redirect(AccountResource::getUrl('index'));
         }
 
-        $this->form->fill();
+        $preservedVendorId = $this->tableFilters['vendor_id']['value'] ?? null;
+        $preservedCurrencyCode = $this->tableFilters['currency_code']['value'] ?? CurrencyAccessor::getDefaultCurrency();
 
-        $this->reset('tableFilters');
+        $this->tableFilters = [
+            'vendor_id' => $preservedVendorId ? ['value' => $preservedVendorId] : [],
+            'currency_code' => ['value' => $preservedCurrencyCode],
+        ];
+
+        $this->form->fill();
     }
 
     protected function getHeaderActions(): array
@@ -189,20 +196,29 @@ class PayBills extends ListRecords
             ->recordClasses(['is-spreadsheet'])
             ->defaultSort('due_date')
             ->paginated(false)
+            ->emptyStateHeading(fn () => $this->hasTableSearch()
+                ? 'No bills found'
+                : 'No vendor selected')
+            ->emptyStateDescription(fn () => $this->hasTableSearch()
+                ? 'Try adjusting your search or filters.'
+                : 'Select a vendor from the filters, or search by bill number or vendor name to find unpaid bills.')
             ->columns([
                 TextColumn::make('vendor.name')
                     ->label('Vendor')
-                    ->sortable(),
+                    ->sortable()
+                    ->searchable(),
                 TextColumn::make('bill_number')
                     ->label('Bill number')
-                    ->sortable(),
+                    ->sortable()
+                    ->searchable(),
                 TextColumn::make('due_date')
                     ->label('Due date')
                     ->defaultDateFormat()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
-                    ->sortable(),
+                    ->sortable()
+                    ->searchable(),
                 TextColumn::make('amount_due')
                     ->label('Amount due')
                     ->currency(static fn(Bill $record) => $record->currency_code)
@@ -350,8 +366,20 @@ class PayBills extends ListRecords
                     }),
                 Tables\Filters\SelectFilter::make('vendor_id')
                     ->label('Vendor')
+                    ->placeholder('All vendors')
                     ->options(fn() => Vendor::query()->pluck('name', 'id')->toArray())
-                    ->searchable(),
+                    ->searchable()
+                    ->query(function (EloquentBuilder $query, array $data) {
+                        if (filled($data['value'] ?? null)) {
+                            return $query->where('vendor_id', $data['value']);
+                        }
+
+                        if ($this->hasTableSearch()) {
+                            return $query;
+                        }
+
+                        return $query->whereRaw('1 = 0');
+                    }),
                 Tables\Filters\SelectFilter::make('status')
                     ->multiple()
                     ->options(BillStatus::getUnpaidOptions()),
@@ -382,10 +410,46 @@ class PayBills extends ListRecords
         return $bankAccount ?: BankAccount::where('enabled', true)->first();
     }
 
+    public function resetTableFiltersForm(): void
+    {
+        parent::resetTableFiltersForm();
+
+        $this->paymentAmounts = [];
+    }
+
+    public function removeTableFilters(): void
+    {
+        parent::removeTableFilters();
+
+        $this->paymentAmounts = [];
+    }
+
+    public function updatedTableSearch(): void
+    {
+        if ($this->getTable()->persistsSearchInSession()) {
+            session()->put(
+                $this->getTableSearchSessionKey(),
+                $this->tableSearch,
+            );
+        }
+
+        if ($this->getTable()->shouldDeselectAllRecordsWhenFiltered()) {
+            $this->deselectAllTableRecords();
+        }
+
+        $this->resetPage();
+        $this->prunePaymentAmountsToVisibleRecords();
+    }
+
     protected function handleTableFilterUpdates(): void
     {
         parent::handleTableFilterUpdates();
 
+        $this->prunePaymentAmountsToVisibleRecords();
+    }
+
+    protected function prunePaymentAmountsToVisibleRecords(): void
+    {
         $visibleBillIds = $this->getTableRecords()->pluck('id')->toArray();
         $visibleBillKeys = array_flip($visibleBillIds);
 

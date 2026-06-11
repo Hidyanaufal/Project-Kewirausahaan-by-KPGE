@@ -23,6 +23,7 @@ use Filament\Support\Enums\MaxWidth;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class PaymentsRelationManager extends RelationManager
 {
@@ -51,6 +52,9 @@ class PaymentsRelationManager extends RelationManager
         return $form
             ->columns(1)
             ->schema([
+                Forms\Components\TextInput::make('transaction_code')
+                    ->label('Transaction code')
+                    ->default(fn () => Transaction::getNextDocumentNumber(TransactionType::Deposit)),
                 Forms\Components\DatePicker::make('posted_at')
                     ->label('Date'),
                 Forms\Components\Grid::make()
@@ -126,7 +130,13 @@ class PaymentsRelationManager extends RelationManager
                             ]),
                         Forms\Components\TextInput::make('pph23')
                             ->label('PPh 23')
-                            ->money()
+                            ->nullable()
+                            ->money(function (RelationManager $livewire) {
+                                /** @var Invoice $invoice */
+                                $invoice = $livewire->getOwnerRecord();
+
+                                return $invoice->currency_code;
+                            })
                     ])->columns(3),
                 Forms\Components\Placeholder::make('currency_conversion')
                     ->label('Currency Conversion')
@@ -243,21 +253,34 @@ class PaymentsRelationManager extends RelationManager
                         return $this->getOwnerRecord()->canRecordPayment() && $this->getOwnerRecord()->isFinalized();
                     })
                     ->mountUsing(function (Form $form) {
-                            /** @var Invoice $record */
-                            $record = $this->getOwnerRecord()->fresh();
-                        $trx = Transaction::where('transactionable_type', Invoice::class)
+                        /** @var Invoice $record */
+                        $record = $this->getOwnerRecord()->fresh();
+                        $defaultPph23 = 0;
+
+                        $approvalTransaction = Transaction::query()
+                            ->where('transactionable_type', Invoice::class)
                             ->where('transactionable_id', $record->id)
+                            ->where('is_payment', false)
                             ->first();
-                        $journals = JournalEntry::where('transaction_id', $trx->id)->get();
-                        $revenueAccounts = Account::where('company_id', $record->company_id)
-                            ->where('category', AccountCategory::Revenue)
-                            ->pluck('id');
-                        $revenueJournals = $journals->whereIn('account_id', $revenueAccounts)->first();
+
+                        if ($approvalTransaction) {
+                            $journals = JournalEntry::where('transaction_id', $approvalTransaction->id)->get();
+                            $revenueAccounts = Account::where('company_id', $record->company_id)
+                                ->where('category', AccountCategory::Revenue)
+                                ->pluck('id');
+                            $revenueJournals = $journals->whereIn('account_id', $revenueAccounts)->first();
+
+                            if ($revenueJournals) {
+                                $defaultPph23 = (int) round(abs($revenueJournals->amount) * 0.02);
+                            }
+                        }
+
                         $form->fill([
-                            'posted_at'         => company_today()->toDateString(),
-                            'amount'            => max($record->amount_due, 0),
-                            'pph23'             => abs($revenueJournals->amount * 0.2) / 10,
-                            'payment_method'    => PaymentMethod::BankPayment
+                            'transaction_code' => Transaction::getNextDocumentNumber(TransactionType::Deposit),
+                            'posted_at' => company_today()->toDateString(),
+                            'amount' => max($record->amount_due, 0),
+                            'pph23' => $defaultPph23 ?: null,
+                            'payment_method' => PaymentMethod::BankPayment,
                         ]);
                     })
                     ->databaseTransaction()
@@ -265,9 +288,20 @@ class PaymentsRelationManager extends RelationManager
                     ->action(function (Tables\Actions\CreateAction $action, array $data) {
                         /** @var Invoice $record */
                         $record = $this->getOwnerRecord();
-                        $record->pph23 = $data['pph23'];
-                        $record->save();
-                        $record->recordPayment($data);
+
+                        DB::transaction(function () use ($record, $data) {
+                            $pph23Cents = ! empty($data['pph23']) ? (int) $data['pph23'] : null;
+
+                            $record->update([
+                                'pph23' => $pph23Cents,
+                            ]);
+
+                            $record->recordPayment([
+                                ...$data,
+                                'pph23' => $pph23Cents,
+                            ]);
+                        });
+
                         $action->success();
                         $this->dispatch('refresh');
                     }),
