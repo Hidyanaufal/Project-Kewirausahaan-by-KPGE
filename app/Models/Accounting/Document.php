@@ -44,6 +44,29 @@ abstract class Document extends Model
         });
     }
 
+    public function hasMissingIncomeAccounts(): bool
+    {
+        $this->loadMissing(['lineItems.offering']);
+
+        return $this->lineItems->contains(function (DocumentLineItem $lineItem) {
+            return blank($lineItem->offering?->income_account_id);
+        });
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, string>
+     */
+    public function getOfferingsWithMissingIncomeAccounts(): \Illuminate\Support\Collection
+    {
+        $this->loadMissing(['lineItems.offering']);
+
+        return $this->lineItems
+            ->filter(fn (DocumentLineItem $lineItem) => blank($lineItem->offering?->income_account_id))
+            ->map(fn (DocumentLineItem $lineItem) => $lineItem->offering?->name ?? 'Unknown')
+            ->unique()
+            ->values();
+    }
+
     public static function getPrintDocumentAction(string $action = Action::class): MountableAction
     {
         return $action::make('printPdf')

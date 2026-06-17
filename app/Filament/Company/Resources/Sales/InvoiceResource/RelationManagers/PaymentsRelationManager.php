@@ -42,6 +42,22 @@ class PaymentsRelationManager extends RelationManager
         return false;
     }
 
+    protected function canEdit(Model $record): bool
+    {
+        /** @var Invoice $ownerRecord */
+        $ownerRecord = $this->getOwnerRecord();
+
+        if (! $ownerRecord->isFinalized() || $ownerRecord->status === InvoiceStatus::Cancelled) {
+            return false;
+        }
+
+        if (! $record instanceof Transaction || ! $record->is_payment) {
+            return false;
+        }
+
+        return (int) $record->transactionable_id === (int) $ownerRecord->id;
+    }
+
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
         return $ownerRecord->status !== InvoiceStatus::Draft;
@@ -307,6 +323,40 @@ class PaymentsRelationManager extends RelationManager
                     }),
             ])
             ->actions([
+                Tables\Actions\EditAction::make()
+                    ->label('Edit')
+                    ->modalHeading('Edit Payment')
+                    ->slideOver()
+                    ->modalWidth(MaxWidth::TwoExtraLarge)
+                    ->mountUsing(function (Form $form, Transaction $record) {
+                        $form->fill([
+                            'transaction_code' => $record->transaction_code,
+                            'posted_at' => $record->posted_at,
+                            'bank_account_id' => $record->bank_account_id,
+                            'amount' => $record->meta['amount_in_document_currency_cents'] ?? $record->amount,
+                            'pph23' => $record->meta['pph23_cents'] ?? null,
+                            'payment_method' => $record->payment_method,
+                            'notes' => $record->notes,
+                        ]);
+                    })
+                    ->databaseTransaction()
+                    ->successNotificationTitle('Payment updated')
+                    ->action(function (Tables\Actions\EditAction $action, Transaction $record, array $data) {
+                        /** @var Invoice $ownerRecord */
+                        $ownerRecord = $this->getOwnerRecord();
+
+                        DB::transaction(function () use ($ownerRecord, $record, $data) {
+                            $pph23Cents = ! empty($data['pph23']) ? (int) $data['pph23'] : null;
+
+                            $ownerRecord->updatePayment($record, [
+                                ...$data,
+                                'pph23' => $pph23Cents,
+                            ]);
+                        });
+
+                        $action->success();
+                        $this->dispatch('refresh');
+                    }),
                 Tables\Actions\DeleteAction::make()
                     ->after(fn() => $this->dispatch('refresh')),
             ])

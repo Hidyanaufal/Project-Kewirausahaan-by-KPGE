@@ -320,3 +320,313 @@ it('balance sheet category totals satisfy assets equals liabilities plus equity'
 
     expect($diff)->toBeLessThan(0.02);
 });
+
+it('shows mapped Laba Tahun Berjalan account on balance sheet instead of generic Retained Earnings', function () {
+    $company = $this->testCompany;
+    $asOf = Carbon::now()->toDateString();
+
+    $referenceEquity = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::Equity)
+        ->firstOrFail();
+
+    $ltjAccount = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $referenceEquity->subtype_id,
+        'code' => '3300.02',
+        'name' => 'Laba Tahun Berjalan',
+    ]);
+
+    AccountDefault::query()->create([
+        'company_id' => $company->id,
+        'account_id' => $ltjAccount->id,
+        'key' => AccountDefaultKey::CurrentYearEarnings,
+    ]);
+
+    $revenueAccount = Account::query()
+        ->where('company_id', $company->id)
+        ->where('category', AccountCategory::Revenue)
+        ->firstOrFail();
+
+    $amount = 300_000;
+    $bankAccount = $company->default->bankAccount;
+
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount)
+        ->create([
+            'posted_at' => now()->toDateTimeString(),
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $bankAccount->account_id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount,
+    ]));
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $revenueAccount->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+
+    expect(Account::shouldShowComputedCurrentYearEarningsOnBalanceSheet($company->id))->toBeTrue();
+
+    $report = Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
+    $equityTypes = $report->categories['Equity']->types ?? [];
+
+    expect($equityTypes)
+        ->toHaveKey('Laba Tahun Berjalan')
+        ->not->toHaveKey('Retained Earnings');
+
+    $ltjLine = $equityTypes['Laba Tahun Berjalan']->accounts[0];
+
+    expect($ltjLine->accountCode)->toBe('3300.02')
+        ->and($ltjLine->accountName)->toBe('Laba Tahun Berjalan')
+        ->and($ltjLine->accountId)->toBeNull();
+
+    $computedAmount = Reporting::calculateRetainedEarnings(
+        app(ReportService::class)->getEarliestTransactionDate(),
+        $asOf,
+        null,
+        $company->id
+    )->getAmount() / 100;
+
+    $displayedAmount = CurrencyConverter::convertToFloat($ltjLine->balance->endingBalance ?? '0');
+
+    expect(abs($displayedAmount - $computedAmount))->toBeLessThan(0.02);
+});
+
+it('shows computed Laba Tahun Berjalan when mapped even if GL retained earnings account exists', function () {
+    $company = $this->testCompany;
+    $asOf = Carbon::now()->toDateString();
+
+    $referenceEquity = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::Equity)
+        ->firstOrFail();
+
+    $ltjAccount = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $referenceEquity->subtype_id,
+        'code' => '3300.03',
+        'name' => 'Laba Tahun Berjalan Mapped',
+    ]);
+
+    AccountDefault::query()->create([
+        'company_id' => $company->id,
+        'account_id' => $ltjAccount->id,
+        'key' => AccountDefaultKey::CurrentYearEarnings,
+    ]);
+
+    Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $referenceEquity->subtype_id,
+        'code' => '3200.97',
+        'name' => 'TEST RETAINED EARNING GL LTJ',
+    ]);
+
+    $revenueAccount = Account::query()
+        ->where('company_id', $company->id)
+        ->where('category', AccountCategory::Revenue)
+        ->firstOrFail();
+
+    $amount = 150_000;
+    $bankAccount = $company->default->bankAccount;
+
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount)
+        ->create([
+            'posted_at' => now()->toDateTimeString(),
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $bankAccount->account_id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount,
+    ]));
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $revenueAccount->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+
+    expect(Account::shouldShowComputedCurrentYearEarningsOnBalanceSheet($company->id))->toBeTrue()
+        ->and(Account::shouldInjectComputedEquityLineOnBalanceSheet($company->id))->toBeTrue()
+        ->and(Account::shouldAddComputedRetainedEarningsToBalanceSheet($company->id))->toBeFalse();
+
+    $report = Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
+
+    expect($report->categories['Equity']->types ?? [])
+        ->toHaveKey('Laba Tahun Berjalan Mapped')
+        ->not->toHaveKey('Retained Earnings');
+});
+
+it('keeps generic Retained Earnings when Laba Tahun Berjalan default is not configured', function () {
+    $company = $this->testCompany;
+    $asOf = Carbon::now()->toDateString();
+
+    $revenueAccount = Account::query()
+        ->where('company_id', $company->id)
+        ->where('category', AccountCategory::Revenue)
+        ->firstOrFail();
+
+    $amount = 200_000;
+    $bankAccount = $company->default->bankAccount;
+
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount)
+        ->create([
+            'posted_at' => now()->toDateTimeString(),
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $bankAccount->account_id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount,
+    ]));
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $revenueAccount->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+
+    expect(Account::getCurrentYearEarningsAccount($company->id))->toBeNull();
+
+    $report = Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
+
+    expect($report->categories['Equity']->types ?? [])
+        ->toHaveKey('Retained Earnings')
+        ->not->toHaveKey('Laba Tahun Berjalan');
+});
+
+it('excludes mapped Laba Tahun Berjalan GL balance from equity totals in favor of computed amount', function () {
+    $company = $this->testCompany;
+    $asOf = Carbon::now()->toDateString();
+
+    $referenceEquity = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::Equity)
+        ->firstOrFail();
+
+    $ltjAccount = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $referenceEquity->subtype_id,
+        'code' => '3300.04',
+        'name' => 'Laba Tahun Berjalan GL Exclude',
+    ]);
+
+    AccountDefault::query()->create([
+        'company_id' => $company->id,
+        'account_id' => $ltjAccount->id,
+        'key' => AccountDefaultKey::CurrentYearEarnings,
+    ]);
+
+    $revenueAccount = Account::query()
+        ->where('company_id', $company->id)
+        ->where('category', AccountCategory::Revenue)
+        ->firstOrFail();
+
+    $bankAccount = $company->default->bankAccount;
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $revenueAmount = 400_000;
+    $revenueTransaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($revenueAmount)
+        ->create([
+            'posted_at' => now()->toDateTimeString(),
+        ]);
+
+    $revenueTransaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $bankAccount->account_id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $revenueAmount,
+    ]));
+
+    $revenueTransaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $revenueAccount->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $revenueAmount,
+    ]));
+
+    $glAmount = 100_000;
+    $ltjGlTransaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($glAmount)
+        ->create([
+            'posted_at' => now()->toDateTimeString(),
+        ]);
+
+    $ltjGlTransaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $bankAccount->account_id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $glAmount,
+    ]));
+
+    $ltjGlTransaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $ltjAccount->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $glAmount,
+    ]));
+
+    expect(Account::balanceSheetExcludedAccountIdsForCompany($company->id))->toContain($ltjAccount->id);
+
+    $report = Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
+    $ltjLine = $report->categories['Equity']->types['Laba Tahun Berjalan GL Exclude']->accounts[0] ?? null;
+
+    expect($ltjLine)->not->toBeNull();
+
+    $computedAmount = Reporting::calculateRetainedEarnings(
+        app(ReportService::class)->getEarliestTransactionDate(),
+        $asOf,
+        null,
+        $company->id
+    )->getAmount() / 100;
+
+    $displayedAmount = CurrencyConverter::convertToFloat($ltjLine->balance->endingBalance ?? '0');
+
+    expect(abs($displayedAmount - $computedAmount))->toBeLessThan(0.02)
+        ->and(abs($displayedAmount - ($glAmount / 100)))->toBeGreaterThan(0.02);
+});

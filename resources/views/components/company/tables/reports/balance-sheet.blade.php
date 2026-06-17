@@ -19,7 +19,7 @@
                 @foreach($categoryAccount as $accountIndex => $categoryAccountCell)
                     <x-company.tables.cell :alignment-class="$report->getAlignmentClass($accountIndex)">
                         @if(is_array($categoryAccountCell) && isset($categoryAccountCell['name']))
-                            @if($categoryAccountCell['name'] === 'Retained Earnings' && isset($categoryAccountCell['start_date']) && isset($categoryAccountCell['end_date']))
+                            @if(empty($categoryAccountCell['id']) && isset($categoryAccountCell['start_date']) && isset($categoryAccountCell['end_date']))
                                 <x-filament::link
                                     color="primary"
                                     target="_blank"
@@ -73,7 +73,7 @@
                         <x-company.tables.cell :alignment-class="$report->getAlignmentClass($accountIndex)"
                                                :indent="$accountIndex === 'account_name'">
                             @if(is_array($typeAccountCell) && isset($typeAccountCell['name']))
-                                @if($typeAccountCell['name'] === 'Retained Earnings' && isset($typeAccountCell['start_date']) && isset($typeAccountCell['end_date']))
+                                @if(empty($typeAccountCell['id']) && isset($typeAccountCell['start_date']) && isset($typeAccountCell['end_date']))
                                     <x-filament::link
                                         color="primary"
                                         target="_blank"

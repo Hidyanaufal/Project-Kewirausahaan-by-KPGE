@@ -210,6 +210,7 @@ class Account extends Model
             ->where('company_id', $companyId)
             ->whereIn('key', [
                 AccountDefaultKey::OpenBalance,
+                AccountDefaultKey::CurrentYearEarnings,
             ])
             ->pluck('account_id');
 
@@ -220,17 +221,98 @@ class Account extends Model
      * Whether computed retained earnings (Revenue − Expense) should be added to balance sheet equity totals.
      * When a dedicated retained earnings GL account exists, cumulative P&L is already reflected there and
      * adding the computed figure would double-count.
+     *
+     * The mapped Laba Tahun Berjalan account is excluded from this check so its own COA code (e.g. 3200.x)
+     * does not suppress the computed line.
      */
     public static function shouldAddComputedRetainedEarningsToBalanceSheet(int $companyId): bool
     {
-        return ! static::query()
+        return static::dedicatedRetainedEarningsGlAccountQuery($companyId)->doesntExist();
+    }
+
+    /**
+     * Whether a computed equity line (Laba Tahun Berjalan or Retained Earnings) should be injected.
+     * When Laba Tahun Berjalan is mapped via Account Default, always inject regardless of GL retained earnings.
+     */
+    public static function shouldInjectComputedEquityLineOnBalanceSheet(int $companyId): bool
+    {
+        if (static::getCurrentYearEarningsAccount($companyId) !== null) {
+            return true;
+        }
+
+        return static::shouldAddComputedRetainedEarningsToBalanceSheet($companyId);
+    }
+
+    public static function shouldShowComputedCurrentYearEarningsOnBalanceSheet(int $companyId): bool
+    {
+        return static::getCurrentYearEarningsAccount($companyId) !== null;
+    }
+
+    /**
+     * @return Builder<self>
+     */
+    protected static function dedicatedRetainedEarningsGlAccountQuery(int $companyId): Builder
+    {
+        $ltjAccountId = static::currentYearEarningsAccountIdForCompany($companyId);
+
+        return static::query()
             ->where('company_id', $companyId)
             ->where('category', AccountCategory::Equity)
+            ->when($ltjAccountId, fn (Builder $query) => $query->where('id', '!=', $ltjAccountId))
             ->where(function (Builder $query): void {
                 $query->where('code', 'like', '3200%')
                     ->orWhereRaw('LOWER(name) LIKE ?', ['%retained earn%']);
-            })
-            ->exists();
+            });
+    }
+
+    public static function getCurrentYearEarningsAccount(?int $companyId = null): ?self
+    {
+        if (! $companyId) {
+            return null;
+        }
+
+        $accountDefault = AccountDefault::query()
+            ->withoutGlobalScope(CurrentCompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('key', AccountDefaultKey::CurrentYearEarnings->value)
+            ->first();
+
+        if (! $accountDefault) {
+            return null;
+        }
+
+        return self::query()
+            ->withoutGlobalScope(CurrentCompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('id', $accountDefault->account_id)
+            ->first();
+    }
+
+    public static function currentYearEarningsAccountIdForCompany(int $companyId): ?int
+    {
+        return static::getCurrentYearEarningsAccount($companyId)?->id;
+    }
+
+    /**
+     * @return array{label: string, code: string, typeName: string}
+     */
+    public static function resolveComputedEquityLineForBalanceSheet(?int $companyId): array
+    {
+        $ltjAccount = $companyId !== null ? static::getCurrentYearEarningsAccount($companyId) : null;
+
+        if ($ltjAccount !== null) {
+            return [
+                'label' => $ltjAccount->name,
+                'code' => $ltjAccount->code,
+                'typeName' => $ltjAccount->name,
+            ];
+        }
+
+        return [
+            'label' => 'Retained Earnings',
+            'code' => 'RE',
+            'typeName' => 'Retained Earnings',
+        ];
     }
 
     public function transactions(): HasMany
