@@ -115,7 +115,7 @@ class TransactionObserver
         //
     }
 
-    protected function updateInvoiceTotals(Invoice $invoice, ?Transaction $excludedTransaction = null): void
+    public function updateInvoiceTotals(Invoice $invoice, ?Transaction $excludedTransaction = null): void
     {
         if (! $invoice->hasPayments()) {
             return;

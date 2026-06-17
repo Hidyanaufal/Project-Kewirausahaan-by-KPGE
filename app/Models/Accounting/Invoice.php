@@ -23,6 +23,8 @@ use App\Models\Common\Client;
 use App\Models\Company;
 use App\Models\Setting\DocumentDefault;
 use App\Observers\InvoiceObserver;
+use App\Observers\TransactionObserver;
+use App\Services\TransactionService;
 use App\Utilities\Currency\CurrencyAccessor;
 use App\Utilities\Currency\CurrencyConverter;
 use Filament\Actions\Action;
@@ -338,7 +340,7 @@ class Invoice extends Document
         });
     }
 
-    public function applyPaymentJournalEntriesForTransaction(Transaction $paymentTransaction): void
+    public function applyPaymentJournalEntriesForTransaction(Transaction $paymentTransaction, bool $preferCalculatedCash = false): void
     {
         $wapuAccountId = $this->historicalWapuTaxAccountId();
         $accountWapu = ($this->isWapu() && $wapuAccountId)
@@ -450,8 +452,9 @@ class Invoice extends Document
 
         $calculatedBankAmount = $remainingReceivable - $journalAmountTotal;
         $cashAmount = (int) (
-            $paymentTransaction->meta['amount_in_document_currency_cents']
-            ?? $calculatedBankAmount
+            $preferCalculatedCash
+                ? $calculatedBankAmount
+                : ($paymentTransaction->meta['amount_in_document_currency_cents'] ?? $calculatedBankAmount)
         );
 
         $bankAccountId = $paymentTransaction->bankAccount?->account_id;
@@ -974,6 +977,98 @@ class Invoice extends Document
         ]);
     }
 
+    public function updatePayment(Transaction $payment, array $data): void
+    {
+        if ($this->status === InvoiceStatus::Cancelled) {
+            throw new \InvalidArgumentException('Cannot update payment on a cancelled invoice.');
+        }
+
+        if (! $payment->is_payment || $payment->transactionable_id !== $this->id) {
+            throw new \InvalidArgumentException('Invalid payment transaction.');
+        }
+
+        DB::transaction(function () use ($payment, $data): void {
+            $pph23Cents = array_key_exists('pph23', $data) && $data['pph23'] !== null && $data['pph23'] !== ''
+                ? (int) $data['pph23']
+                : null;
+
+            if ($pph23Cents !== null) {
+                $this->update(['pph23' => $pph23Cents]);
+                $this->refresh();
+            }
+
+            $bankAccount = BankAccount::findOrFail($data['bank_account_id']);
+            $bankAccountCurrency = $bankAccount->account->currency_code ?? CurrencyAccessor::getDefaultCurrency();
+            $invoiceCurrency = $this->currency_code;
+            $requiresConversion = $invoiceCurrency !== $bankAccountCurrency;
+            $amountInInvoiceCurrencyCents = (int) $data['amount'];
+
+            $formattedAmountForBankCurrency = $requiresConversion
+                ? CurrencyConverter::convertBalance(
+                    $amountInInvoiceCurrencyCents,
+                    $invoiceCurrency,
+                    $bankAccountCurrency
+                )
+                : $amountInInvoiceCurrencyCents;
+
+            $meta = $payment->meta ?? [];
+            $meta['original_document_currency'] = $invoiceCurrency;
+            $meta['amount_in_document_currency_cents'] = $amountInInvoiceCurrencyCents;
+            $meta['pph23_cents'] = $pph23Cents;
+
+            Transaction::withoutEvents(function () use ($payment, $data, $formattedAmountForBankCurrency, $meta): void {
+                $payment->update([
+                    'posted_at' => $data['posted_at'],
+                    'amount' => $formattedAmountForBankCurrency,
+                    'transaction_code' => $data['transaction_code'] ?? null,
+                    'payment_method' => $data['payment_method'],
+                    'bank_account_id' => $data['bank_account_id'],
+                    'notes' => $data['notes'] ?? null,
+                    'meta' => $meta,
+                ]);
+            });
+
+            $payment->refresh();
+
+            app(TransactionObserver::class)->updateInvoiceTotals($this);
+            $this->refresh();
+
+            $this->rebuildJournalsForPayment($payment);
+            $this->refresh();
+        });
+    }
+
+    protected function rebuildJournalsForPayment(Transaction $payment): void
+    {
+        $latestPayment = $this->payments()->orderByDesc('id')->first();
+        $paymentsToRebuild = collect([$payment]);
+
+        if (in_array($this->status, [InvoiceStatus::Paid, InvoiceStatus::Overpaid], true) && $payment->id !== $latestPayment?->id) {
+            $paymentsToRebuild->push($latestPayment);
+        }
+
+        $transactionService = app(TransactionService::class);
+
+        foreach ($paymentsToRebuild->unique('id') as $paymentToRebuild) {
+            $paymentToRebuild->refresh();
+            $paymentToRebuild->loadMissing(['bankAccount.account', 'account']);
+
+            $paymentToRebuild->journalEntries()->delete();
+
+            if (in_array($this->status, [InvoiceStatus::Paid, InvoiceStatus::Overpaid], true) && $paymentToRebuild->id === $latestPayment?->id) {
+                $this->applyPaymentJournalEntriesForTransaction($paymentToRebuild, preferCalculatedCash: true);
+            } else {
+                $transactionService->createJournalEntries($paymentToRebuild);
+            }
+
+            if (! $this->journalTransactionIsBalanced($paymentToRebuild->fresh())) {
+                throw new \RuntimeException(
+                    "Journal entries do not balance for payment transaction #{$paymentToRebuild->id} on Invoice #{$this->invoice_number}."
+                );
+            }
+        }
+    }
+
     public function approveDraft(?Carbon $approvedAt = null): void
     {
         if (! $this->isDraft() && $this->status !== InvoiceStatus::Sent) {
@@ -1017,6 +1112,8 @@ class Invoice extends Document
     public function createApprovalTransaction(): void
     {
         $this->loadMissing(['lineItems.adjustments', 'lineItems.offering', 'client']);
+
+        $this->validateApprovalJournalAccounts();
 
         $baseDescription = "{$this->client->name}: Invoice #{$this->invoice_number}";
 
@@ -1175,6 +1272,27 @@ class Invoice extends Document
         $this->createApprovalTransaction();
     }
 
+    protected function validateApprovalJournalAccounts(): void
+    {
+        $missingIncomeOfferings = $this->getOfferingsWithMissingIncomeAccounts();
+
+        if ($missingIncomeOfferings->isNotEmpty()) {
+            throw new \RuntimeException(
+                'Income account is not set for offering(s): ' . $missingIncomeOfferings->join(', ') . '. Please update them in Products/Services before approving.'
+            );
+        }
+
+        foreach ($this->lineItems as $lineItem) {
+            foreach ($lineItem->adjustments as $adjustment) {
+                if (blank($adjustment->account_id)) {
+                    throw new \RuntimeException(
+                        "Adjustment \"{$adjustment->name}\" does not have an account configured. Please update it before approving."
+                    );
+                }
+            }
+        }
+    }
+
     public function convertAmountToDefaultCurrency(int $amountCents): int
     {
         $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
@@ -1198,30 +1316,46 @@ class Invoice extends Document
         return $action::make('blockedApprove')
             ->label('Approve')
             ->icon('heroicon-m-check-circle')
-            ->visible(fn (self $record) => $record->canBeApproved() && $record->hasInactiveAdjustments())
+            ->visible(fn (self $record) => $record->canBeApproved() && ($record->hasInactiveAdjustments() || $record->hasMissingIncomeAccounts()))
             ->requiresConfirmation()
             ->modalAlignment(Alignment::Start)
             ->modalIconColor('danger')
             ->modalDescription(function (self $record) {
-                $inactiveAdjustments = collect();
+                $output = '';
 
-                foreach ($record->lineItems as $lineItem) {
-                    foreach ($lineItem->adjustments as $adjustment) {
-                        if ($adjustment->isInactive() && $inactiveAdjustments->doesntContain($adjustment->name)) {
-                            $inactiveAdjustments->push($adjustment->name);
+                if ($record->hasInactiveAdjustments()) {
+                    $inactiveAdjustments = collect();
+
+                    foreach ($record->lineItems as $lineItem) {
+                        foreach ($lineItem->adjustments as $adjustment) {
+                            if ($adjustment->isInactive() && $inactiveAdjustments->doesntContain($adjustment->name)) {
+                                $inactiveAdjustments->push($adjustment->name);
+                            }
                         }
                     }
+
+                    $output .= "<p class='text-sm mb-4'>This invoice contains inactive adjustments that need to be addressed before approval:</p>";
+                    $output .= "<ul role='list' class='list-disc list-inside space-y-1 text-sm'>";
+
+                    foreach ($inactiveAdjustments as $name) {
+                        $output .= "<li class='py-1'><span class='font-medium'>{$name}</span></li>";
+                    }
+
+                    $output .= '</ul>';
                 }
 
-                $output = "<p class='text-sm mb-4'>This invoice contains inactive adjustments that need to be addressed before approval:</p>";
-                $output .= "<ul role='list' class='list-disc list-inside space-y-1 text-sm'>";
+                if ($record->hasMissingIncomeAccounts()) {
+                    $output .= "<p class='text-sm mb-4 mt-4'>The following offerings are missing an income account:</p>";
+                    $output .= "<ul role='list' class='list-disc list-inside space-y-1 text-sm'>";
 
-                foreach ($inactiveAdjustments as $name) {
-                    $output .= "<li class='py-1'><span class='font-medium'>{$name}</span></li>";
+                    foreach ($record->getOfferingsWithMissingIncomeAccounts() as $name) {
+                        $output .= "<li class='py-1'><span class='font-medium'>{$name}</span></li>";
+                    }
+
+                    $output .= '</ul>';
                 }
 
-                $output .= '</ul>';
-                $output .= "<p class='text-sm mt-4'>Please update these adjustments before approving the invoice.</p>";
+                $output .= "<p class='text-sm mt-4'>Please resolve these issues before approving the invoice.</p>";
 
                 return new HtmlString($output);
             })
@@ -1243,16 +1377,22 @@ class Invoice extends Document
             ->databaseTransaction()
             ->successNotificationTitle('Invoice approved')
             ->action(function (self $record, MountableAction $action, Component $livewire) {
-                if ($record->hasInactiveAdjustments()) {
+                if ($record->hasInactiveAdjustments() || $record->hasMissingIncomeAccounts()) {
                     $isViewPage = $livewire instanceof InvoiceResource\Pages\ViewInvoice;
 
                     if (! $isViewPage) {
                         redirect(InvoiceResource\Pages\ViewInvoice::getUrl(['record' => $record->id]));
                     } else {
+                        $body = match (true) {
+                            $record->hasInactiveAdjustments() && $record->hasMissingIncomeAccounts() => 'This invoice has inactive adjustments and offerings without income accounts that must be addressed first.',
+                            $record->hasInactiveAdjustments() => 'This invoice has inactive adjustments that must be addressed first.',
+                            default => 'This invoice has offerings without income accounts that must be addressed first.',
+                        };
+
                         Notification::make()
                             ->warning()
                             ->title('Cannot approve invoice')
-                            ->body('This invoice has inactive adjustments that must be addressed first.')
+                            ->body($body)
                             ->persistent()
                             ->send();
                     }
@@ -1298,16 +1438,22 @@ class Invoice extends Document
             ->action(function (self $record, MountableAction $action, Component $livewire) {
                 // Approval Level 1: Draft → Unsent
                 if ($record->canBeApproved()) {
-                    if ($record->hasInactiveAdjustments()) {
+                    if ($record->hasInactiveAdjustments() || $record->hasMissingIncomeAccounts()) {
                         $isViewPage = $livewire instanceof InvoiceResource\Pages\ViewInvoice;
 
                         if (! $isViewPage) {
                             redirect(InvoiceResource\Pages\ViewInvoice::getUrl(['record' => $record->id]));
                         } else {
+                            $body = match (true) {
+                                $record->hasInactiveAdjustments() && $record->hasMissingIncomeAccounts() => 'This invoice has inactive adjustments and offerings without income accounts that must be addressed first.',
+                                $record->hasInactiveAdjustments() => 'This invoice has inactive adjustments that must be addressed first.',
+                                default => 'This invoice has offerings without income accounts that must be addressed first.',
+                            };
+
                             Notification::make()
                                 ->warning()
                                 ->title('Cannot approve invoice')
-                                ->body('This invoice has inactive adjustments that must be addressed first.')
+                                ->body($body)
                                 ->persistent()
                                 ->send();
                         }

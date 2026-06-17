@@ -155,6 +155,18 @@ class ReportService
         return $balances;
     }
 
+    private function calculateCashFlowMovement(Account $account): int
+    {
+        $accountBalances = $this->calculateAccountBalances($account);
+        $netCashFlow = $accountBalances['net_movement'] ?? 0;
+
+        if ($account->subtype?->inverse_cash_flow) {
+            $netCashFlow *= -1;
+        }
+
+        return $netCashFlow;
+    }
+
     public function calculateRetainedEarnings(?string $startDate, string $endDate, $projectId = null, $companyId = null): Money
     {
         $startDate ??= Carbon::parse($this->accountService->getEarliestTransactionDate())->toDateTimeString();
@@ -703,6 +715,7 @@ class ReportService
                 AccountType::CurrentAsset,
             ])
             ->whereRelation('subtype', 'name', '!=', 'Cash and Cash Equivalents')
+            ->whereDoesntHave('bankAccount')
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
@@ -762,9 +775,7 @@ class ReportService
         /** @var Account[] $entries */
         foreach ([$accounts, $adjustments] as $entries) {
             foreach ($entries as $entry) {
-                $accountCategory = $entry->type->getCategory();
-                $accountBalances = $this->calculateAccountBalances($entry);
-                $netCashFlow = $accountBalances['net_movement'] ?? 0;
+                $netCashFlow = $this->calculateCashFlowMovement($entry);
 
                 // Accumulate totals
                 $sectionTotal += $netCashFlow;
@@ -869,14 +880,18 @@ class ReportService
                 $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), $projectId, $companyId)->getAmount();
 
                 $addComputedRetainedEarnings = $companyId === null
-                    || Account::shouldAddComputedRetainedEarningsToBalanceSheet((int) $companyId);
+                    || Account::shouldInjectComputedEquityLineOnBalanceSheet((int) $companyId);
 
                 if ($addComputedRetainedEarnings) {
                     $categorySummaryBalances['ending_balance'] += $retainedEarningsAmount;
 
+                    $computedEquityLine = Account::resolveComputedEquityLineForBalanceSheet(
+                        $companyId !== null ? (int) $companyId : null
+                    );
+
                     $retainedEarningsDTO = new AccountDTO(
-                        'Retained Earnings',
-                        'RE',
+                        $computedEquityLine['label'],
+                        $computedEquityLine['code'],
                         null,
                         $this->formatBalances(['ending_balance' => $retainedEarningsAmount]),
                         startDate: $startDateCarbon->toDateString(),
@@ -898,7 +913,11 @@ class ReportService
             }
 
             if ($category === AccountCategory::Equity && $retainedEarningsAmount != 0 && $retainedEarningsDTO !== null) {
-                $subCategories['Retained Earnings'] = new AccountTypeDTO(
+                $computedEquityLine = Account::resolveComputedEquityLineForBalanceSheet(
+                    $companyId !== null ? (int) $companyId : null
+                );
+
+                $subCategories[$computedEquityLine['typeName']] = new AccountTypeDTO(
                     accounts: [$retainedEarningsDTO],
                     summary: $this->formatBalances(['ending_balance' => $retainedEarningsAmount]),
                 );

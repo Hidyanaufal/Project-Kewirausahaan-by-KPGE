@@ -312,12 +312,15 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 ->filter(fn($a) => is_null($a->parent_id))
                 ->sum(fn($a) => $subtreeBalance($a));
 
-            // Inject Retained Earnings sebelum Total Equity (hanya jika belum ada akun GL retained earnings)
-            $addComputedRetainedEarnings = Account::shouldAddComputedRetainedEarningsToBalanceSheet($companyId);
+            // Inject computed equity (Laba Tahun Berjalan atau Retained Earnings) sebelum Total Equity
+            $addComputedRetainedEarnings = Account::shouldInjectComputedEquityLineOnBalanceSheet($companyId);
             if ($category === AccountCategory::Equity && $netIncome != 0 && $addComputedRetainedEarnings) {
+                $computedEquityLine = Account::resolveComputedEquityLineForBalanceSheet($companyId);
+                $computedLabel = $computedEquityLine['code'] . ' ' . $computedEquityLine['label'];
+
                 $rows->push([
                     'data' => [
-                        'Retained Earnings',
+                        $computedLabel,
                         $toNumber($netIncome / 100),
                     ],
                     'style' => [
