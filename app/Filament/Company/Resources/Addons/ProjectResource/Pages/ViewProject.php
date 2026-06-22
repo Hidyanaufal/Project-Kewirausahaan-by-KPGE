@@ -18,7 +18,7 @@ use App\Helpers\AuthHelper;
 use App\Jobs\SendProjectApprovedNotification;
 use App\Models\Addons\Project;
 use Filament\Notifications\Notification;
-use Rmsramos\Activitylog\Actions\ActivityLogTimelineSimpleAction;
+use App\Filament\Actions\ProjectActivityLogTimelineSimpleAction;
 
 class ViewProject extends ViewRecord
 {
@@ -77,7 +77,7 @@ class ViewProject extends ViewRecord
         return [
             ActionGroup::make([
                 $this->getApproveAction(),
-                ActivityLogTimelineSimpleAction::make('Activities')->color('info'),
+                ProjectActivityLogTimelineSimpleAction::make('Activities')->color('info'),
                 Actions\EditAction::make()
                     ->color('primary')
                     ->label('Edit Project')

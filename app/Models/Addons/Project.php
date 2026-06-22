@@ -40,6 +40,7 @@ class Project extends Model
         'project_value',
         'start_date',
         'end_date',
+        'end_date_reminder_sent_at',
         'work_basis',
         'status',
         'pic_client_id',
@@ -49,6 +50,7 @@ class Project extends Model
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
+        'end_date_reminder_sent_at' => 'datetime',
         'status' => ProjectStatus::class,
         'is_imported' => 'boolean',
     ];

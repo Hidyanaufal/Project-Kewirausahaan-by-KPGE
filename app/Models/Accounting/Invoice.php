@@ -1113,8 +1113,6 @@ class Invoice extends Document
     {
         $this->loadMissing(['lineItems.adjustments', 'lineItems.offering', 'client']);
 
-        $this->validateApprovalJournalAccounts();
-
         $baseDescription = "{$this->client->name}: Invoice #{$this->invoice_number}";
 
         $journalEntryData = [];
@@ -1272,27 +1270,6 @@ class Invoice extends Document
         $this->createApprovalTransaction();
     }
 
-    protected function validateApprovalJournalAccounts(): void
-    {
-        $missingIncomeOfferings = $this->getOfferingsWithMissingIncomeAccounts();
-
-        if ($missingIncomeOfferings->isNotEmpty()) {
-            throw new \RuntimeException(
-                'Income account is not set for offering(s): ' . $missingIncomeOfferings->join(', ') . '. Please update them in Products/Services before approving.'
-            );
-        }
-
-        foreach ($this->lineItems as $lineItem) {
-            foreach ($lineItem->adjustments as $adjustment) {
-                if (blank($adjustment->account_id)) {
-                    throw new \RuntimeException(
-                        "Adjustment \"{$adjustment->name}\" does not have an account configured. Please update it before approving."
-                    );
-                }
-            }
-        }
-    }
-
     public function convertAmountToDefaultCurrency(int $amountCents): int
     {
         $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
@@ -1316,46 +1293,30 @@ class Invoice extends Document
         return $action::make('blockedApprove')
             ->label('Approve')
             ->icon('heroicon-m-check-circle')
-            ->visible(fn (self $record) => $record->canBeApproved() && ($record->hasInactiveAdjustments() || $record->hasMissingIncomeAccounts()))
+            ->visible(fn (self $record) => $record->canBeApproved() && $record->hasInactiveAdjustments())
             ->requiresConfirmation()
             ->modalAlignment(Alignment::Start)
             ->modalIconColor('danger')
             ->modalDescription(function (self $record) {
-                $output = '';
+                $inactiveAdjustments = collect();
 
-                if ($record->hasInactiveAdjustments()) {
-                    $inactiveAdjustments = collect();
-
-                    foreach ($record->lineItems as $lineItem) {
-                        foreach ($lineItem->adjustments as $adjustment) {
-                            if ($adjustment->isInactive() && $inactiveAdjustments->doesntContain($adjustment->name)) {
-                                $inactiveAdjustments->push($adjustment->name);
-                            }
+                foreach ($record->lineItems as $lineItem) {
+                    foreach ($lineItem->adjustments as $adjustment) {
+                        if ($adjustment->isInactive() && $inactiveAdjustments->doesntContain($adjustment->name)) {
+                            $inactiveAdjustments->push($adjustment->name);
                         }
                     }
-
-                    $output .= "<p class='text-sm mb-4'>This invoice contains inactive adjustments that need to be addressed before approval:</p>";
-                    $output .= "<ul role='list' class='list-disc list-inside space-y-1 text-sm'>";
-
-                    foreach ($inactiveAdjustments as $name) {
-                        $output .= "<li class='py-1'><span class='font-medium'>{$name}</span></li>";
-                    }
-
-                    $output .= '</ul>';
                 }
 
-                if ($record->hasMissingIncomeAccounts()) {
-                    $output .= "<p class='text-sm mb-4 mt-4'>The following offerings are missing an income account:</p>";
-                    $output .= "<ul role='list' class='list-disc list-inside space-y-1 text-sm'>";
+                $output = "<p class='text-sm mb-4'>This invoice contains inactive adjustments that need to be addressed before approval:</p>";
+                $output .= "<ul role='list' class='list-disc list-inside space-y-1 text-sm'>";
 
-                    foreach ($record->getOfferingsWithMissingIncomeAccounts() as $name) {
-                        $output .= "<li class='py-1'><span class='font-medium'>{$name}</span></li>";
-                    }
-
-                    $output .= '</ul>';
+                foreach ($inactiveAdjustments as $name) {
+                    $output .= "<li class='py-1'><span class='font-medium'>{$name}</span></li>";
                 }
 
-                $output .= "<p class='text-sm mt-4'>Please resolve these issues before approving the invoice.</p>";
+                $output .= '</ul>';
+                $output .= "<p class='text-sm mt-4'>Please update these adjustments before approving the invoice.</p>";
 
                 return new HtmlString($output);
             })
@@ -1377,22 +1338,16 @@ class Invoice extends Document
             ->databaseTransaction()
             ->successNotificationTitle('Invoice approved')
             ->action(function (self $record, MountableAction $action, Component $livewire) {
-                if ($record->hasInactiveAdjustments() || $record->hasMissingIncomeAccounts()) {
+                if ($record->hasInactiveAdjustments()) {
                     $isViewPage = $livewire instanceof InvoiceResource\Pages\ViewInvoice;
 
                     if (! $isViewPage) {
                         redirect(InvoiceResource\Pages\ViewInvoice::getUrl(['record' => $record->id]));
                     } else {
-                        $body = match (true) {
-                            $record->hasInactiveAdjustments() && $record->hasMissingIncomeAccounts() => 'This invoice has inactive adjustments and offerings without income accounts that must be addressed first.',
-                            $record->hasInactiveAdjustments() => 'This invoice has inactive adjustments that must be addressed first.',
-                            default => 'This invoice has offerings without income accounts that must be addressed first.',
-                        };
-
                         Notification::make()
                             ->warning()
                             ->title('Cannot approve invoice')
-                            ->body($body)
+                            ->body('This invoice has inactive adjustments that must be addressed first.')
                             ->persistent()
                             ->send();
                     }
@@ -1438,22 +1393,16 @@ class Invoice extends Document
             ->action(function (self $record, MountableAction $action, Component $livewire) {
                 // Approval Level 1: Draft → Unsent
                 if ($record->canBeApproved()) {
-                    if ($record->hasInactiveAdjustments() || $record->hasMissingIncomeAccounts()) {
+                    if ($record->hasInactiveAdjustments()) {
                         $isViewPage = $livewire instanceof InvoiceResource\Pages\ViewInvoice;
 
                         if (! $isViewPage) {
                             redirect(InvoiceResource\Pages\ViewInvoice::getUrl(['record' => $record->id]));
                         } else {
-                            $body = match (true) {
-                                $record->hasInactiveAdjustments() && $record->hasMissingIncomeAccounts() => 'This invoice has inactive adjustments and offerings without income accounts that must be addressed first.',
-                                $record->hasInactiveAdjustments() => 'This invoice has inactive adjustments that must be addressed first.',
-                                default => 'This invoice has offerings without income accounts that must be addressed first.',
-                            };
-
                             Notification::make()
                                 ->warning()
                                 ->title('Cannot approve invoice')
-                                ->body($body)
+                                ->body('This invoice has inactive adjustments that must be addressed first.')
                                 ->persistent()
                                 ->send();
                         }
