@@ -209,21 +209,6 @@ class ViewInvoice extends ViewRecord
 
                         return new HtmlString($output);
                     }),
-                BannerEntry::make('missingIncomeAccounts')
-                    ->label('Missing income accounts')
-                    ->warning()
-                    ->icon('heroicon-o-exclamation-triangle')
-                    ->visible(fn (Invoice $record) => $record->hasMissingIncomeAccounts() && $record->canBeApproved())
-                    ->columnSpanFull()
-                    ->description(function (Invoice $record) {
-                        $offeringsList = $record->getOfferingsWithMissingIncomeAccounts()
-                            ->map(static fn (string $name) => "<span class='font-medium'>{$name}</span>")
-                            ->join(', ');
-
-                        $output = "<p class='text-sm'>The following offerings do not have an income account configured: {$offeringsList}. Please update them in Products/Services before approving.</p>";
-
-                        return new HtmlString($output);
-                    }),
                 Section::make('Invoice Details')
                     ->columns(4)
                     ->schema([

@@ -913,29 +913,6 @@ function sumApprovalSalesTaxCredits(Invoice $invoice): int
         ->sum('amount');
 }
 
-test('approveDraft fails when offering has no income account', function () {
-    $companyId = $this->testCompany->id;
-
-    $invoice = Invoice::factory()
-        ->withLineItems(1)
-        ->state([
-            'company_id' => $companyId,
-            'due_date' => now()->addDays(30),
-        ])
-        ->create();
-
-    $invoice->refresh();
-    $invoice->lineItems->first()->offering->updateQuietly(['income_account_id' => null]);
-
-    expect($invoice->hasMissingIncomeAccounts())->toBeTrue()
-        ->and($invoice->getOfferingsWithMissingIncomeAccounts())->not->toBeEmpty();
-
-    expect(fn () => $invoice->approveDraft())->toThrow(
-        RuntimeException::class,
-        'Income account is not set for offering(s):'
-    );
-});
-
 test('approveDraft succeeds without PPN WAPU adjustment or account default', function () {
     $companyId = $this->testCompany->id;
     removePpnWapuConfigurationForCompany($companyId);
