@@ -86,6 +86,27 @@ services:
     networks:
       - mykpg_network
 
+  # Scheduler Service
+  scheduler:
+    user: "www-data"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mykpg_scheduler
+    image: tetra/mykpg
+    restart: unless-stopped
+    working_dir: /var/www
+    command: php artisan schedule:work
+    volumes:
+      - ./:/var/www
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - mykpg_storage:/var/www/storage/app
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - mykpg_network
+
 networks:
   mykpg_network:
     driver: bridge
