@@ -21,7 +21,7 @@ use Filament\Tables;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Rmsramos\Activitylog\Actions\ActivityLogTimelineTableAction;
+use App\Filament\Actions\ProjectActivityLogTimelineTableAction;
 
 class ProjectResource extends Resource
 {
@@ -268,7 +268,7 @@ class ProjectResource extends Resource
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\EditAction::make(),
                     Tables\Actions\ViewAction::make()->color('warning'),
-                    ActivityLogTimelineTableAction::make('Activities')->color('info'),
+                    ProjectActivityLogTimelineTableAction::make('Activities')->color('info'),
                     Tables\Actions\DeleteAction::make(),
                 ]),
             ])

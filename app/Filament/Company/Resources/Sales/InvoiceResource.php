@@ -470,6 +470,12 @@ class InvoiceResource extends Resource
         return $table
             ->defaultSort('id', 'desc')
             ->modifyQueryUsing(function (Builder $query, Tables\Contracts\HasTable $livewire) {
+                $query->with([
+                    'payments' => fn ($paymentsQuery) => $paymentsQuery
+                        ->select(['id', 'transactionable_type', 'transactionable_id', 'transaction_code', 'posted_at'])
+                        ->orderBy('id'),
+                ]);
+
                 if (property_exists($livewire, 'recurringInvoice')) {
                     $recurringInvoiceId = $livewire->recurringInvoice;
 
@@ -517,6 +523,27 @@ class InvoiceResource extends Resource
                     ->sortable()
                     ->alignEnd()
                     ->showOnTabs(['unpaid']),
+                Tables\Columns\TextColumn::make('payment_transaction_codes')
+                    ->label('Payment code')
+                    ->getStateUsing(function (Invoice $record): ?string {
+                        if (! $record->hasPayments()) {
+                            return null;
+                        }
+
+                        return $record->payments
+                            ->pluck('transaction_code')
+                            ->filter()
+                            ->unique()
+                            ->implode(', ') ?: null;
+                    })
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas('payments', function (Builder $paymentsQuery) use ($search): void {
+                            $paymentsQuery->where('transaction_code', 'like', "%{$search}%");
+                        });
+                    })
+                    ->placeholder('—')
+                    ->toggleable()
+                    ->hideOnTabs(['draft']),
                 Tables\Columns\TextColumn::make('amount_due')
                     ->label('Amount due')
                     ->currencyWithConversion(static fn(Invoice $record) => $record->currency_code)

@@ -23,6 +23,8 @@ use App\Models\Common\Client;
 use App\Models\Company;
 use App\Models\Setting\DocumentDefault;
 use App\Observers\InvoiceObserver;
+use App\Observers\TransactionObserver;
+use App\Services\TransactionService;
 use App\Utilities\Currency\CurrencyAccessor;
 use App\Utilities\Currency\CurrencyConverter;
 use Filament\Actions\Action;
@@ -338,7 +340,7 @@ class Invoice extends Document
         });
     }
 
-    public function applyPaymentJournalEntriesForTransaction(Transaction $paymentTransaction): void
+    public function applyPaymentJournalEntriesForTransaction(Transaction $paymentTransaction, bool $preferCalculatedCash = false): void
     {
         $wapuAccountId = $this->historicalWapuTaxAccountId();
         $accountWapu = ($this->isWapu() && $wapuAccountId)
@@ -450,8 +452,9 @@ class Invoice extends Document
 
         $calculatedBankAmount = $remainingReceivable - $journalAmountTotal;
         $cashAmount = (int) (
-            $paymentTransaction->meta['amount_in_document_currency_cents']
-            ?? $calculatedBankAmount
+            $preferCalculatedCash
+                ? $calculatedBankAmount
+                : ($paymentTransaction->meta['amount_in_document_currency_cents'] ?? $calculatedBankAmount)
         );
 
         $bankAccountId = $paymentTransaction->bankAccount?->account_id;
@@ -972,6 +975,98 @@ class Invoice extends Document
                 'pph23_cents' => $data['pph23'] ?? null,
             ],
         ]);
+    }
+
+    public function updatePayment(Transaction $payment, array $data): void
+    {
+        if ($this->status === InvoiceStatus::Cancelled) {
+            throw new \InvalidArgumentException('Cannot update payment on a cancelled invoice.');
+        }
+
+        if (! $payment->is_payment || $payment->transactionable_id !== $this->id) {
+            throw new \InvalidArgumentException('Invalid payment transaction.');
+        }
+
+        DB::transaction(function () use ($payment, $data): void {
+            $pph23Cents = array_key_exists('pph23', $data) && $data['pph23'] !== null && $data['pph23'] !== ''
+                ? (int) $data['pph23']
+                : null;
+
+            if ($pph23Cents !== null) {
+                $this->update(['pph23' => $pph23Cents]);
+                $this->refresh();
+            }
+
+            $bankAccount = BankAccount::findOrFail($data['bank_account_id']);
+            $bankAccountCurrency = $bankAccount->account->currency_code ?? CurrencyAccessor::getDefaultCurrency();
+            $invoiceCurrency = $this->currency_code;
+            $requiresConversion = $invoiceCurrency !== $bankAccountCurrency;
+            $amountInInvoiceCurrencyCents = (int) $data['amount'];
+
+            $formattedAmountForBankCurrency = $requiresConversion
+                ? CurrencyConverter::convertBalance(
+                    $amountInInvoiceCurrencyCents,
+                    $invoiceCurrency,
+                    $bankAccountCurrency
+                )
+                : $amountInInvoiceCurrencyCents;
+
+            $meta = $payment->meta ?? [];
+            $meta['original_document_currency'] = $invoiceCurrency;
+            $meta['amount_in_document_currency_cents'] = $amountInInvoiceCurrencyCents;
+            $meta['pph23_cents'] = $pph23Cents;
+
+            Transaction::withoutEvents(function () use ($payment, $data, $formattedAmountForBankCurrency, $meta): void {
+                $payment->update([
+                    'posted_at' => $data['posted_at'],
+                    'amount' => $formattedAmountForBankCurrency,
+                    'transaction_code' => $data['transaction_code'] ?? null,
+                    'payment_method' => $data['payment_method'],
+                    'bank_account_id' => $data['bank_account_id'],
+                    'notes' => $data['notes'] ?? null,
+                    'meta' => $meta,
+                ]);
+            });
+
+            $payment->refresh();
+
+            app(TransactionObserver::class)->updateInvoiceTotals($this);
+            $this->refresh();
+
+            $this->rebuildJournalsForPayment($payment);
+            $this->refresh();
+        });
+    }
+
+    protected function rebuildJournalsForPayment(Transaction $payment): void
+    {
+        $latestPayment = $this->payments()->orderByDesc('id')->first();
+        $paymentsToRebuild = collect([$payment]);
+
+        if (in_array($this->status, [InvoiceStatus::Paid, InvoiceStatus::Overpaid], true) && $payment->id !== $latestPayment?->id) {
+            $paymentsToRebuild->push($latestPayment);
+        }
+
+        $transactionService = app(TransactionService::class);
+
+        foreach ($paymentsToRebuild->unique('id') as $paymentToRebuild) {
+            $paymentToRebuild->refresh();
+            $paymentToRebuild->loadMissing(['bankAccount.account', 'account']);
+
+            $paymentToRebuild->journalEntries()->delete();
+
+            if (in_array($this->status, [InvoiceStatus::Paid, InvoiceStatus::Overpaid], true) && $paymentToRebuild->id === $latestPayment?->id) {
+                $this->applyPaymentJournalEntriesForTransaction($paymentToRebuild, preferCalculatedCash: true);
+            } else {
+                $transactionService->createJournalEntries($paymentToRebuild);
+            }
+
+            if (! $this->journalTransactionIsBalanced($paymentToRebuild->fresh())) {
+                throw new \RuntimeException(
+                    "Journal entries do not balance for payment transaction #{$paymentToRebuild->id} on Invoice #{$this->invoice_number}."
+                );
+            }
+        }
     }
 
     public function approveDraft(?Carbon $approvedAt = null): void

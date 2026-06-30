@@ -556,6 +556,284 @@ test('record payment wapu keeps tax reclassification on payment journal', functi
         ->and($invoice->journalTransactionIsBalanced($paymentTrx))->toBeTrue();
 });
 
+test('update partial payment recalculates journals and invoice status', function () {
+    $invoice = Invoice::factory()
+        ->withLineItems()
+        ->state([
+            'company_id' => $this->testCompany->id,
+            'due_date' => now()->addDays(30),
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $invoice->company_id)
+        ->where('enabled', true)
+        ->firstOrFail();
+
+    $paymentAmount = (int) floor($invoice->amount_due / 2);
+    expect($paymentAmount)->toBeGreaterThan(0);
+
+    $invoice->recordPayment([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $paymentAmount,
+        'notes' => 'Partial payment',
+    ]);
+
+    $invoice->refresh();
+    $payment = $invoice->payments()->firstOrFail();
+    expect($invoice->status)->toBe(InvoiceStatus::Partial);
+
+    $newAmount = $paymentAmount + 10_000;
+
+    $invoice->updatePayment($payment, [
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $newAmount,
+        'notes' => 'Updated partial payment',
+    ]);
+
+    $invoice->refresh();
+    $payment->refresh();
+
+    expect($invoice->status)->toBe(InvoiceStatus::Partial)
+        ->and((int) $invoice->amount_paid)->toBe($newAmount)
+        ->and((int) ($payment->meta['amount_in_document_currency_cents'] ?? 0))->toBe($newAmount)
+        ->and($invoice->journalTransactionIsBalanced($payment))->toBeTrue();
+});
+
+test('update final paid payment rebuilds complex journals', function () {
+    $companyId = $this->testCompany->id;
+    removePpnWapuConfigurationForCompany($companyId);
+
+    $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
+    $subtotal = 1_000_000;
+    $taxTotal = 110_000;
+    $total = $subtotal + $taxTotal;
+    $manualPph23 = 20_000;
+
+    $invoice = Invoice::factory()
+        ->withLineItems(1)
+        ->state([
+            'company_id' => $companyId,
+            'currency_code' => $defaultCurrency,
+            'due_date' => now()->addDays(30),
+            'profit_total' => 0,
+            'discount_method' => \App\Enums\Accounting\DocumentDiscountMethod::PerLineItem,
+            'discount_rate' => 0,
+            'discount_total' => 0,
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $lineItem = $invoice->lineItems->first();
+    $lineItem->updateQuietly([
+        'subtotal' => $subtotal,
+        'unit_price' => $subtotal,
+        'quantity' => 1,
+    ]);
+    attachElevenPercentPpnToInvoiceLineItem($invoice);
+    $invoice->updateQuietly([
+        'subtotal' => $subtotal,
+        'profit_total' => 0,
+        'discount_total' => 0,
+        'tax_total' => $taxTotal,
+        'total' => $total,
+    ]);
+
+    $invoice->refresh();
+    $invoice->load(['lineItems.adjustments', 'client']);
+    $invoice->approveDraft();
+    $invoice->refresh();
+    $invoice->update(['pph23' => $manualPph23]);
+    $invoice->refresh();
+
+    $manualCash = (int) $invoice->actual_total;
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $invoice->company_id)
+        ->where('enabled', true)
+        ->firstOrFail();
+
+    $invoice->recordPayment([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $manualCash,
+        'pph23' => $manualPph23,
+        'notes' => 'Full payment',
+    ]);
+
+    $invoice->refresh();
+    $payment = $invoice->payments()->firstOrFail();
+    expect($invoice->status)->toBe(InvoiceStatus::Paid);
+
+    $updatedPph23 = $manualPph23 + 5_000;
+    $invoice->update(['pph23' => $updatedPph23]);
+    $invoice->refresh();
+    $updatedCash = (int) $invoice->actual_total;
+
+    $invoice->updatePayment($payment, [
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $updatedCash,
+        'pph23' => $updatedPph23,
+        'notes' => 'Updated full payment',
+    ]);
+
+    $invoice->refresh();
+    $payment->refresh();
+
+    $receivableAccount = Account::getAccountsReceivableAccount($invoice->company_id);
+    $pph23Account = Account::getAccountsPPh23($invoice->company_id);
+    $approvalReceivable = (int) JournalEntry::query()
+        ->where('transaction_id', $invoice->approvalTransaction->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $paymentPph23Debit = (int) JournalEntry::query()
+        ->where('transaction_id', $payment->id)
+        ->where('account_id', $pph23Account->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $cashDebit = (int) JournalEntry::query()
+        ->where('transaction_id', $payment->id)
+        ->where('account_id', $payment->bankAccount->account_id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $receivableCredit = (int) JournalEntry::query()
+        ->where('transaction_id', $payment->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+
+    expect($invoice->status)->toBe(InvoiceStatus::Paid)
+        ->and((int) $invoice->pph23)->toBe($updatedPph23)
+        ->and($paymentPph23Debit)->toBe($updatedPph23)
+        ->and($cashDebit)->toBe($updatedCash)
+        ->and($receivableCredit)->toBe($approvalReceivable)
+        ->and($invoice->journalTransactionIsBalanced($payment))->toBeTrue();
+});
+
+test('update first payment on paid invoice rebuilds latest payment journals', function () {
+    $activeCompanyId = auth()->user()?->current_company_id ?? $this->testCompany->id;
+
+    $invoice = Invoice::factory()
+        ->withLineItems()
+        ->state([
+            'company_id' => $activeCompanyId,
+            'due_date' => now()->addDays(30),
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $invoice->company_id)
+        ->where('enabled', true)
+        ->firstOrFail();
+
+    $payment1Amount = (int) floor($invoice->amount_due / 2);
+    expect($payment1Amount)->toBeGreaterThan(0);
+
+    $invoice->recordPayment([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $payment1Amount,
+        'notes' => 'Partial payment #1',
+    ]);
+
+    $invoice->refresh();
+
+    $payment2Amount = (int) $invoice->amount_due;
+    $invoice->recordPayment([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $payment2Amount,
+        'notes' => 'Partial payment #2',
+    ]);
+
+    $invoice->refresh();
+    expect($invoice->status)->toBe(InvoiceStatus::Paid);
+
+    $payments = $invoice->payments()->orderBy('id')->get();
+    $payment1 = $payments->first();
+    $payment2 = $payments->last();
+
+    $receivableAccount = Account::getAccountsReceivableAccount($invoice->company_id);
+    $totalReceivable = (int) JournalEntry::query()
+        ->where('transaction_id', $invoice->approvalTransaction->id)
+        ->where('account_id', $receivableAccount->id)
+        ->sum('amount');
+
+    $delta = 25_000;
+    $newPayment1Amount = $payment1Amount + $delta;
+    $newPayment2Amount = $payment2Amount - $delta;
+    expect($newPayment2Amount)->toBeGreaterThan(0);
+
+    $invoice->updatePayment($payment1, [
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $newPayment1Amount,
+        'notes' => 'Updated partial payment #1',
+    ]);
+
+    $invoice->updatePayment($payment2, [
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $newPayment2Amount,
+        'notes' => 'Updated partial payment #2',
+    ]);
+
+    $invoice->refresh();
+    $payment1->refresh();
+    $payment2->refresh();
+
+    $payment1ReceivableCredits = (int) JournalEntry::query()
+        ->where('transaction_id', $payment1->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+
+    $payment1ReceivableDebits = (int) JournalEntry::query()
+        ->where('transaction_id', $payment1->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Debit)
+        ->sum('amount');
+
+    $payment1NetReceivable = $payment1ReceivableCredits - $payment1ReceivableDebits;
+    $expectedRemainingReceivable = $totalReceivable - $payment1NetReceivable;
+
+    $payment2ReceivableCredit = (int) JournalEntry::query()
+        ->where('transaction_id', $payment2->id)
+        ->where('account_id', $receivableAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+
+    expect($invoice->status)->toBe(InvoiceStatus::Paid)
+        ->and((int) ($payment1->meta['amount_in_document_currency_cents'] ?? 0))->toBe($newPayment1Amount)
+        ->and((int) ($payment2->meta['amount_in_document_currency_cents'] ?? 0))->toBe($newPayment2Amount)
+        ->and($payment2ReceivableCredit)->toBe($expectedRemainingReceivable)
+        ->and($invoice->journalTransactionIsBalanced($payment1))->toBeTrue()
+        ->and($invoice->journalTransactionIsBalanced($payment2))->toBeTrue();
+});
+
 function removePpnWapuConfigurationForCompany(int $companyId): void
 {
     Adjustment::query()
