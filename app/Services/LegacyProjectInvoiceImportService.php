@@ -22,6 +22,7 @@ use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use Throwable;
 
 class LegacyProjectInvoiceImportService
@@ -32,19 +33,27 @@ class LegacyProjectInvoiceImportService
             'updated' => 0,
             'skipped' => 0,
             'failed' => 0,
+            'stubbed' => 0,
         ],
         'invoices' => [
             'inserted' => 0,
             'updated' => 0,
             'skipped' => 0,
             'failed' => 0,
+            'with_total' => 0,
+            'paid_with_payment' => 0,
+            'zero_total_rejected' => 0,
         ],
         'warnings' => [],
     ];
 
+    protected bool $forceReimport = false;
+
     protected array $invoiceSupplementRows = [];
 
     protected array $projectReferenceMap = [];
+
+    protected array $workBasisMap = [];
 
     protected array $clientCache = [];
 
@@ -53,6 +62,13 @@ class LegacyProjectInvoiceImportService
     protected ?Offering $defaultOffering = null;
 
     protected ?BankAccount $activeBankAccount = null;
+
+    protected ?LegacyWorkbookLayout $layout = null;
+
+    /** @var array<int, ProjectType>|null */
+    protected ?array $companyProjectTypes = null;
+
+    protected int $stubSequence = 0;
 
     public function __construct(
         protected int $companyId,
@@ -64,6 +80,34 @@ class LegacyProjectInvoiceImportService
     public function summary(): array
     {
         return $this->summary;
+    }
+
+    public function setForceReimport(bool $forceReimport): self
+    {
+        $this->forceReimport = $forceReimport;
+
+        return $this;
+    }
+
+    public function setWorkbookLayout(LegacyWorkbookLayout $layout): self
+    {
+        $this->layout = $layout;
+
+        return $this;
+    }
+
+    protected function layout(): LegacyWorkbookLayout
+    {
+        return $this->layout ?? LegacyWorkbookLayout::detect([], []);
+    }
+
+    public function prepareImportedInvoiceForReimport(Invoice $invoice): void
+    {
+        if (! $invoice->is_imported) {
+            throw new \RuntimeException("Invoice '{$invoice->invoice_number}' bukan data imported, tidak bisa di-reset untuk re-import.");
+        }
+
+        $this->resetImportedInvoice($invoice);
     }
 
     public function rememberInvoiceSupplementRows(array $rows): void
@@ -82,10 +126,7 @@ class LegacyProjectInvoiceImportService
     public function importProjectSheet(string $sheetName, array $rows): void
     {
         $projectTypeName = trim((string) str($sheetName)->after('Project-'));
-        $projectType = ProjectType::query()
-            ->where('company_id', $this->companyId)
-            ->whereRaw('LOWER(name) = ?', [strtolower($projectTypeName)])
-            ->first();
+        $projectType = $this->resolveProjectTypeForSheet($projectTypeName, $rows);
 
         if (! $projectType) {
             $this->addWarning("Sheet {$sheetName} dilewati karena project type '{$projectTypeName}' tidak ditemukan.");
@@ -202,22 +243,45 @@ class LegacyProjectInvoiceImportService
 
     public function importInvoiceSheet(array $rows): void
     {
+        $rowsByInvoice = [];
+
         foreach ($rows as $row) {
-            $lineNumber = $row['row_number'] ?? null;
             $mapped = $this->mapInvoiceRow($row['values'] ?? []);
 
             if (! $mapped || empty($mapped['invoice_number'])) {
                 continue;
             }
 
+            $invoiceNumber = $mapped['invoice_number'];
+
+            if (
+                ! isset($rowsByInvoice[$invoiceNumber])
+                || $this->isBetterInvoiceImportRow($mapped, $rowsByInvoice[$invoiceNumber]['mapped'])
+            ) {
+                $rowsByInvoice[$invoiceNumber] = [
+                    'row' => $row,
+                    'mapped' => $mapped,
+                ];
+            }
+        }
+
+        foreach ($rowsByInvoice as ['row' => $row, 'mapped' => $mapped]) {
+            $lineNumber = $row['row_number'] ?? null;
+
             try {
                 $project = $this->resolveProjectForInvoice($mapped['project_reference'], $mapped['date']);
 
                 if (! $project) {
-                    $this->summary['invoices']['failed']++;
-                    $this->addWarning("Invoice '{$mapped['invoice_number']}' dilewati karena project '{$mapped['project_reference']}' tidak ditemukan.");
+                    $project = $this->createLegacyProjectStubForInvoice($mapped);
 
-                    continue;
+                    if (! $project) {
+                        $this->summary['invoices']['failed']++;
+                        $this->addWarning("Invoice '{$mapped['invoice_number']}' dilewati karena project '{$mapped['project_reference']}' tidak ditemukan dan gagal dibuat otomatis.");
+
+                        continue;
+                    }
+
+                    $this->addWarning("Project '{$mapped['project_reference']}' tidak ditemukan, dibuat otomatis sebagai stub legacy untuk invoice '{$mapped['invoice_number']}'.");
                 }
 
                 $existing = Invoice::query()
@@ -232,11 +296,27 @@ class LegacyProjectInvoiceImportService
                     continue;
                 }
 
-                if ($existing && $existing->payments()->exists()) {
+                if ($existing && $existing->payments()->exists() && ! $existing->is_imported && ! $this->forceReimport) {
                     $this->summary['invoices']['skipped']++;
-                    $this->addWarning("Invoice '{$mapped['invoice_number']}' sudah punya payment transaction, sehingga import update dilewati.");
+                    $this->addWarning("Invoice '{$mapped['invoice_number']}' sudah ada sebagai data non-imported dengan payment, sehingga tidak dioverwrite.");
 
                     continue;
+                }
+
+                if ($mapped['total'] <= 0 && $mapped['status'] !== InvoiceStatus::Cancelled) {
+                    $this->summary['invoices']['zero_total_rejected']++;
+                    $this->summary['invoices']['failed']++;
+                    $this->addWarning("Invoice '{$mapped['invoice_number']}' baris {$lineNumber} dilewati karena total 0 dan status bukan BATAL.");
+
+                    continue;
+                }
+
+                if (empty($mapped['date'])) {
+                    $mapped['date'] = $project->start_date
+                        ?? $project->request_number_date
+                        ?? $project->end_date
+                        ?? now()->toDateString();
+                    $mapped['due_date'] ??= $mapped['date'];
                 }
 
                 DB::transaction(function () use ($existing, $mapped, $project) {
@@ -252,6 +332,16 @@ class LegacyProjectInvoiceImportService
                         $this->summary['invoices']['updated']++;
                     } else {
                         $this->summary['invoices']['inserted']++;
+                    }
+
+                    $invoice->refresh();
+
+                    if ($invoice->total > 0) {
+                        $this->summary['invoices']['with_total']++;
+                    }
+
+                    if ($invoice->status === InvoiceStatus::Paid && $invoice->payments()->exists()) {
+                        $this->summary['invoices']['paid_with_payment']++;
                     }
                 });
             } catch (Throwable $e) {
@@ -468,37 +558,123 @@ class LegacyProjectInvoiceImportService
         ];
     }
 
+    protected function isBetterInvoiceImportRow(array $candidate, array $current): bool
+    {
+        $candidateScore = $this->invoiceImportRowQualityScore($candidate);
+        $currentScore = $this->invoiceImportRowQualityScore($current);
+
+        if ($candidateScore !== $currentScore) {
+            return $candidateScore > $currentScore;
+        }
+
+        return ($candidate['total'] ?? 0) >= ($current['total'] ?? 0);
+    }
+
+    protected function invoiceImportRowQualityScore(array $mapped): int
+    {
+        $score = 0;
+
+        if ($this->cleanText($mapped['project_reference'] ?? null)) {
+            $score += 100;
+        }
+
+        if (($mapped['total'] ?? 0) > 0) {
+            $score += 50;
+        }
+
+        if ($this->cleanText($mapped['item_description'] ?? null)) {
+            $score += 10;
+        }
+
+        if (! empty($mapped['date'])) {
+            $score += 5;
+        }
+
+        if (($mapped['paid_value'] ?? 0) > 0) {
+            $score += 5;
+        }
+
+        if (($mapped['status'] ?? null) === InvoiceStatus::Paid) {
+            $score += 1;
+        }
+
+        return $score;
+    }
+
     protected function mapInvoiceRow(array $values): ?array
     {
         if ($this->isEmptyRow($values)) {
             return null;
         }
 
-        $invoiceNumber = $this->normalizeDocumentNumber($values[2] ?? null);
+        $layout = $this->layout();
+        $invoiceNumber = $this->normalizeDocumentNumber($layout->valueAt($values, 'invoice', 'invoice_number'));
 
         if (! $invoiceNumber) {
             return null;
         }
 
         $supplement = $this->invoiceSupplementRows[$invoiceNumber] ?? [];
-        $mainProjectReference = $this->cleanText($values[3] ?? null);
-        $mainDescription = $this->cleanText($values[4] ?? null);
-        $preTaxTotal = $supplement['pre_tax_total'] ?? $this->deriveInvoicePretaxTotal($values);
-        $subtotal = $supplement['subtotal'] ?? $preTaxTotal;
-        $profitTotal = $supplement['profit_total'] ?? max($preTaxTotal - $subtotal, 0);
-        $taxTotal = $supplement['tax_total'] ?? $this->parseMoneyToMinor($values[7] ?? null);
-        $total = $supplement['total'] ?? max($preTaxTotal + $taxTotal, 0);
-        $paidValue = $supplement['paid_value'] ?? $this->parseMoneyToMinor($values[10] ?? null);
-        $status = $this->normalizeInvoiceStatus($supplement['status'] ?? ($values[9] ?? null), $paidValue);
+        $hasSupplementFinancials = $this->supplementHasFinancialData($supplement);
+        $mainProjectReference = $this->cleanText($layout->valueAt($values, 'invoice', 'project_reference'));
+        $mainDescription = $this->cleanText($layout->valueAt($values, 'invoice', 'item_description'));
+
+        $invoicePreTax = $this->deriveInvoicePretaxTotal($values);
+        $invoiceTax = $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'tax_total'));
+        $invoiceTotal = $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'total'));
+
+        if ($invoiceTotal <= 0 && $invoicePreTax > 0 && $invoiceTax > 0) {
+            $invoiceTotal = $invoicePreTax + $invoiceTax;
+        }
+
+        $preTaxTotal = $this->firstPositive(
+            $hasSupplementFinancials ? ($supplement['pre_tax_total'] ?? 0) : 0,
+            $invoicePreTax,
+        );
+
+        $taxTotal = $this->firstPositive(
+            $hasSupplementFinancials ? ($supplement['tax_total'] ?? 0) : 0,
+            $invoiceTax,
+        );
+
+        $total = $this->firstPositive(
+            $hasSupplementFinancials ? ($supplement['total'] ?? 0) : 0,
+            $invoiceTotal > 0 ? $invoiceTotal : max($preTaxTotal + $taxTotal, 0),
+        );
+
+        [$subtotal, $profitTotal] = $this->deriveSubtotalAndProfit(
+            supplement: $supplement,
+            hasSupplementFinancials: $hasSupplementFinancials,
+            values: $values,
+            preTaxTotal: $preTaxTotal,
+        );
+
+        $paidValue = $this->firstPositive(
+            $hasSupplementFinancials ? ($supplement['paid_value'] ?? 0) : 0,
+            $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'paid_value')),
+        );
+
+        $status = $this->normalizeInvoiceStatus(
+            $this->resolveImportStatus($supplement, $values, $hasSupplementFinancials),
+            $paidValue,
+        );
+
         $profitRate = $subtotal > 0 && $profitTotal > 0
             ? (int) round(($profitTotal / $subtotal) * 100 * 10000)
             : 0;
 
+        $projectReference = $mainProjectReference
+            ?: $this->cleanText($supplement['project_reference'] ?? null)
+            ?: $this->cleanText($supplement['contract'] ?? null);
+
         return [
             'invoice_number' => $invoiceNumber,
-            'date' => $supplement['date'] ?? $this->parseDate($values[1] ?? null),
-            'due_date' => $supplement['due_date'] ?? ($supplement['date'] ?? $this->parseDate($values[1] ?? null)),
-            'project_reference' => $mainProjectReference ?: $this->cleanText($supplement['project_reference'] ?? null),
+            'date' => $this->parseDate($supplement['date'] ?? null)
+                ?? $this->parseDate($layout->valueAt($values, 'invoice', 'date')),
+            'due_date' => $this->parseDate($supplement['due_date'] ?? null)
+                ?? $this->parseDate($supplement['date'] ?? null)
+                ?? $this->parseDate($layout->valueAt($values, 'invoice', 'date')),
+            'project_reference' => $projectReference,
             'item_description' => $mainDescription ?: $this->cleanText($supplement['item_description'] ?? null),
             'subtotal' => $subtotal,
             'profit_total' => $profitTotal,
@@ -507,11 +683,53 @@ class LegacyProjectInvoiceImportService
             'total' => $total,
             'status' => $status,
             'paid_value' => $paidValue,
-            'tax_number' => $this->cleanText($supplement['tax_number'] ?? null),
-            'pph23' => $status === InvoiceStatus::Paid && $preTaxTotal > $paidValue && $paidValue > 0
-                ? $preTaxTotal - $paidValue
-                : null,
+            'tax_number' => $this->cleanText($supplement['tax_number'] ?? null)
+                ?: $this->cleanText($layout->valueAt($values, 'invoice', 'tax_number')),
+            'pekerjaan_hint' => $this->cleanText($supplement['pekerjaan'] ?? null),
+            'pph23' => $this->deriveImportedPph23(
+                status: $status,
+                preTaxTotal: $preTaxTotal,
+                paidValue: $paidValue,
+                subtotal: $subtotal,
+                profitTotal: $profitTotal,
+                total: $total,
+            ),
         ];
+    }
+
+    protected function deriveImportedPph23(
+        InvoiceStatus $status,
+        int $preTaxTotal,
+        int $paidValue,
+        int $subtotal,
+        int $profitTotal,
+        int $total,
+    ): ?int {
+        if ($status !== InvoiceStatus::Paid) {
+            return null;
+        }
+
+        if ($paidValue > 0 && $preTaxTotal > $paidValue) {
+            return $preTaxTotal - $paidValue;
+        }
+
+        if (! $this->legacyImportInvoiceQualifiesAsWapu($total)) {
+            return null;
+        }
+
+        $base = $subtotal + $profitTotal;
+
+        if ($base <= 0) {
+            return null;
+        }
+
+        return (int) round($base * 0.02);
+    }
+
+    protected function legacyImportInvoiceQualifiesAsWapu(int $total): bool
+    {
+        return $total > 1_000_000_000
+            && Adjustment::companyHasPpnWapu($this->companyId);
     }
 
     protected function recordImportedPaidPayment(Invoice $invoice, int $amount, ?string $postedAt, ?int $pph23): void
@@ -519,6 +737,18 @@ class LegacyProjectInvoiceImportService
         if ($amount <= 0) {
             return;
         }
+
+        if ($pph23 !== null && (int) $invoice->pph23 !== $pph23) {
+            $invoice->forceFill([
+                'pph23' => $pph23,
+                'updated_by' => $this->actorId,
+                'updated_at' => $this->dateTimeOrNow($postedAt),
+                'is_imported' => true,
+            ])->saveQuietly();
+        }
+
+        app(LegacyImportedInvoiceJournalService::class)
+            ->preparePaidInvoiceForLegacyImport($invoice);
 
         $invoice->forceFill([
             'actual_total' => $amount,
@@ -556,15 +786,22 @@ class LegacyProjectInvoiceImportService
             return null;
         }
 
-        $invoiceNumber = $this->normalizeDocumentNumber(($values[4] ?? null) ?: ($values[20] ?? null));
+        $layout = $this->layout();
+        $invoiceNumber = $this->normalizeDocumentNumber(
+            ($layout->valueAt($values, 'supplement', 'invoice_number') ?: null)
+            ?: ($layout->valueAt($values, 'supplement', 'invoice_number_alt') ?: null)
+        );
 
         if (! $invoiceNumber) {
             return null;
         }
 
-        $nominalInvoice = $this->parseMoneyToMinor($values[10] ?? null);
-        $baseOrProfit = $this->parseMoneyToMinor($values[11] ?? null);
-        $preTaxTotal = $this->parseMoneyToMinor(($values[12] ?? null) ?: ($values[10] ?? null));
+        $nominalInvoice = $this->parseMoneyToMinor($layout->valueAt($values, 'supplement', 'nominal_invoice'));
+        $baseOrProfit = $this->parseMoneyToMinor($layout->valueAt($values, 'supplement', 'profit'));
+        $preTaxTotal = $this->parseMoneyToMinor(
+            ($layout->valueAt($values, 'supplement', 'pre_tax_total') ?: null)
+            ?: ($layout->valueAt($values, 'supplement', 'nominal_invoice') ?: null)
+        );
 
         [$subtotal, $profitTotal] = $this->deriveSubtotalAndProfitFromSupplement(
             nominalInvoice: $nominalInvoice,
@@ -572,20 +809,25 @@ class LegacyProjectInvoiceImportService
             preTaxTotal: $preTaxTotal,
         );
 
+        $contract = $this->cleanText($layout->valueAt($values, 'supplement', 'contract'));
+        $projectReference = $this->cleanText($layout->valueAt($values, 'supplement', 'project_reference')) ?: $contract;
+
         return [
             'invoice_number' => $invoiceNumber,
-            'date' => $this->parseDate($values[5] ?? null),
-            'due_date' => $this->parseDate($values[15] ?? null),
-            'project_reference' => $this->cleanText($values[8] ?? null),
-            'item_description' => $this->cleanText($values[9] ?? null),
+            'date' => $this->parseDate($layout->valueAt($values, 'supplement', 'date')),
+            'due_date' => $this->parseDate($layout->valueAt($values, 'supplement', 'due_date')),
+            'contract' => $contract,
+            'pekerjaan' => $this->cleanText($layout->valueAt($values, 'supplement', 'pekerjaan')),
+            'project_reference' => $projectReference,
+            'item_description' => $this->cleanText($layout->valueAt($values, 'supplement', 'item_description')),
             'pre_tax_total' => $preTaxTotal,
             'subtotal' => $subtotal,
             'profit_total' => $profitTotal,
-            'tax_total' => $this->parseMoneyToMinor($values[13] ?? null),
-            'total' => $this->parseMoneyToMinor($values[14] ?? null),
-            'status' => $this->cleanText($values[19] ?? null),
-            'paid_value' => $this->parseMoneyToMinor($values[21] ?? null),
-            'tax_number' => $this->cleanText($values[18] ?? null),
+            'tax_total' => $this->parseMoneyToMinor($layout->valueAt($values, 'supplement', 'tax_total')),
+            'total' => $this->parseMoneyToMinor($layout->valueAt($values, 'supplement', 'total')),
+            'status' => $this->cleanText($layout->valueAt($values, 'supplement', 'status')),
+            'paid_value' => $this->parseMoneyToMinor($layout->valueAt($values, 'supplement', 'paid_value')),
+            'tax_number' => $this->cleanText($layout->valueAt($values, 'supplement', 'tax_number')),
         ];
     }
 
@@ -608,14 +850,119 @@ class LegacyProjectInvoiceImportService
 
     protected function deriveInvoicePretaxTotal(array $values): int
     {
-        $total = $this->parseMoneyToMinor($values[8] ?? null);
-        $tax = $this->parseMoneyToMinor($values[7] ?? null);
+        $layout = $this->layout();
+        $total = $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'total'));
+        $tax = $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'tax_total'));
+        $profit = $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'profit'));
+        $dpp = $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'dpp'));
 
-        if ($total > 0 && $tax >= 0) {
+        if ($total > 0 && $tax > 0) {
             return max($total - $tax, 0);
         }
 
-        return $this->parseMoneyToMinor(($values[6] ?? null) ?: ($values[5] ?? null));
+        if ($dpp > 0 && $profit > 0) {
+            return $dpp + $profit;
+        }
+
+        if ($profit > 0 && $total > 0) {
+            return max($total - $tax, $profit);
+        }
+
+        return $this->firstPositive($dpp, $profit);
+    }
+
+    protected function deriveSubtotalAndProfit(
+        array $supplement,
+        bool $hasSupplementFinancials,
+        array $values,
+        int $preTaxTotal,
+    ): array {
+        if ($hasSupplementFinancials && ($supplement['subtotal'] ?? 0) > 0) {
+            return [
+                $supplement['subtotal'],
+                ($supplement['profit_total'] ?? 0) > 0
+                    ? $supplement['profit_total']
+                    : max($preTaxTotal - $supplement['subtotal'], 0),
+            ];
+        }
+
+        if ($hasSupplementFinancials && ($supplement['profit_total'] ?? 0) > 0 && $preTaxTotal > 0) {
+            return [
+                max($preTaxTotal - $supplement['profit_total'], 0),
+                $supplement['profit_total'],
+            ];
+        }
+
+        $dpp = $this->parseMoneyToMinor($this->layout()->valueAt($values, 'invoice', 'dpp'));
+        $profit = $this->parseMoneyToMinor($this->layout()->valueAt($values, 'invoice', 'profit'));
+
+        if ($dpp > 0) {
+            return [$dpp, $profit > 0 ? $profit : max($preTaxTotal - $dpp, 0)];
+        }
+
+        if ($profit > 0 && $preTaxTotal > 0) {
+            return [max($preTaxTotal - $profit, 0), $profit];
+        }
+
+        return [$preTaxTotal, 0];
+    }
+
+    protected function supplementHasFinancialData(array $supplement): bool
+    {
+        if ($supplement === []) {
+            return false;
+        }
+
+        return ($supplement['pre_tax_total'] ?? 0) > 0
+            || ($supplement['subtotal'] ?? 0) > 0
+            || ($supplement['profit_total'] ?? 0) > 0
+            || ($supplement['tax_total'] ?? 0) > 0
+            || ($supplement['total'] ?? 0) > 0
+            || ($supplement['paid_value'] ?? 0) > 0;
+    }
+
+    protected function resolveImportStatus(array $supplement, array $values, bool $hasSupplementFinancials): mixed
+    {
+        $invoiceStatus = $this->layout()->valueAt($values, 'invoice', 'status');
+        $supplementStatus = $supplement['status'] ?? null;
+
+        if ($hasSupplementFinancials && $this->isMeaningfulStatus($supplementStatus)) {
+            return $supplementStatus;
+        }
+
+        if ($this->isMeaningfulStatus($invoiceStatus)) {
+            return $invoiceStatus;
+        }
+
+        if (! $hasSupplementFinancials && $this->isCancelledStatus($supplementStatus)) {
+            return $supplementStatus;
+        }
+
+        return $invoiceStatus ?? $supplementStatus;
+    }
+
+    protected function isMeaningfulStatus(mixed $status): bool
+    {
+        $normalized = strtoupper(trim((string) $status));
+
+        return $normalized !== ''
+            && ! in_array($normalized, ['#N/A', 'N/A', '#REF!', 'REF!', '0', '-', 'NULL'], true);
+    }
+
+    protected function isCancelledStatus(mixed $status): bool
+    {
+        return strtoupper(trim((string) $status)) === 'BATAL';
+    }
+
+    protected function firstPositive(int ...$candidates): int
+    {
+        foreach ($candidates as $value) {
+            if ($value > 0) {
+                return $value;
+            }
+        }
+
+        return 0;
     }
 
     protected function normalizeInvoiceStatus(mixed $rawStatus, int $paidValue): InvoiceStatus
@@ -724,6 +1071,12 @@ class LegacyProjectInvoiceImportService
             }
         }
 
+        foreach ($this->workBasisAliases($reference) as $alias) {
+            if (isset($this->workBasisMap[$alias])) {
+                return $this->workBasisMap[$alias];
+            }
+        }
+
         $query = Project::query()
             ->where('company_id', $this->companyId);
 
@@ -743,8 +1096,34 @@ class LegacyProjectInvoiceImportService
                     ->orWhere('number', 'like', "{$prefix}%-{$suffix}")
                     ->orWhere('number', 'like', "{$prefix}{$suffix}");
             });
+        } elseif (preg_match('/^([A-Z]+)(\d{2})-(\d{3})$/', $normalized, $matches)) {
+            $prefix = $matches[1];
+            $referenceYear = $matches[2];
+            $suffix = $matches[3];
+            $invoiceYear = $invoiceDate ? Carbon::parse($invoiceDate)->format('y') : null;
+
+            $query->where(function ($subQuery) use ($prefix, $referenceYear, $suffix, $invoiceYear): void {
+                $subQuery->orWhere('number', "{$prefix}{$referenceYear}-{$suffix}");
+
+                if ($invoiceYear && $invoiceYear !== $referenceYear) {
+                    $subQuery->orWhere('number', "{$prefix}{$invoiceYear}-{$suffix}");
+                }
+
+                $subQuery->orWhere('number', 'like', "{$prefix}%-{$suffix}");
+            });
+        } elseif ($this->looksLikeContractReference($reference)) {
+            $query->where(function ($subQuery) use ($reference): void {
+                $subQuery
+                    ->orWhere('work_basis', $reference)
+                    ->orWhere('work_basis', 'like', '%' . $reference . '%')
+                    ->orWhere('number', $reference);
+            });
         } else {
-            $query->where('number', $reference);
+            $query->where(function ($subQuery) use ($reference): void {
+                $subQuery
+                    ->orWhere('number', $reference)
+                    ->orWhere('work_basis', $reference);
+            });
         }
 
         $project = $query->orderByDesc('id')->first();
@@ -754,6 +1133,274 @@ class LegacyProjectInvoiceImportService
         }
 
         return $project;
+    }
+
+    protected function createLegacyProjectStubForInvoice(array $invoiceData): ?Project
+    {
+        $reference = $this->cleanText($invoiceData['project_reference'] ?? null);
+
+        if (! $reference) {
+            return null;
+        }
+
+        $projectType = $this->resolveProjectTypeByNameHint($invoiceData['pekerjaan_hint'] ?? null)
+            ?? $this->resolveProjectTypeFromReference($reference);
+
+        if (! $projectType) {
+            return null;
+        }
+
+        $client = Client::query()
+            ->where('company_id', $this->companyId)
+            ->orderBy('id')
+            ->first();
+
+        if (! $client) {
+            $client = Client::query()->create([
+                'company_id' => $this->companyId,
+                'name' => 'Legacy Import Client',
+                'currency_code' => 'IDR',
+                'created_by' => $this->actorId,
+                'updated_by' => $this->actorId,
+            ]);
+        }
+
+        $legacyTimestamp = $this->legacyCreatedAt($invoiceData['date'] ?? null);
+        $description = $this->cleanText($invoiceData['item_description'] ?? null);
+        $isContractReference = $this->looksLikeContractReference($reference);
+        $projectNumber = $isContractReference
+            ? $this->buildContractStubProjectNumber($projectType, $reference, $invoiceData['date'] ?? null)
+            : strtoupper($reference);
+
+        $project = new Project();
+        $project->forceFill([
+            'company_id' => $this->companyId,
+            'project_type_id' => $projectType->id,
+            'client_id' => $client->id,
+            'pic_id' => $this->actorId,
+            'number' => $projectNumber,
+            'name' => $description ?: $this->buildLegacyProjectName($projectNumber),
+            'description' => $description,
+            'request_number_date' => $invoiceData['date'] ?? null,
+            'start_date' => $invoiceData['date'] ?? null,
+            'work_basis' => $isContractReference ? $reference : null,
+            'status' => ProjectStatus::Approved,
+            'is_imported' => true,
+            'created_at' => $legacyTimestamp,
+            'updated_at' => $legacyTimestamp,
+        ]);
+        $project->saveQuietly();
+
+        $this->registerProjectReference($project);
+        $this->summary['projects']['stubbed']++;
+
+        return $project;
+    }
+
+    protected function resolveProjectTypeFromReference(string $reference): ?ProjectType
+    {
+        $reference = strtoupper(str_replace(["\n", "\r", ' '], '', $reference));
+
+        if (preg_match('/^([A-Z]+)/', $reference, $matches)) {
+            $type = $this->resolveProjectTypeByCodePrefix($matches[1]);
+
+            if ($type) {
+                return $type;
+            }
+        }
+
+        if ($this->looksLikeContractReference($reference)) {
+            return null;
+        }
+
+        return null;
+    }
+
+    protected function resolveProjectTypeForSheet(string $sheetSuffix, array $rows): ?ProjectType
+    {
+        $types = $this->getCompanyProjectTypes();
+
+        foreach ($types as $type) {
+            if (strcasecmp($type->name, $sheetSuffix) === 0) {
+                return $type;
+            }
+        }
+
+        foreach ($types as $type) {
+            if (str_contains(strtolower($type->name), strtolower($sheetSuffix))
+                || str_contains(strtolower($sheetSuffix), strtolower($type->name))) {
+                return $type;
+            }
+        }
+
+        $aliases = [
+            'EO' => ['event organizer', 'eo'],
+            'Pengadaan' => ['pengadaan barang', 'pengadaan'],
+            'Survey' => ['survey'],
+            'Tenaga Kerja' => ['tenaga kerja'],
+        ];
+
+        foreach ($aliases[$sheetSuffix] ?? [strtolower($sheetSuffix)] as $alias) {
+            foreach ($types as $type) {
+                if (str_contains(strtolower($type->name), $alias)) {
+                    return $type;
+                }
+            }
+        }
+
+        foreach ($rows as $row) {
+            $values = $row['values'] ?? [];
+            $prefix = $this->cleanText($values[2] ?? null);
+            $number = $this->buildProjectNumber($values[2] ?? null, $values[4] ?? null);
+
+            foreach ([$prefix, $number] as $candidate) {
+                if (! $candidate) {
+                    continue;
+                }
+
+                $normalized = strtoupper(str_replace([' ', '-'], '', $candidate));
+
+                if (preg_match('/^([A-Z]+)/', $normalized, $matches)) {
+                    $type = $this->resolveProjectTypeByCodePrefix($matches[1]);
+
+                    if ($type) {
+                        return $type;
+                    }
+                }
+            }
+        }
+
+        return count($types) === 1 ? $types[0] : null;
+    }
+
+    protected function resolveProjectTypeByNameHint(?string $hint): ?ProjectType
+    {
+        $hint = $this->cleanText($hint);
+
+        if (! $hint) {
+            return null;
+        }
+
+        $types = $this->getCompanyProjectTypes();
+        $normalizedHint = strtolower($hint);
+
+        foreach ($types as $type) {
+            if (strtolower($type->name) === $normalizedHint) {
+                return $type;
+            }
+        }
+
+        foreach ($types as $type) {
+            if (str_contains(strtolower($type->name), $normalizedHint)
+                || str_contains($normalizedHint, strtolower($type->name))) {
+                return $type;
+            }
+        }
+
+        foreach ($types as $type) {
+            if ($type->code && str_contains($normalizedHint, strtolower($type->code))) {
+                return $type;
+            }
+        }
+
+        return null;
+    }
+
+    protected function resolveProjectTypeByCodePrefix(string $prefix): ?ProjectType
+    {
+        $prefix = strtoupper($prefix);
+        $types = $this->getCompanyProjectTypes();
+
+        usort($types, fn (ProjectType $a, ProjectType $b) => strlen((string) $b->code) <=> strlen((string) $a->code));
+
+        foreach ($types as $type) {
+            $code = strtoupper((string) $type->code);
+
+            if ($code !== '' && str_starts_with($prefix, $code)) {
+                return $type;
+            }
+        }
+
+        $legacyPrefixToTypeCode = [
+            'PG' => 'EO',
+        ];
+
+        if (isset($legacyPrefixToTypeCode[$prefix])) {
+            foreach ($types as $type) {
+                if (strtoupper((string) $type->code) === $legacyPrefixToTypeCode[$prefix]) {
+                    return $type;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<int, ProjectType>
+     */
+    protected function getCompanyProjectTypes(): array
+    {
+        if ($this->companyProjectTypes !== null) {
+            return $this->companyProjectTypes;
+        }
+
+        $this->companyProjectTypes = ProjectType::query()
+            ->where('company_id', $this->companyId)
+            ->orderBy('id')
+            ->get()
+            ->all();
+
+        return $this->companyProjectTypes;
+    }
+
+    protected function buildContractStubProjectNumber(ProjectType $projectType, string $contract, ?string $invoiceDate): string
+    {
+        $existing = Project::query()
+            ->where('company_id', $this->companyId)
+            ->where('work_basis', $contract)
+            ->value('number');
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $existingByNumber = Project::query()
+            ->where('company_id', $this->companyId)
+            ->where('number', $contract)
+            ->exists();
+
+        if (! $existingByNumber) {
+            return $contract;
+        }
+
+        $year = $invoiceDate ? Carbon::parse($invoiceDate)->format('y') : now()->format('y');
+        $code = strtoupper((string) ($projectType->code ?: 'LEG'));
+        $this->stubSequence++;
+
+        return sprintf('%s%s-STB%03d', $code, $year, $this->stubSequence);
+    }
+
+    protected function looksLikeContractReference(string $reference): bool
+    {
+        $reference = trim($reference);
+
+        return $reference !== ''
+            && preg_match('/^\d{6,}$/', $reference);
+    }
+
+    protected function workBasisAliases(string $reference): array
+    {
+        $reference = trim($reference);
+
+        if ($reference === '') {
+            return [];
+        }
+
+        return array_values(array_unique([
+            $reference,
+            preg_replace('/\D/', '', $reference) ?? $reference,
+        ]));
     }
 
     protected function resolveDefaultOffering(): Offering
@@ -872,6 +1519,12 @@ class LegacyProjectInvoiceImportService
         foreach ($this->projectReferenceAliases($project->number) as $alias) {
             $this->projectReferenceMap[$alias] = $project;
         }
+
+        if ($project->work_basis) {
+            foreach ($this->workBasisAliases($project->work_basis) as $alias) {
+                $this->workBasisMap[$alias] = $project;
+            }
+        }
     }
 
     protected function projectReferenceAliases(string $reference, ?string $invoiceDate = null): array
@@ -948,7 +1601,23 @@ class LegacyProjectInvoiceImportService
         }
 
         if ($value instanceof Carbon) {
-            return $value->toDateString();
+            return $this->formatLegacyDate($value);
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return $this->formatLegacyDate(Carbon::instance($value));
+        }
+
+        if (is_int($value) || is_float($value) || (is_string($value) && is_numeric(trim($value)))) {
+            $serial = (float) $value;
+
+            if ($serial >= 20_000 && $serial <= 70_000) {
+                try {
+                    return $this->formatLegacyDate(Carbon::instance(ExcelDate::excelToDateTimeObject($serial)));
+                } catch (Throwable) {
+                    // Fall through to string parsing.
+                }
+            }
         }
 
         $value = trim((string) $value);
@@ -957,24 +1626,105 @@ class LegacyProjectInvoiceImportService
             return null;
         }
 
-        $formats = ['Y-m-d', 'd/m/Y', 'd/m/y', 'd-m-Y', 'm/d/Y'];
+        $value = $this->normalizeIndonesianDateString($value);
+
+        // 2-digit year formats must be tried before 4-digit (Y) to avoid 06/01/25 → 0025-01-06.
+        $formats = [
+            'Y-m-d',
+            'd/m/y',
+            'd-m-y',
+            'd-M-y',
+            'd-M-Y',
+            'j M Y',
+            'j M y',
+            'd/m/Y',
+            'd-m-Y',
+            'm/d/y',
+            'm/d/Y',
+        ];
 
         foreach ($formats as $format) {
             try {
-                return Carbon::createFromFormat($format, $value)->toDateString();
+                $parsed = Carbon::createFromFormat($format, $value);
+
+                if ($parsed !== false) {
+                    $formatted = $this->formatLegacyDate($parsed);
+
+                    if ($formatted !== null) {
+                        return $formatted;
+                    }
+                }
             } catch (Throwable) {
                 // Try the next format.
             }
         }
 
         try {
-            return Carbon::parse($value)->toDateString();
+            return $this->formatLegacyDate(Carbon::parse($value));
         } catch (Throwable) {
             return null;
         }
     }
 
+    protected function normalizeIndonesianDateString(string $value): string
+    {
+        $replacements = [
+            'januari' => 'January',
+            'februari' => 'February',
+            'maret' => 'March',
+            'april' => 'April',
+            'mei' => 'May',
+            'juni' => 'June',
+            'juli' => 'July',
+            'agustus' => 'August',
+            'september' => 'September',
+            'oktober' => 'October',
+            'november' => 'November',
+            'desember' => 'December',
+            'okt' => 'Oct',
+            'nov' => 'Nov',
+            'des' => 'Dec',
+        ];
+
+        $normalized = $value;
+
+        foreach ($replacements as $from => $to) {
+            $normalized = preg_replace('/\b' . preg_quote($from, '/') . '\b/iu', $to, $normalized) ?? $normalized;
+        }
+
+        // Common Excel typo: "1 Nov 0256" should be 2025.
+        $normalized = preg_replace('/\b0256\b/', '2025', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\b0255\b/', '2025', $normalized) ?? $normalized;
+
+        return trim($normalized);
+    }
+
+    protected function formatLegacyDate(Carbon $date): ?string
+    {
+        $normalized = $this->normalizeLegacyDate($date->copy());
+
+        if ($normalized->year < 1990 || $normalized->year > 2035) {
+            return null;
+        }
+
+        return $normalized->toDateString();
+    }
+
+    protected function normalizeLegacyDate(Carbon $date): Carbon
+    {
+        if ($date->year < 1900) {
+            $date->year = 2000 + ($date->year % 100);
+        }
+
+        return $date;
+    }
+
     protected function parseMoneyToMinor(mixed $value): int
+    {
+        return $this->parseMoneyMajorUnits($value) * $this->moneySubunit();
+    }
+
+    protected function parseMoneyMajorUnits(mixed $value): int
     {
         if ($value === null) {
             return 0;
@@ -1004,21 +1754,26 @@ class LegacyProjectInvoiceImportService
         }
 
         if (preg_match('/^\d{1,3}([.,]\d{3})+$/', $numeric)) {
-            $minor = (int) preg_replace('/[.,]/', '', $numeric);
+            $major = (int) preg_replace('/[.,]/', '', $numeric);
 
-            return $negative ? -$minor : $minor;
+            return $negative ? -$major : $major;
         }
 
         if (preg_match('/^\d+[.,]\d{1,2}$/', $numeric)) {
             $decimal = (float) str_replace(',', '.', $numeric);
-            $minor = (int) round($decimal);
+            $major = (int) round($decimal);
 
-            return $negative ? -$minor : $minor;
+            return $negative ? -$major : $major;
         }
 
-        $minor = (int) preg_replace('/\D/', '', $numeric);
+        $major = (int) preg_replace('/\D/', '', $numeric);
 
-        return $negative ? -abs($minor) : $minor;
+        return $negative ? -abs($major) : $major;
+    }
+
+    protected function moneySubunit(): int
+    {
+        return (int) (config('money.currencies.IDR.subunit') ?? 100);
     }
 
     protected function cleanText(mixed $value): ?string

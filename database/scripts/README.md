@@ -1,5 +1,30 @@
 # Excel Multi-Sheet Migration Tool
 
+> **DEPRECATED** — Script Python ini **tidak lagi digunakan** untuk import invoice.
+> Import invoice legacy harus melalui Laravel agar jurnal akuntansi (approval + payment) ter-generate dengan benar.
+
+## Jalur import resmi
+
+```bash
+# Via UI: Projects → Import Legacy Project & Invoice
+
+# Via CLI (re-import / perbaikan data):
+php artisan legacy:reimport-invoices {companyId} \
+  --file="Copy File of Master Project & Invoice - kpg(1).xlsx" \
+  --only-broken
+
+# Preview tanpa perubahan:
+php artisan legacy:reimport-invoices {companyId} --file="..." --dry-run
+```
+
+## Mengapa script ini deprecated?
+
+- Insert SQL langsung ke `invoices` **tanpa** jurnal approval/payment
+- Mengalikan nominal `* 100` (salah — sistem menyimpan whole rupiah)
+- Tidak compatible dengan model invoice + accounting saat ini
+
+---
+
 A lightweight tool for migrating multi-sheet Excel data (with specific naming patterns) into a MySQL database. Supports sheet order control, dynamic mapping, and validation.
 
 ## 🚀 Features

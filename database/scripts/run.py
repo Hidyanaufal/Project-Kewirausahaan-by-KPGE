@@ -10,6 +10,17 @@ from utils.helpers import clean_value
 from colorama import init, Fore, Style
 init(autoreset=True)
 
+print(Fore.RED + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print(Fore.RED + "  DEPRECATED — Jangan gunakan script ini untuk import invoice.")
+print(Fore.RED + "  Gunakan: php artisan legacy:reimport-invoices {companyId} --file=...")
+print(Fore.RED + "  Atau UI: Projects → Import Legacy Project & Invoice")
+print(Fore.RED + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + Style.RESET_ALL)
+
+confirm = input(Fore.YELLOW + "Lanjutkan anyway? (yes/no): " + Style.RESET_ALL).strip().lower()
+if confirm not in ("yes", "y"):
+    print(Fore.CYAN + "Dibatalkan." + Style.RESET_ALL)
+    exit(0)
+
 load_dotenv()
 
 CREATED_BY = int(os.getenv("CREATED_BY"))
