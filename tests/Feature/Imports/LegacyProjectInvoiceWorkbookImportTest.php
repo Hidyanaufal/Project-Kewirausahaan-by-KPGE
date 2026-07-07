@@ -79,8 +79,8 @@ it('imports legacy workbook into approved projects and invoice final states', fu
         ->and($paidInvoice->approvalTransaction)->not->toBeNull()
         ->and($paidInvoice->payments()->count())->toBe(1)
         ->and($paidInvoice->project?->number)->toBe('EO26-001')
-        ->and($paidInvoice->subtotal)->toBe(9_020_000_000)
-        ->and($paidInvoice->profit_total)->toBe(902_000_000)
+        ->and($paidInvoice->subtotal)->toBe(902_000_000)
+        ->and($paidInvoice->profit_total)->toBe(9_020_000_000)
         ->and($paidInvoice->tax_total)->toBe(1_091_420_000)
         ->and($paidInvoice->total)->toBe(11_013_420_000)
         ->and($paidInvoice->actual_total)->toBe(9_723_560_000)
@@ -438,6 +438,64 @@ function ensureLegacyInvoiceImportDefaultsForCompany(int $companyId): void
             'key' => $key,
         ]);
     }
+}
+
+it('prefers invoice sheet financials over supplement when both are present', function () {
+    $workbookPath = sys_get_temp_dir() . '/legacy-import-invoice-sheet-priority-' . uniqid() . '.xlsx';
+    createShiftedInvoiceSheetPriorityWorkbook($workbookPath);
+
+    Project::query()->create([
+        'company_id' => $this->testCompany->id,
+        'project_type_id' => ProjectType::query()->where('name', 'EO')->value('id'),
+        'client_id' => \App\Models\Common\Client::factory()->create(['company_id' => $this->testCompany->id])->id,
+        'pic_id' => $this->testUser->id,
+        'number' => 'EO25-143',
+        'name' => 'Legacy EO Project 143',
+        'status' => \App\Enums\Addons\ProjectStatus::Approved,
+        'is_imported' => true,
+    ]);
+
+    $importer = new LegacyProjectInvoiceWorkbookImport(
+        companyId: $this->testCompany->id,
+        actorId: $this->testUser->id,
+    );
+
+    $importer->importFile($workbookPath);
+    @unlink($workbookPath);
+
+    $invoice = Invoice::query()->where('invoice_number', 'PG25-160')->firstOrFail();
+
+    expect($invoice->total)->toBe(3_370_018_200)
+        ->and($invoice->tax_total)->toBe(333_965_800)
+        ->and($invoice->actual_total)->toBe(2_975_331_400);
+});
+
+function createShiftedInvoiceSheetPriorityWorkbook(string $path): void
+{
+    $spreadsheet = new Spreadsheet;
+
+    $invoice = $spreadsheet->getActiveSheet();
+    $invoice->setTitle('Invoice');
+    $invoice->fromArray([
+        ['Nomor Invoice', '', 'Nomor Projek', 'Nomor Faktur', 'Offering Item', 'DPP', 'Profit', 'PPN', 'Total Setelah PPN', 'Status Bayar', 'Nilai Invoice yang dibayar'],
+        ['', '2/7/2025', 'PG25-160', 'EO25-143', 'PENERBITAN SERTIFIKAT PENDAFTARAN MEREK FLOW2MAX', '', '212', '3,339,658', '33,700,182', 'PAID', '29,753,314'],
+    ]);
+
+    $supplement = new Worksheet($spreadsheet, 't');
+    $spreadsheet->addSheet($supplement);
+    $supplement->fromArray([
+        ['Bulan', 'Huruf', '', 'No Urut', 'No Invoice', 'Tanggal', 'No.Kontrak / SPK', 'PT', 'NO EO ', 'Judul Invoice', 'Nominal Invoice', 'Profit', 'Total stlh Profit', 'PPN', 'Total stlh PPN', 'Jatuh Tempo', 'POSISI Terakhir', 'PIC KPG', 'NO FAKTUR', 'Status Bayar', 'No Invoice', 'Nilai Invoice yang dibayar'],
+        ['Juli', 'PG25-', '', '160', 'PG25-160', '2025-07-02', '', 'PGE', 'EO25-143', 'PENERBITAN SERTIFIKAT PENDAFTARAN MEREK FLOW2MAX', '1,765,000', '211,800', '1,976,800', '217,448', '2,194,248', '', '', 'ALIF', '', 'PAID', 'PG25-160', '2,154,712'],
+    ]);
+
+    $projectEo = new Worksheet($spreadsheet, 'Project-EO');
+    $spreadsheet->addSheet($projectEo);
+    $projectEo->fromArray([
+        ['Nama Projek', 'Tanggal Permintaan', 'Nomor Prefix', 'Nomor Registrasi', 'Nomor Projek'],
+        ['FLOW2MAX', '01/07/2025', 'EO25-', '143', '143'],
+    ]);
+
+    (new Xlsx($spreadsheet))->save($path);
 }
 
 function createLegacyWorkbook(string $path): void

@@ -15,6 +15,22 @@ php artisan legacy:reimport-invoices {companyId} \
 
 # Preview tanpa perubahan:
 php artisan legacy:reimport-invoices {companyId} --file="..." --dry-run
+
+# Audit selisih sheet Invoice vs supplement (t):
+php artisan legacy:invoice-sheet-mismatch audit \
+  --file="Copy File of Master Project & Invoice - kpg(1).xlsx" \
+  --company={companyId}
+
+# Perbaiki sheet Invoice di Excel agar cocok dengan supplement:
+php artisan legacy:invoice-sheet-mismatch fix-excel \
+  --file="Copy File of Master Project & Invoice - kpg(1).xlsx" \
+  --output="Copy File of Master Project & Invoice - kpg(1)-fixed.xlsx"
+
+# Re-import invoice DB yang totalnya tidak cocok dengan supplement:
+php artisan legacy:invoice-sheet-mismatch fix-db \
+  --file="Copy File of Master Project & Invoice - kpg(1).xlsx" \
+  --company={companyId} \
+  --dry-run
 ```
 
 ## Mengapa script ini deprecated?

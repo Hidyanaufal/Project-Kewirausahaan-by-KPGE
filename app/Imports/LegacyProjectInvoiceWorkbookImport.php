@@ -18,6 +18,7 @@ class LegacyProjectInvoiceWorkbookImport
         protected int $companyId,
         protected int $actorId,
         protected bool $forceReimport = false,
+        protected bool $preferSupplementFinancials = false,
     ) {}
 
     public function importFile(string $filePath): void
@@ -26,28 +27,7 @@ class LegacyProjectInvoiceWorkbookImport
         session(['current_company_id' => $this->companyId]);
 
         try {
-            $spreadsheet = IOFactory::load($filePath);
-            $service = (new LegacyProjectInvoiceImportService($this->companyId, $this->actorId))
-                ->setForceReimport($this->forceReimport);
-
-            $invoiceSheet = $spreadsheet->getSheetByName('Invoice');
-            $supplementSheet = $spreadsheet->getSheetByName('t');
-
-            $invoiceHeader = $invoiceSheet ? $this->extractHeaderRow($invoiceSheet) : [];
-            $invoiceSampleRows = $invoiceSheet ? array_slice($this->extractRows($invoiceSheet), 0, 5) : [];
-            $supplementHeader = $supplementSheet ? $this->extractHeaderRow($supplementSheet) : [];
-
-            $layout = LegacyWorkbookLayout::detect($invoiceHeader, $invoiceSampleRows, $supplementHeader);
-            $service->setWorkbookLayout($layout);
-
-            if ($supplementSheet) {
-                $service->rememberInvoiceSupplementRows($this->extractRows($supplementSheet));
-            }
-
-            $projectSheets = collect($spreadsheet->getSheetNames())
-                ->filter(fn (string $name) => str_starts_with($name, 'Project-'))
-                ->values()
-                ->all();
+            [$service, $invoiceRows, $projectSheets, $spreadsheet] = $this->bootstrapImport($filePath);
 
             if ($projectSheets === []) {
                 $this->missingSheetWarnings[] = "Tidak ada sheet 'Project-*' ditemukan di workbook.";
@@ -58,8 +38,8 @@ class LegacyProjectInvoiceWorkbookImport
                 $service->importProjectSheet($sheetName, $this->extractRows($sheet));
             }
 
-            if ($invoiceSheet) {
-                $service->importInvoiceSheet($this->extractRows($invoiceSheet));
+            if ($invoiceRows !== []) {
+                $service->importInvoiceSheet($invoiceRows);
             } else {
                 $this->missingSheetWarnings[] = "Sheet 'Invoice' tidak ditemukan di workbook.";
             }
@@ -76,6 +56,60 @@ class LegacyProjectInvoiceWorkbookImport
                 session()->forget('current_company_id');
             }
         }
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function previewMappedInvoices(string $filePath): array
+    {
+        [$service, $invoiceRows] = $this->bootstrapImport($filePath);
+        $mappedInvoices = [];
+
+        foreach ($invoiceRows as $row) {
+            $mapped = $service->previewMapInvoiceRow($row['values'] ?? []);
+
+            if (! $mapped || empty($mapped['invoice_number'])) {
+                continue;
+            }
+
+            $mappedInvoices[$mapped['invoice_number']] = $mapped;
+        }
+
+        return $mappedInvoices;
+    }
+
+    /**
+     * @return array{0: LegacyProjectInvoiceImportService, 1: array<int, array<string, mixed>>, 2: array<int, string>, 3: \PhpOffice\PhpSpreadsheet\Spreadsheet}
+     */
+    protected function bootstrapImport(string $filePath): array
+    {
+        $spreadsheet = IOFactory::load($filePath);
+        $service = (new LegacyProjectInvoiceImportService($this->companyId, $this->actorId))
+            ->setForceReimport($this->forceReimport)
+            ->setPreferSupplementFinancials($this->preferSupplementFinancials);
+
+        $invoiceSheet = $spreadsheet->getSheetByName('Invoice');
+        $supplementSheet = $spreadsheet->getSheetByName('t');
+
+        $invoiceHeader = $invoiceSheet ? $this->extractHeaderRow($invoiceSheet) : [];
+        $invoiceRows = $invoiceSheet ? $this->extractRows($invoiceSheet) : [];
+        $invoiceSampleRows = array_slice($invoiceRows, 0, 5);
+        $supplementHeader = $supplementSheet ? $this->extractHeaderRow($supplementSheet) : [];
+
+        $layout = LegacyWorkbookLayout::detect($invoiceHeader, $invoiceSampleRows, $supplementHeader);
+        $service->setWorkbookLayout($layout);
+
+        if ($supplementSheet) {
+            $service->rememberInvoiceSupplementRows($this->extractRows($supplementSheet));
+        }
+
+        $projectSheets = collect($spreadsheet->getSheetNames())
+            ->filter(fn (string $name) => str_starts_with($name, 'Project-'))
+            ->values()
+            ->all();
+
+        return [$service, $invoiceRows, $projectSheets, $spreadsheet];
     }
 
     public function notificationTitle(): string
