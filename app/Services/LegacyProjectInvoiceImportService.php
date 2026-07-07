@@ -49,6 +49,8 @@ class LegacyProjectInvoiceImportService
 
     protected bool $forceReimport = false;
 
+    protected bool $preferSupplementFinancials = false;
+
     protected array $invoiceSupplementRows = [];
 
     protected array $projectReferenceMap = [];
@@ -85,6 +87,13 @@ class LegacyProjectInvoiceImportService
     public function setForceReimport(bool $forceReimport): self
     {
         $this->forceReimport = $forceReimport;
+
+        return $this;
+    }
+
+    public function setPreferSupplementFinancials(bool $preferSupplementFinancials): self
+    {
+        $this->preferSupplementFinancials = $preferSupplementFinancials;
 
         return $this;
     }
@@ -239,6 +248,11 @@ class LegacyProjectInvoiceImportService
                 ]);
             }
         }
+    }
+
+    public function previewMapInvoiceRow(array $values): ?array
+    {
+        return $this->mapInvoiceRow($values);
     }
 
     public function importInvoiceSheet(array $rows): void
@@ -627,31 +641,23 @@ class LegacyProjectInvoiceImportService
             $invoiceTotal = $invoicePreTax + $invoiceTax;
         }
 
-        $preTaxTotal = $this->firstPositive(
-            $hasSupplementFinancials ? ($supplement['pre_tax_total'] ?? 0) : 0,
-            $invoicePreTax,
-        );
+        $invoicePaid = $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'paid_value'));
+        $supplementPreTax = $hasSupplementFinancials ? (int) ($supplement['pre_tax_total'] ?? 0) : 0;
+        $supplementTax = $hasSupplementFinancials ? (int) ($supplement['tax_total'] ?? 0) : 0;
+        $supplementTotal = $hasSupplementFinancials ? (int) ($supplement['total'] ?? 0) : 0;
+        $supplementPaid = $hasSupplementFinancials ? (int) ($supplement['paid_value'] ?? 0) : 0;
+        $derivedInvoiceTotal = $invoiceTotal > 0 ? $invoiceTotal : max($invoicePreTax + $invoiceTax, 0);
 
-        $taxTotal = $this->firstPositive(
-            $hasSupplementFinancials ? ($supplement['tax_total'] ?? 0) : 0,
-            $invoiceTax,
-        );
-
-        $total = $this->firstPositive(
-            $hasSupplementFinancials ? ($supplement['total'] ?? 0) : 0,
-            $invoiceTotal > 0 ? $invoiceTotal : max($preTaxTotal + $taxTotal, 0),
-        );
+        $preTaxTotal = $this->preferFinancialAmount($invoicePreTax, $supplementPreTax, $hasSupplementFinancials);
+        $taxTotal = $this->preferFinancialAmount($invoiceTax, $supplementTax, $hasSupplementFinancials);
+        $total = $this->preferFinancialAmount($derivedInvoiceTotal, $supplementTotal, $hasSupplementFinancials);
+        $paidValue = $this->preferFinancialAmount($invoicePaid, $supplementPaid, $hasSupplementFinancials);
 
         [$subtotal, $profitTotal] = $this->deriveSubtotalAndProfit(
             supplement: $supplement,
             hasSupplementFinancials: $hasSupplementFinancials,
             values: $values,
             preTaxTotal: $preTaxTotal,
-        );
-
-        $paidValue = $this->firstPositive(
-            $hasSupplementFinancials ? ($supplement['paid_value'] ?? 0) : 0,
-            $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'paid_value')),
         );
 
         $status = $this->normalizeInvoiceStatus(
@@ -877,6 +883,19 @@ class LegacyProjectInvoiceImportService
         array $values,
         int $preTaxTotal,
     ): array {
+        $dpp = $this->parseMoneyToMinor($this->layout()->valueAt($values, 'invoice', 'dpp'));
+        $profit = $this->parseMoneyToMinor($this->layout()->valueAt($values, 'invoice', 'profit'));
+
+        if (! $this->preferSupplementFinancials) {
+            if ($dpp > 0) {
+                return [$dpp, $profit > 0 ? $profit : max($preTaxTotal - $dpp, 0)];
+            }
+
+            if ($profit > 0 && $preTaxTotal > 0) {
+                return [max($preTaxTotal - $profit, 0), $profit];
+            }
+        }
+
         if ($hasSupplementFinancials && ($supplement['subtotal'] ?? 0) > 0) {
             return [
                 $supplement['subtotal'],
@@ -893,15 +912,14 @@ class LegacyProjectInvoiceImportService
             ];
         }
 
-        $dpp = $this->parseMoneyToMinor($this->layout()->valueAt($values, 'invoice', 'dpp'));
-        $profit = $this->parseMoneyToMinor($this->layout()->valueAt($values, 'invoice', 'profit'));
+        if ($this->preferSupplementFinancials) {
+            if ($dpp > 0) {
+                return [$dpp, $profit > 0 ? $profit : max($preTaxTotal - $dpp, 0)];
+            }
 
-        if ($dpp > 0) {
-            return [$dpp, $profit > 0 ? $profit : max($preTaxTotal - $dpp, 0)];
-        }
-
-        if ($profit > 0 && $preTaxTotal > 0) {
-            return [max($preTaxTotal - $profit, 0), $profit];
+            if ($profit > 0 && $preTaxTotal > 0) {
+                return [max($preTaxTotal - $profit, 0), $profit];
+            }
         }
 
         return [$preTaxTotal, 0];
@@ -952,6 +970,15 @@ class LegacyProjectInvoiceImportService
     protected function isCancelledStatus(mixed $status): bool
     {
         return strtoupper(trim((string) $status)) === 'BATAL';
+    }
+
+    protected function preferFinancialAmount(int $invoiceAmount, int $supplementAmount, bool $hasSupplementFinancials): int
+    {
+        if ($this->preferSupplementFinancials && $hasSupplementFinancials) {
+            return $this->firstPositive($supplementAmount, $invoiceAmount);
+        }
+
+        return $this->firstPositive($invoiceAmount, $supplementAmount);
     }
 
     protected function firstPositive(int ...$candidates): int
