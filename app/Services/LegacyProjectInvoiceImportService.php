@@ -456,22 +456,6 @@ class LegacyProjectInvoiceImportService
 
         $finalStatus = $data['status'];
 
-        if ($finalStatus === InvoiceStatus::Draft) {
-            $invoice->forceFill([
-                'status' => InvoiceStatus::Draft,
-                'approved_at' => null,
-                'last_sent_at' => null,
-                'paid_at' => null,
-                'amount_paid' => 0,
-                'updated_by' => $this->actorId,
-                'updated_at' => $legacyTimestamp,
-                'is_imported' => true,
-            ])->saveQuietly();
-            $this->syncInvoiceUpdatedAt($invoice, $legacyTimestamp);
-
-            return;
-        }
-
         $invoice->approveDraft($this->dateTimeOrNow($data['date']));
 
         if (in_array($finalStatus, [InvoiceStatus::Sent, InvoiceStatus::Overdue, InvoiceStatus::Viewed, InvoiceStatus::Paid, InvoiceStatus::Partial, InvoiceStatus::Cancelled], true)) {
@@ -505,8 +489,11 @@ class LegacyProjectInvoiceImportService
 
         if ($finalStatus === InvoiceStatus::Partial) {
             $amountPaid = min($data['paid_value'], (int) $invoice->actual_total);
+            $partialStatus = $this->importDueDateHasPassed($data['due_date'] ?? $data['date'])
+                ? InvoiceStatus::Overdue
+                : InvoiceStatus::Partial;
             $invoice->forceFill([
-                'status' => InvoiceStatus::Partial,
+                'status' => $partialStatus,
                 'amount_paid' => $amountPaid,
                 'updated_by' => $this->actorId,
                 'updated_at' => $legacyTimestamp,
@@ -523,8 +510,14 @@ class LegacyProjectInvoiceImportService
             return;
         }
 
-        if ($finalStatus === InvoiceStatus::Sent) {
+        if (in_array($finalStatus, [InvoiceStatus::Sent, InvoiceStatus::Overdue], true)) {
+            $sentStatus = ($finalStatus === InvoiceStatus::Overdue
+                || $this->importDueDateHasPassed($data['due_date'] ?? $data['date']))
+                ? InvoiceStatus::Overdue
+                : InvoiceStatus::Sent;
+
             $invoice->forceFill([
+                'status' => $sentStatus,
                 'updated_by' => $this->actorId,
                 'updated_at' => $legacyTimestamp,
                 'is_imported' => true,
@@ -532,6 +525,19 @@ class LegacyProjectInvoiceImportService
         }
 
         $this->syncInvoiceUpdatedAt($invoice, $legacyTimestamp);
+    }
+
+    protected function importDueDateHasPassed(?string $dueDate): bool
+    {
+        if (! $dueDate) {
+            return false;
+        }
+
+        try {
+            return Carbon::parse($dueDate)->startOfDay()->isBefore(company_today());
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     protected function resetImportedInvoice(Invoice $invoice): void
@@ -1032,8 +1038,7 @@ class LegacyProjectInvoiceImportService
             $normalized === 'BATAL' => InvoiceStatus::Cancelled,
             $normalized === 'PAID' => InvoiceStatus::Paid,
             $paidValue > 0 => InvoiceStatus::Partial,
-            $this->isMeaningfulStatus($rawStatus) => InvoiceStatus::Sent,
-            default => InvoiceStatus::Draft,
+            default => InvoiceStatus::Sent,
         };
     }
 
