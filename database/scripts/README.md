@@ -16,6 +16,14 @@ php artisan legacy:reimport-invoices {companyId} \
 # Preview tanpa perubahan:
 php artisan legacy:reimport-invoices {companyId} --file="..." --dry-run
 
+# Re-import KPP (company 2) dan/atau KPPE (company 3):
+php artisan legacy:reimport-invoices-preset kpp --dry-run
+php artisan legacy:reimport-invoices-preset kppe --dry-run
+php artisan legacy:reimport-invoices-preset both --dry-run
+
+# Jalankan live (tanpa --dry-run):
+php artisan legacy:reimport-invoices-preset both
+
 # Audit selisih sheet Invoice vs supplement (t):
 php artisan legacy:invoice-sheet-mismatch audit \
   --file="Copy File of Master Project & Invoice - kpg(1).xlsx" \

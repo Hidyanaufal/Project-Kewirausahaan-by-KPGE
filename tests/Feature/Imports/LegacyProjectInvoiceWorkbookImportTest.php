@@ -70,7 +70,7 @@ it('imports legacy workbook into approved projects and invoice final states', fu
 
     $paidInvoice = Invoice::query()->where('invoice_number', 'PG26-001')->firstOrFail();
     $cancelledInvoice = Invoice::query()->where('invoice_number', 'PG26-002')->firstOrFail();
-    $sentInvoice = Invoice::query()->where('invoice_number', 'PG26-003')->firstOrFail();
+    $draftInvoice = Invoice::query()->where('invoice_number', 'PG26-003')->firstOrFail();
 
     expect($paidInvoice->status)->toBe(InvoiceStatus::Paid)
         ->and($paidInvoice->is_imported)->toBeTrue()
@@ -90,9 +90,9 @@ it('imports legacy workbook into approved projects and invoice final states', fu
         ->and($cancelledInvoice->is_imported)->toBeTrue()
         ->and($cancelledInvoice->transactions()->count())->toBe(0);
 
-    expect($sentInvoice->is_imported)->toBeTrue()
-        ->and($sentInvoice->approvalTransaction)->not->toBeNull()
-        ->and($sentInvoice->status)->toBe(InvoiceStatus::Sent);
+    expect($draftInvoice->is_imported)->toBeTrue()
+        ->and($draftInvoice->approvalTransaction)->toBeNull()
+        ->and($draftInvoice->status)->toBe(InvoiceStatus::Draft);
 });
 
 it('is idempotent on repeated import without creating duplicate records', function () {
@@ -470,6 +470,124 @@ it('prefers invoice sheet financials over supplement when both are present', fun
         ->and($invoice->actual_total)->toBe(2_975_331_400);
 });
 
+it('marks invoice as draft when invoice sheet status and paid value are N/A', function () {
+    $workbookPath = sys_get_temp_dir() . '/legacy-import-draft-na-' . uniqid() . '.xlsx';
+    createNaStatusInvoiceWorkbook($workbookPath);
+
+    Project::query()->create([
+        'company_id' => $this->testCompany->id,
+        'project_type_id' => ProjectType::query()->where('name', 'EO')->value('id'),
+        'client_id' => \App\Models\Common\Client::factory()->create(['company_id' => $this->testCompany->id])->id,
+        'pic_id' => $this->testUser->id,
+        'number' => 'EO25-193',
+        'name' => 'Legacy EO Project 193',
+        'status' => \App\Enums\Addons\ProjectStatus::Approved,
+        'is_imported' => true,
+    ]);
+
+    $importer = new LegacyProjectInvoiceWorkbookImport(
+        companyId: $this->testCompany->id,
+        actorId: $this->testUser->id,
+    );
+
+    $importer->importFile($workbookPath);
+    @unlink($workbookPath);
+
+    $draft = Invoice::query()->where('invoice_number', 'PG25-263')->firstOrFail();
+
+    expect($draft->status)->toBe(InvoiceStatus::Draft)
+        ->and($draft->approvalTransaction)->toBeNull()
+        ->and((int) $draft->amount_paid)->toBe(0)
+        ->and($draft->payments()->count())->toBe(0)
+        ->and($draft->total)->toBe(12_245_520_000);
+});
+
+it('keeps invoice payable when invoice sheet has paid value but N/A status', function () {
+    $workbookPath = sys_get_temp_dir() . '/legacy-import-partial-na-' . uniqid() . '.xlsx';
+    createNaStatusWithPaidWorkbook($workbookPath);
+
+    Project::query()->create([
+        'company_id' => $this->testCompany->id,
+        'project_type_id' => ProjectType::query()->where('name', 'EO')->value('id'),
+        'client_id' => \App\Models\Common\Client::factory()->create(['company_id' => $this->testCompany->id])->id,
+        'pic_id' => $this->testUser->id,
+        'number' => 'EO25-194',
+        'name' => 'Legacy EO Project 194',
+        'status' => \App\Enums\Addons\ProjectStatus::Approved,
+        'is_imported' => true,
+    ]);
+
+    $importer = new LegacyProjectInvoiceWorkbookImport(
+        companyId: $this->testCompany->id,
+        actorId: $this->testUser->id,
+    );
+
+    $importer->importFile($workbookPath);
+    @unlink($workbookPath);
+
+    $invoice = Invoice::query()->where('invoice_number', 'PG25-264')->firstOrFail();
+
+    expect($invoice->status)->toBe(InvoiceStatus::Partial)
+        ->and($invoice->approvalTransaction)->not->toBeNull()
+        ->and((int) $invoice->amount_paid)->toBeGreaterThan(0);
+});
+
+function createNaStatusInvoiceWorkbook(string $path): void
+{
+    $spreadsheet = new Spreadsheet;
+
+    $invoice = $spreadsheet->getActiveSheet();
+    $invoice->setTitle('Invoice');
+    $invoice->fromArray([
+        ['Nomor Invoice', '', 'Nomor Projek', 'Nomor Faktur', 'Offering Item', 'DPP', 'Profit', 'PPN', 'Total Setelah PPN', 'Status Bayar', 'Nilai Invoice yang dibayar'],
+        ['', '16/09/2025', 'PG25-263', 'EO25-193', 'Jasa Event Organizer (EO) Kegiatan Investor Site Visit PT PGE Tbk', '', '10,692,000', '12,135,200', '122,455,200', '#N/A', '#N/A'],
+    ]);
+
+    $supplement = new Worksheet($spreadsheet, 't');
+    $spreadsheet->addSheet($supplement);
+    $supplement->fromArray([
+        ['Bulan', 'Huruf', '', 'No Urut', 'No Invoice', 'Tanggal', 'No.Kontrak / SPK', 'PT', 'NO EO ', 'Judul Invoice', 'Nominal Invoice', 'Profit', 'Total stlh Profit', 'PPN', 'Total stlh PPN', 'Jatuh Tempo', 'POSISI Terakhir', 'PIC KPG', 'NO FAKTUR', 'Status Bayar', 'No Invoice', 'Nilai Invoice yang dibayar'],
+        ['September', 'PG25-', '', '263', 'PG25-263', '2025-09-16', '', 'PGE', 'EO25-193', 'Jasa Event Organizer (EO) Kegiatan Investor Site Visit PT PGE Tbk', '89,100,000', '10,692,000', '99,792,000', '10,977,120', '110,769,120', '', '', 'CHATALYNA', '', 'PAID', 'PG25-263', '92726078'],
+    ]);
+
+    $projectEo = new Worksheet($spreadsheet, 'Project-EO');
+    $spreadsheet->addSheet($projectEo);
+    $projectEo->fromArray([
+        ['Nama Projek', 'Tanggal Permintaan', 'Nomor Prefix', 'Nomor Registrasi', 'Nomor Projek'],
+        ['Investor Site Visit', '01/09/2025', 'EO25-', '193', '193'],
+    ]);
+
+    (new Xlsx($spreadsheet))->save($path);
+}
+
+function createNaStatusWithPaidWorkbook(string $path): void
+{
+    $spreadsheet = new Spreadsheet;
+
+    $invoice = $spreadsheet->getActiveSheet();
+    $invoice->setTitle('Invoice');
+    $invoice->fromArray([
+        ['Nomor Invoice', '', 'Nomor Projek', 'Nomor Faktur', 'Offering Item', 'DPP', 'Profit', 'PPN', 'Total Setelah PPN', 'Status Bayar', 'Nilai Invoice yang dibayar'],
+        ['', '16/09/2025', 'PG25-264', 'EO25-194', 'Jasa EO Legacy Overdue', '', '10,692,000', '12,135,200', '122,455,200', '#N/A', '90,000,000'],
+    ]);
+
+    $supplement = new Worksheet($spreadsheet, 't');
+    $spreadsheet->addSheet($supplement);
+    $supplement->fromArray([
+        ['Bulan', 'Huruf', '', 'No Urut', 'No Invoice', 'Tanggal', 'No.Kontrak / SPK', 'PT', 'NO EO ', 'Judul Invoice', 'Nominal Invoice', 'Profit', 'Total stlh Profit', 'PPN', 'Total stlh PPN', 'Jatuh Tempo', 'POSISI Terakhir', 'PIC KPG', 'NO FAKTUR', 'Status Bayar', 'No Invoice', 'Nilai Invoice yang dibayar'],
+        ['September', 'PG25-', '', '264', 'PG25-264', '2025-09-16', '', 'PGE', 'EO25-194', 'Jasa EO Legacy Overdue', '89,100,000', '10,692,000', '99,792,000', '10,977,120', '110,769,120', '', '', 'CHATALYNA', '', 'PAID', 'PG25-264', '92726078'],
+    ]);
+
+    $projectEo = new Worksheet($spreadsheet, 'Project-EO');
+    $spreadsheet->addSheet($projectEo);
+    $projectEo->fromArray([
+        ['Nama Projek', 'Tanggal Permintaan', 'Nomor Prefix', 'Nomor Registrasi', 'Nomor Projek'],
+        ['Legacy Overdue', '01/09/2025', 'EO25-', '194', '194'],
+    ]);
+
+    (new Xlsx($spreadsheet))->save($path);
+}
+
 function createShiftedInvoiceSheetPriorityWorkbook(string $path): void
 {
     $spreadsheet = new Spreadsheet;
@@ -722,7 +840,7 @@ function createKppLegacyWorkbookWithDuplicateInvoiceRows(string $path): void
     $invoice->setTitle('Invoice');
     $invoice->fromArray([
         ['Nomor Invoice', 'Tanggal', 'Nomor Projek', 'Nomor Faktur', 'Offering Item', 'DPP', 'Profit', 'PPN', 'Total Setelah PPN', 'Status Bayar', 'Nilai Invoice yang dibayar'],
-        ['PP26-232', '2026-07-04', 'KP26-009', '', 'Pembayaran Tahap III', '37,001,586', '4,440,190', '4,558,595', '46,000,372', '#N/A', ''],
+        ['PP26-232', '2026-07-04', 'KP26-009', '', 'Pembayaran Tahap III', '37,001,586', '4,440,190', '4,558,595', '46,000,372', 'PAID', '46,000,372'],
         ['PP26-232', '2026-07-04', '', '', 'Duplicate row without project', '37,001,586', '4,440,190', '4,558,595', '46,000,372', 'PAID', '46,000,372'],
     ]);
 
