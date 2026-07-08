@@ -453,9 +453,27 @@ class LegacyProjectInvoiceImportService
         ])->save();
 
         $invoice->refresh();
-        $invoice->approveDraft($this->dateTimeOrNow($data['date']));
 
         $finalStatus = $data['status'];
+
+        if ($finalStatus === InvoiceStatus::Draft) {
+            $invoice->forceFill([
+                'status' => InvoiceStatus::Draft,
+                'approved_at' => null,
+                'last_sent_at' => null,
+                'paid_at' => null,
+                'amount_paid' => 0,
+                'updated_by' => $this->actorId,
+                'updated_at' => $legacyTimestamp,
+                'is_imported' => true,
+            ])->saveQuietly();
+            $this->syncInvoiceUpdatedAt($invoice, $legacyTimestamp);
+
+            return;
+        }
+
+        $invoice->approveDraft($this->dateTimeOrNow($data['date']));
+
         if (in_array($finalStatus, [InvoiceStatus::Sent, InvoiceStatus::Overdue, InvoiceStatus::Viewed, InvoiceStatus::Paid, InvoiceStatus::Partial, InvoiceStatus::Cancelled], true)) {
             $invoice->markAsSent($this->dateTimeOrNow($data['date']));
             $invoice->refresh();
@@ -651,7 +669,9 @@ class LegacyProjectInvoiceImportService
         $preTaxTotal = $this->preferFinancialAmount($invoicePreTax, $supplementPreTax, $hasSupplementFinancials);
         $taxTotal = $this->preferFinancialAmount($invoiceTax, $supplementTax, $hasSupplementFinancials);
         $total = $this->preferFinancialAmount($derivedInvoiceTotal, $supplementTotal, $hasSupplementFinancials);
-        $paidValue = $this->preferFinancialAmount($invoicePaid, $supplementPaid, $hasSupplementFinancials);
+        $paidValue = $this->preferSupplementFinancials
+            ? $this->firstPositive($supplementPaid, $invoicePaid)
+            : $invoicePaid;
 
         [$subtotal, $profitTotal] = $this->deriveSubtotalAndProfit(
             supplement: $supplement,
@@ -944,6 +964,18 @@ class LegacyProjectInvoiceImportService
         $invoiceStatus = $this->layout()->valueAt($values, 'invoice', 'status');
         $supplementStatus = $supplement['status'] ?? null;
 
+        if (! $this->preferSupplementFinancials) {
+            if ($this->isMeaningfulStatus($invoiceStatus)) {
+                return $invoiceStatus;
+            }
+
+            if ($this->isCancelledStatus($supplementStatus)) {
+                return $supplementStatus;
+            }
+
+            return $invoiceStatus;
+        }
+
         if ($hasSupplementFinancials && $this->isMeaningfulStatus($supplementStatus)) {
             return $supplementStatus;
         }
@@ -1000,7 +1032,8 @@ class LegacyProjectInvoiceImportService
             $normalized === 'BATAL' => InvoiceStatus::Cancelled,
             $normalized === 'PAID' => InvoiceStatus::Paid,
             $paidValue > 0 => InvoiceStatus::Partial,
-            default => InvoiceStatus::Sent,
+            $this->isMeaningfulStatus($rawStatus) => InvoiceStatus::Sent,
+            default => InvoiceStatus::Draft,
         };
     }
 
