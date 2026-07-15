@@ -144,22 +144,38 @@
             {{-- </thead> --}}
             <tbody>
                 @if ($document?->detail?->hide_offering_items)
-                    {{-- Mode: Hide Offering Items - Tampilkan langsung total sejajar dengan project --}}
+                    @php
+                        $hideModeLineDescription = collect($document->lineItems ?? [])
+                            ->map(fn ($item) => trim((string) ($item->description ?? '')))
+                            ->first(fn (string $description) => $description !== '');
+                    @endphp
+                    {{-- Mode: Hide Offering Items - tampilkan judul/deskripsi invoice bila ada --}}
                     <tr>
                         <td class="px-2 py-1 text-center border border-black align-top">
                             {{ \Carbon\Carbon::parse($document->dueDate)->format('d-M-y') }}
                         </td>
                         <td class="py-1 pl-2 font-semibold text-left border border-black">
-                            @isset($document->project)
-                                <div>
-                                    {{ $document->project }}
-                                    @if ($document?->detail?->project?->description)
-                                        <div class="mt-0.5 text-[10px] text-gray-600 leading-snug">
-                                            {{ $document?->detail?->project?->description }}
-                                        </div>
-                                    @endif
-                                </div>
-                            @endisset
+                            <div>
+                                @if ($hideModeLineDescription)
+                                    {{ $hideModeLineDescription }}
+                                    @isset($document->project)
+                                        @if ($document->project !== $hideModeLineDescription)
+                                            <div class="mt-0.5 text-[10px] text-gray-600 leading-snug">
+                                                {{ $document->project }}
+                                            </div>
+                                        @endif
+                                    @endisset
+                                @else
+                                    @isset($document->project)
+                                        {{ $document->project }}
+                                        @if ($document?->detail?->project?->description)
+                                            <div class="mt-0.5 text-[10px] text-gray-600 leading-snug">
+                                                {{ $document?->detail?->project?->description }}
+                                            </div>
+                                        @endif
+                                    @endisset
+                                @endif
+                            </div>
                         </td>
                         <td class="py-1 pr-2 text-right border border-black whitespace-nowrap">
                             {{ formatMoneyCeiling($document->subtotal) }}
@@ -203,6 +219,7 @@
                 @endif
 
 
+                @if ($document->profit)
                 <!-- Profit -->
                 <tr>
                     <td colspan="2" class="px-2 text-right border-t border-black">Profit {{ $document->profitPercentage }}%</td>
@@ -210,6 +227,7 @@
                         {{ formatMoneyCeiling($document->profit) }}
                     </td>
                 </tr>
+                @endif
 
                 <!-- Jumlah -->
                 <tr>

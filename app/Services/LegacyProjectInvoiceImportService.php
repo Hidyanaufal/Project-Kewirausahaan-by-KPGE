@@ -43,6 +43,9 @@ class LegacyProjectInvoiceImportService
             'with_total' => 0,
             'paid_with_payment' => 0,
             'zero_total_rejected' => 0,
+            'profit_derived' => 0,
+            'excel_duplicates_collapsed' => 0,
+            'db_duplicates_removed' => 0,
         ],
         'warnings' => [],
     ];
@@ -255,9 +258,16 @@ class LegacyProjectInvoiceImportService
         return $this->mapInvoiceRow($values);
     }
 
-    public function importInvoiceSheet(array $rows): void
+    /**
+     * Collapse Excel rows that share an invoice number into a single preferred row.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<string, array{row: array<string, mixed>, mapped: array<string, mixed>}>
+     */
+    public function collapseInvoiceSheetRows(array $rows): array
     {
         $rowsByInvoice = [];
+        $collapsed = 0;
 
         foreach ($rows as $row) {
             $mapped = $this->mapInvoiceRow($row['values'] ?? []);
@@ -268,10 +278,18 @@ class LegacyProjectInvoiceImportService
 
             $invoiceNumber = $mapped['invoice_number'];
 
-            if (
-                ! isset($rowsByInvoice[$invoiceNumber])
-                || $this->isBetterInvoiceImportRow($mapped, $rowsByInvoice[$invoiceNumber]['mapped'])
-            ) {
+            if (! isset($rowsByInvoice[$invoiceNumber])) {
+                $rowsByInvoice[$invoiceNumber] = [
+                    'row' => $row,
+                    'mapped' => $mapped,
+                ];
+
+                continue;
+            }
+
+            $collapsed++;
+
+            if ($this->isBetterInvoiceImportRow($mapped, $rowsByInvoice[$invoiceNumber]['mapped'])) {
                 $rowsByInvoice[$invoiceNumber] = [
                     'row' => $row,
                     'mapped' => $mapped,
@@ -279,11 +297,76 @@ class LegacyProjectInvoiceImportService
             }
         }
 
+        $this->summary['invoices']['excel_duplicates_collapsed'] = $collapsed;
+
+        if ($collapsed > 0) {
+            $this->addWarning(
+                "Sheet Invoice: {$collapsed} baris duplikat digabung (1 nomor invoice = 1 record)."
+            );
+        }
+
+        return $rowsByInvoice;
+    }
+
+    /**
+     * Keep one imported invoice per invoice_number; delete extra imported duplicates.
+     * Non-imported invoices with the same number are left untouched.
+     *
+     * @return array{groups: int, removed: int}
+     */
+    public function purgeDuplicateImportedInvoices(): array
+    {
+        $duplicateNumbers = Invoice::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', $this->companyId)
+            ->where('is_imported', true)
+            ->select('invoice_number')
+            ->groupBy('invoice_number')
+            ->havingRaw('COUNT(*) > 1')
+            ->pluck('invoice_number');
+
+        $removed = 0;
+
+        foreach ($duplicateNumbers as $invoiceNumber) {
+            $removed += $this->purgeImportedDuplicatesForNumber((string) $invoiceNumber);
+        }
+
+        $this->summary['invoices']['db_duplicates_removed'] = $removed;
+
+        if ($removed > 0) {
+            $this->addWarning(
+                "Database: {$removed} invoice imported duplikat dihapus (menyisakan 1 per nomor)."
+            );
+        }
+
+        return [
+            'groups' => $duplicateNumbers->count(),
+            'removed' => $removed,
+        ];
+    }
+
+    public function importInvoiceSheet(array $rows): void
+    {
+        $this->purgeDuplicateImportedInvoices();
+
+        $rowsByInvoice = $this->collapseInvoiceSheetRows($rows);
+
         foreach ($rowsByInvoice as ['row' => $row, 'mapped' => $mapped]) {
             $lineNumber = $row['row_number'] ?? null;
 
             try {
-                $project = $this->resolveProjectForInvoice($mapped['project_reference'], $mapped['date']);
+                if (! empty($mapped['profit_derived_from_sheet_gap'])) {
+                    $this->summary['invoices']['profit_derived']++;
+                    $this->addWarning(
+                        "Invoice '{$mapped['invoice_number']}': profit_total direkonstruksi dari selisih pretax sheet Invoice vs nominal sheet t = {$mapped['profit_total']} karena kolom DPP/Profit Excel kosong."
+                    );
+                }
+
+                $project = $this->resolveProjectForInvoice(
+                    $mapped['project_reference'],
+                    $mapped['date'],
+                    $mapped['item_description'] ?? null,
+                );
 
                 if (! $project) {
                     $project = $this->createLegacyProjectStubForInvoice($mapped);
@@ -298,10 +381,7 @@ class LegacyProjectInvoiceImportService
                     $this->addWarning("Project '{$mapped['project_reference']}' tidak ditemukan, dibuat otomatis sebagai stub legacy untuk invoice '{$mapped['invoice_number']}'.");
                 }
 
-                $existing = Invoice::query()
-                    ->where('company_id', $this->companyId)
-                    ->where('invoice_number', $mapped['invoice_number'])
-                    ->first();
+                $existing = $this->resolveExistingInvoiceForImport((string) $mapped['invoice_number']);
 
                 if ($existing && ! $existing->is_imported) {
                     $this->summary['invoices']['skipped']++;
@@ -542,6 +622,10 @@ class LegacyProjectInvoiceImportService
 
     protected function resetImportedInvoice(Invoice $invoice): void
     {
+        $invoice->payments()->get()->each(function ($payment): void {
+            $payment->delete();
+        });
+
         $invoice->transactions()->get()->each(function ($transaction): void {
             $transaction->delete();
         });
@@ -563,6 +647,124 @@ class LegacyProjectInvoiceImportService
             'updated_by' => $this->actorId,
             'is_imported' => true,
         ])->saveQuietly();
+    }
+
+    protected function resolveExistingInvoiceForImport(string $invoiceNumber): ?Invoice
+    {
+        $this->purgeImportedDuplicatesForNumber($invoiceNumber);
+
+        $imported = Invoice::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', $this->companyId)
+            ->where('invoice_number', $invoiceNumber)
+            ->where('is_imported', true)
+            ->orderBy('id')
+            ->first();
+
+        if ($imported) {
+            return $imported;
+        }
+
+        return Invoice::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', $this->companyId)
+            ->where('invoice_number', $invoiceNumber)
+            ->orderBy('id')
+            ->first();
+    }
+
+    protected function purgeImportedDuplicatesForNumber(string $invoiceNumber): int
+    {
+        $imported = Invoice::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', $this->companyId)
+            ->where('invoice_number', $invoiceNumber)
+            ->where('is_imported', true)
+            ->orderBy('id')
+            ->get();
+
+        if ($imported->count() <= 1) {
+            return 0;
+        }
+
+        $keeper = $imported->reduce(
+            fn (?Invoice $best, Invoice $candidate): Invoice => $best
+                ? $this->preferImportedInvoiceRecord($best, $candidate)
+                : $candidate
+        );
+
+        $removed = 0;
+
+        foreach ($imported as $invoice) {
+            if ($keeper && $invoice->id === $keeper->id) {
+                continue;
+            }
+
+            $this->deleteImportedInvoiceRecord($invoice);
+            $removed++;
+        }
+
+        return $removed;
+    }
+
+    protected function preferImportedInvoiceRecord(Invoice $left, Invoice $right): Invoice
+    {
+        $leftScore = $this->importedInvoiceKeepScore($left);
+        $rightScore = $this->importedInvoiceKeepScore($right);
+
+        if ($leftScore !== $rightScore) {
+            return $leftScore >= $rightScore ? $left : $right;
+        }
+
+        return $left->id <= $right->id ? $left : $right;
+    }
+
+    protected function importedInvoiceKeepScore(Invoice $invoice): int
+    {
+        $score = 0;
+
+        if ($invoice->status === InvoiceStatus::Paid) {
+            $score += 100;
+        } elseif ($invoice->status === InvoiceStatus::Partial) {
+            $score += 80;
+        } elseif ($invoice->status === InvoiceStatus::Sent) {
+            $score += 40;
+        } elseif ($invoice->status === InvoiceStatus::Cancelled) {
+            $score += 10;
+        }
+
+        if ($invoice->payments()->exists()) {
+            $score += 50;
+        }
+
+        if ((int) $invoice->total > 0) {
+            $score += 20;
+        }
+
+        if ((int) $invoice->amount_paid > 0) {
+            $score += 10;
+        }
+
+        return $score;
+    }
+
+    protected function deleteImportedInvoiceRecord(Invoice $invoice): void
+    {
+        DB::transaction(function () use ($invoice): void {
+            $invoice->payments()->get()->each(function ($payment): void {
+                $payment->delete();
+            });
+
+            $invoice->transactions()->get()->each(function ($transaction): void {
+                $transaction->delete();
+            });
+
+            $invoice->lineItems()->get()->each(function ($lineItem): void {
+                $lineItem->delete();
+            });
+
+            $invoice->delete();
+        });
     }
 
     protected function mapProjectRow(array $values): ?array
@@ -718,6 +920,14 @@ class LegacyProjectInvoiceImportService
             'tax_number' => $this->cleanText($supplement['tax_number'] ?? null)
                 ?: $this->cleanText($layout->valueAt($values, 'invoice', 'tax_number')),
             'pekerjaan_hint' => $this->cleanText($supplement['pekerjaan'] ?? null),
+            'profit_derived_from_sheet_gap' => $this->isProfitDerivedFromSheetGap(
+                values: $values,
+                supplement: $supplement,
+                hasSupplementFinancials: $hasSupplementFinancials,
+                preTaxTotal: $preTaxTotal,
+                subtotal: $subtotal,
+                profitTotal: $profitTotal,
+            ),
             'pph23' => $this->deriveImportedPph23(
                 status: $status,
                 preTaxTotal: $preTaxTotal,
@@ -869,12 +1079,10 @@ class LegacyProjectInvoiceImportService
             return [0, 0];
         }
 
-        if ($nominalInvoice > 0 && $nominalInvoice < $preTaxTotal) {
-            return [$nominalInvoice, $preTaxTotal - $nominalInvoice];
-        }
-
-        if ($baseOrProfit > 0 && $baseOrProfit < $preTaxTotal) {
-            return [$baseOrProfit, $preTaxTotal - $baseOrProfit];
+        // Only treat sheet-t "Profit" column as profit when it is explicitly filled.
+        // If empty, the entire pretax amount stays in DPP (matches Excel: no Profit → all DPP).
+        if ($baseOrProfit > 0) {
+            return [max($preTaxTotal - $baseOrProfit, 0), $baseOrProfit];
         }
 
         return [$preTaxTotal, 0];
@@ -911,40 +1119,39 @@ class LegacyProjectInvoiceImportService
     ): array {
         $dpp = $this->parseMoneyToMinor($this->layout()->valueAt($values, 'invoice', 'dpp'));
         $profit = $this->parseMoneyToMinor($this->layout()->valueAt($values, 'invoice', 'profit'));
+        $supplementProfit = $hasSupplementFinancials ? (int) ($supplement['profit_total'] ?? 0) : 0;
 
+        // Excel-faithful: Profit only when an explicit Profit column is filled.
+        // Empty Profit ⇒ entire pretax stays in DPP (do not invent margin from sheet gaps).
         if (! $this->preferSupplementFinancials) {
-            if ($dpp > 0) {
-                return [$dpp, $profit > 0 ? $profit : max($preTaxTotal - $dpp, 0)];
-            }
-
             if ($profit > 0 && $preTaxTotal > 0) {
                 return [max($preTaxTotal - $profit, 0), $profit];
             }
+
+            if ($dpp > 0 && $profit > 0) {
+                return [$dpp, $profit];
+            }
+
+            if ($dpp > 0 && $profit <= 0) {
+                return [$preTaxTotal > 0 ? $preTaxTotal : $dpp, 0];
+            }
         }
 
-        if ($hasSupplementFinancials && ($supplement['subtotal'] ?? 0) > 0) {
-            return [
-                $supplement['subtotal'],
-                ($supplement['profit_total'] ?? 0) > 0
-                    ? $supplement['profit_total']
-                    : max($preTaxTotal - $supplement['subtotal'], 0),
-            ];
-        }
-
-        if ($hasSupplementFinancials && ($supplement['profit_total'] ?? 0) > 0 && $preTaxTotal > 0) {
-            return [
-                max($preTaxTotal - $supplement['profit_total'], 0),
-                $supplement['profit_total'],
-            ];
+        if ($supplementProfit > 0 && $preTaxTotal > 0) {
+            return [max($preTaxTotal - $supplementProfit, 0), $supplementProfit];
         }
 
         if ($this->preferSupplementFinancials) {
-            if ($dpp > 0) {
-                return [$dpp, $profit > 0 ? $profit : max($preTaxTotal - $dpp, 0)];
-            }
-
             if ($profit > 0 && $preTaxTotal > 0) {
                 return [max($preTaxTotal - $profit, 0), $profit];
+            }
+
+            if ($dpp > 0 && $profit > 0) {
+                return [$dpp, $profit];
+            }
+
+            if ($dpp > 0 && $profit <= 0) {
+                return [$preTaxTotal > 0 ? $preTaxTotal : $dpp, 0];
             }
         }
 
@@ -1122,8 +1329,11 @@ class LegacyProjectInvoiceImportService
         return $this->picCache[$picName];
     }
 
-    protected function resolveProjectForInvoice(?string $reference, ?string $invoiceDate): ?Project
-    {
+    protected function resolveProjectForInvoice(
+        ?string $reference,
+        ?string $invoiceDate,
+        ?string $itemDescription = null,
+    ): ?Project {
         $reference = $this->cleanText($reference);
 
         if (! $reference) {
@@ -1131,8 +1341,14 @@ class LegacyProjectInvoiceImportService
         }
 
         foreach ($this->projectReferenceAliases($reference, $invoiceDate) as $alias) {
-            if (isset($this->projectReferenceMap[$alias])) {
-                return $this->projectReferenceMap[$alias];
+            if (! isset($this->projectReferenceMap[$alias])) {
+                continue;
+            }
+
+            $candidate = $this->projectReferenceMap[$alias];
+
+            if ($this->shouldAcceptResolvedProject($reference, $candidate, $itemDescription)) {
+                return $candidate;
             }
         }
 
@@ -1142,62 +1358,197 @@ class LegacyProjectInvoiceImportService
             }
         }
 
-        $query = Project::query()
-            ->where('company_id', $this->companyId);
-
         $normalized = strtoupper(str_replace(["\n", "\r", ' '], '', $reference));
+        $candidates = collect();
 
         if (preg_match('/^([A-Z]+)(\d{3})$/', $normalized, $matches)) {
             $prefix = $matches[1];
             $suffix = $matches[2];
             $year = $invoiceDate ? Carbon::parse($invoiceDate)->format('y') : null;
 
-            $query->where(function ($subQuery) use ($prefix, $suffix, $year): void {
-                if ($year) {
-                    $subQuery->orWhere('number', "{$prefix}{$year}-{$suffix}");
-                }
+            $exactNumbers = array_values(array_filter([
+                $year ? "{$prefix}{$year}-{$suffix}" : null,
+                $normalized,
+            ]));
 
-                $subQuery
-                    ->orWhere('number', 'like', "{$prefix}%-{$suffix}")
-                    ->orWhere('number', 'like', "{$prefix}{$suffix}");
-            });
+            if ($exactNumbers !== []) {
+                $candidates = Project::query()
+                    ->where('company_id', $this->companyId)
+                    ->whereIn('number', $exactNumbers)
+                    ->orderByDesc('id')
+                    ->get();
+            }
         } elseif (preg_match('/^([A-Z]+)(\d{2})-(\d{3})$/', $normalized, $matches)) {
             $prefix = $matches[1];
             $referenceYear = $matches[2];
             $suffix = $matches[3];
             $invoiceYear = $invoiceDate ? Carbon::parse($invoiceDate)->format('y') : null;
 
-            $query->where(function ($subQuery) use ($prefix, $referenceYear, $suffix, $invoiceYear): void {
-                $subQuery->orWhere('number', "{$prefix}{$referenceYear}-{$suffix}");
+            $exactNumbers = array_values(array_unique(array_filter([
+                "{$prefix}{$referenceYear}-{$suffix}",
+                ($invoiceYear && $invoiceYear !== $referenceYear)
+                    ? "{$prefix}{$invoiceYear}-{$suffix}"
+                    : null,
+            ])));
 
-                if ($invoiceYear && $invoiceYear !== $referenceYear) {
-                    $subQuery->orWhere('number', "{$prefix}{$invoiceYear}-{$suffix}");
-                }
-
-                $subQuery->orWhere('number', 'like', "{$prefix}%-{$suffix}");
-            });
+            $candidates = Project::query()
+                ->where('company_id', $this->companyId)
+                ->whereIn('number', $exactNumbers)
+                ->orderByDesc('id')
+                ->get();
         } elseif ($this->looksLikeContractReference($reference)) {
-            $query->where(function ($subQuery) use ($reference): void {
-                $subQuery
-                    ->orWhere('work_basis', $reference)
-                    ->orWhere('work_basis', 'like', '%' . $reference . '%')
-                    ->orWhere('number', $reference);
-            });
+            $candidates = Project::query()
+                ->where('company_id', $this->companyId)
+                ->where(function ($subQuery) use ($reference): void {
+                    $subQuery
+                        ->orWhere('work_basis', $reference)
+                        ->orWhere('work_basis', 'like', '%' . $reference . '%')
+                        ->orWhere('number', $reference);
+                })
+                ->orderByDesc('id')
+                ->get();
         } else {
-            $query->where(function ($subQuery) use ($reference): void {
-                $subQuery
-                    ->orWhere('number', $reference)
-                    ->orWhere('work_basis', $reference);
-            });
+            $candidates = Project::query()
+                ->where('company_id', $this->companyId)
+                ->where(function ($subQuery) use ($reference): void {
+                    $subQuery
+                        ->orWhere('number', $reference)
+                        ->orWhere('work_basis', $reference);
+                })
+                ->orderByDesc('id')
+                ->get();
         }
 
-        $project = $query->orderByDesc('id')->first();
+        foreach ($candidates as $candidate) {
+            if ($this->shouldAcceptResolvedProject($reference, $candidate, $itemDescription)) {
+                $this->registerProjectReference($candidate);
 
-        if ($project) {
-            $this->registerProjectReference($project);
+                return $candidate;
+            }
         }
 
-        return $project;
+        return null;
+    }
+
+    protected function shouldAcceptResolvedProject(
+        string $reference,
+        Project $project,
+        ?string $itemDescription,
+    ): bool {
+        if ($this->isExactProjectNumberReference($reference, $project)) {
+            return true;
+        }
+
+        // Expanded/shorthand matches (e.g. KG027 → KG25-027) require description alignment.
+        if ($this->invoiceDescriptionMatchesProject($itemDescription, $project)) {
+            return true;
+        }
+
+        $this->addWarning(
+            "Project '{$project->number}' diabaikan untuk referensi '{$reference}' karena deskripsi invoice tidak cocok dengan nama project."
+        );
+
+        return false;
+    }
+
+    protected function isExactProjectNumberReference(string $reference, Project $project): bool
+    {
+        $projectNumber = strtoupper(str_replace(["\n", "\r", ' '], '', (string) $project->number));
+        $normalizedReference = strtoupper(str_replace(["\n", "\r", ' '], '', $reference));
+
+        if ($projectNumber === '' || $normalizedReference === '') {
+            return false;
+        }
+
+        if ($projectNumber === $normalizedReference) {
+            return true;
+        }
+
+        $compactProject = str_replace('-', '', $projectNumber);
+        $compactReference = str_replace('-', '', $normalizedReference);
+
+        return $compactProject === $compactReference;
+    }
+
+    protected function invoiceDescriptionMatchesProject(?string $itemDescription, Project $project): bool
+    {
+        $description = $this->cleanText($itemDescription);
+
+        if (! $description) {
+            return false;
+        }
+
+        $haystack = mb_strtolower(trim(($project->name ?? '') . ' ' . ($project->description ?? '')));
+
+        if ($haystack === '') {
+            return false;
+        }
+
+        $tokens = $this->significantDescriptionTokens(mb_strtolower($description));
+
+        if ($tokens === []) {
+            return false;
+        }
+
+        $matched = 0;
+
+        foreach ($tokens as $token) {
+            if (str_contains($haystack, $token)) {
+                $matched++;
+            }
+        }
+
+        $ratio = $matched / count($tokens);
+
+        return $matched >= 2 || $ratio >= 0.35;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function significantDescriptionTokens(string $text): array
+    {
+        $stopWords = [
+            'yang', 'dari', 'untuk', 'dalam', 'pada', 'dengan', 'adalah', 'serta', 'atau', 'ini', 'itu',
+            'tagihan', 'termin', 'pekerjaan', 'jasa', 'nilai', 'kontrak', 'rangka', 'dan', 'the', 'of',
+            'ke', 'di', 'oleh', 'atas', 'bagi',
+        ];
+
+        $words = preg_split('/[^a-z0-9]+/u', $text) ?: [];
+
+        return array_values(array_unique(array_filter(
+            $words,
+            fn (string $word): bool => mb_strlen($word) >= 4 && ! in_array($word, $stopWords, true)
+        )));
+    }
+
+    protected function isProfitDerivedFromSheetGap(
+        array $values,
+        array $supplement,
+        bool $hasSupplementFinancials,
+        int $preTaxTotal,
+        int $subtotal,
+        int $profitTotal,
+    ): bool {
+        if ($profitTotal <= 0 || $subtotal <= 0 || ! $hasSupplementFinancials) {
+            return false;
+        }
+
+        $layout = $this->layout();
+        $dpp = $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'dpp'));
+        $profit = $this->parseMoneyToMinor($layout->valueAt($values, 'invoice', 'profit'));
+        $supplementProfit = (int) ($supplement['profit_total'] ?? 0);
+        $supplementSubtotal = (int) ($supplement['subtotal'] ?? 0);
+
+        if ($dpp > 0 || $profit > 0 || $supplementProfit > 0) {
+            return false;
+        }
+
+        if ($supplementSubtotal <= 0 || $preTaxTotal <= $supplementSubtotal) {
+            return false;
+        }
+
+        return $profitTotal === max($preTaxTotal - $supplementSubtotal, 0);
     }
 
     protected function createLegacyProjectStubForInvoice(array $invoiceData): ?Project
@@ -1606,7 +1957,8 @@ class LegacyProjectInvoiceImportService
         ];
 
         if (preg_match('/^([A-Z]+)(\d{2})-(\d{3})$/', $reference, $matches)) {
-            $aliases[] = $matches[1] . $matches[3];
+            // Do not register PREFIX+NNN (e.g. KG027 from KG25-027): that causes false positives
+            // when unrelated invoices use the same shorthand reference.
             $aliases[] = $matches[1] . $matches[2] . $matches[3];
         }
 
