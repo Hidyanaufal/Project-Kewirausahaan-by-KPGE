@@ -2,6 +2,7 @@
 
 use App\Enums\Accounting\JournalEntryType;
 use App\Enums\Accounting\TransactionType;
+use App\Filament\Company\Resources\Accounting\JournalEntryResource\Pages\ListJournalEntries;
 use App\Filament\Company\Resources\Accounting\TransactionResource\Pages\ListTransactions;
 use App\Filament\Forms\Components\JournalEntryRepeater;
 use App\Filament\Tables\Actions\EditTransactionAction;
@@ -10,11 +11,18 @@ use App\Models\Accounting\Account;
 use App\Models\Accounting\Transaction;
 use App\Utilities\Currency\ConfigureCurrencies;
 use App\Utilities\Currency\CurrencyConverter;
+use Filament\Facades\Filament;
 use Filament\Tables\Actions\DeleteAction;
 use Filament\Tables\Actions\DeleteBulkAction;
 use Filament\Tables\Actions\ReplicateAction;
 
 use function Pest\Livewire\livewire;
+
+beforeEach(function () {
+    /** @var \Tests\TestCase $this */
+    $this->testUser->update(['is_super_admin' => true]);
+    Filament::setCurrentPanel(Filament::getPanel('company'));
+});
 
 it('creates correct journal entries for a deposit transaction', function () {
     $transaction = Transaction::factory()
@@ -98,9 +106,11 @@ it('deletes associated journal entries when transaction is deleted', function ()
 
     $transaction->delete();
 
-    $this->assertModelMissing($transaction);
+    $this->assertSoftDeleted($transaction);
 
-    $this->assertDatabaseCount('journal_entries', 0);
+    foreach ($transaction->journalEntries()->withTrashed()->get() as $entry) {
+        $this->assertSoftDeleted($entry);
+    }
 });
 
 it('handles multi-currency transfers without conversion when the source bank account is in the default currency', function () {
@@ -230,16 +240,17 @@ it('can add an income or expense transaction', function (TransactionType $transa
     $defaultBankAccount = $testCompany->default->bankAccount;
     $defaultAccount = Transaction::getUncategorizedAccountByType($transactionType);
 
-    livewire(ListTransactions::class)
+    livewire(ListJournalEntries::class)
         ->mountAction($actionName)
         ->assertActionDataSet([
             'posted_at' => company_today()->toDateString(),
             'type' => $transactionType,
             'bank_account_id' => $defaultBankAccount->id,
             'amount' => '0.00',
-            'account_id' => $defaultAccount->id,
+            'account_id' => null,
         ])
         ->setActionData([
+            'account_id' => $defaultAccount->id,
             'amount' => '500.00',
         ])
         ->callMountedAction()
@@ -264,7 +275,7 @@ it('can add a transfer transaction', function () {
     $sourceBankAccount = $testCompany->default->bankAccount;
     $destinationBankAccount = Account::factory()->withBankAccount('Destination Bank Account')->create();
 
-    livewire(ListTransactions::class)
+    livewire(ListJournalEntries::class)
         ->mountAction('createTransfer')
         ->assertActionDataSet([
             'posted_at' => company_today()->toDateString(),
@@ -297,19 +308,19 @@ it('can add a journal transaction', function () {
 
     $undoRepeaterFake = JournalEntryRepeater::fake();
 
-    livewire(ListTransactions::class)
+    livewire(ListJournalEntries::class)
         ->mountAction('createJournalEntry')
         ->assertActionDataSet([
             'posted_at' => company_today()->toDateString(),
             'journalEntries' => [
-                ['type' => JournalEntryType::Debit, 'account_id' => $defaultDebitAccount->id, 'amount' => '0.00'],
-                ['type' => JournalEntryType::Credit, 'account_id' => $defaultCreditAccount->id, 'amount' => '0.00'],
+                ['type' => JournalEntryType::Debit, 'amount' => '0.00'],
+                ['type' => JournalEntryType::Credit, 'amount' => '0.00'],
             ],
         ])
         ->setActionData([
             'journalEntries' => [
-                ['amount' => '1,000.00'],
-                ['amount' => '1,000.00'],
+                ['account_id' => $defaultDebitAccount->id, 'amount' => '1,000.00'],
+                ['account_id' => $defaultCreditAccount->id, 'amount' => '1,000.00'],
             ],
         ])
         ->callMountedAction()
@@ -474,9 +485,11 @@ it('can delete a transaction with journal entries', function () {
     livewire(ListTransactions::class)
         ->callTableAction(DeleteAction::class, $transaction);
 
-    $this->assertModelMissing($transaction);
+    $this->assertSoftDeleted($transaction);
 
-    $this->assertDatabaseEmpty('journal_entries');
+    foreach ($transaction->journalEntries()->withTrashed()->get() as $entry) {
+        $this->assertSoftDeleted($entry);
+    }
 });
 
 it('can bulk delete transactions with journal entries', function () {
@@ -492,6 +505,11 @@ it('can bulk delete transactions with journal entries', function () {
     livewire(ListTransactions::class)
         ->callTableBulkAction(DeleteBulkAction::class, $transactions);
 
-    $this->assertDatabaseEmpty('transactions');
-    $this->assertDatabaseEmpty('journal_entries');
+    foreach ($transactions as $transaction) {
+        $this->assertSoftDeleted($transaction);
+
+        foreach ($transaction->journalEntries()->withTrashed()->get() as $entry) {
+            $this->assertSoftDeleted($entry);
+        }
+    }
 });
