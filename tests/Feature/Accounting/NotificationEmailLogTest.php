@@ -171,6 +171,9 @@ test('invoice approval email writes a send log', function () {
         'updated_by' => $user->id,
     ]));
 
+    // Job only sends once the invoice is finalized (see SendInvoiceApprovedNotification).
+    $invoice->updateQuietly(['finalized_at' => now()]);
+
     (new SendInvoiceApprovedNotification($invoice->id))->handle();
 
     Mail::assertSent(InvoiceApprovedNotification::class, fn (InvoiceApprovedNotification $mail) => $mail->hasTo($user->email)
