@@ -257,6 +257,74 @@ it('creates legacy project stub when invoice references missing project', functi
         ->and($invoice->total)->toBeGreaterThan(0);
 });
 
+it('does not bind shorthand KG027 to unrelated KG25-027 spot charter project', function () {
+    $client = \App\Models\Common\Client::factory()->create(['company_id' => $this->testCompany->id]);
+
+    Project::query()->create([
+        'company_id' => $this->testCompany->id,
+        'project_type_id' => ProjectType::query()->where('name', 'Pengadaan')->value('id'),
+        'client_id' => $client->id,
+        'pic_id' => $this->testUser->id,
+        'number' => 'KG25-027',
+        'name' => 'JASA SPOT CHARTER KENDARAAN BOD 11-12 Agust 2025',
+        'status' => \App\Enums\Addons\ProjectStatus::Approved,
+        'is_imported' => true,
+    ]);
+
+    $workbookPath = sys_get_temp_dir() . '/legacy-import-kg027-' . uniqid() . '.xlsx';
+    createLegacyWorkbookWithKg027ShorthandMismatch($workbookPath);
+
+    $importer = new LegacyProjectInvoiceWorkbookImport(
+        companyId: $this->testCompany->id,
+        actorId: $this->testUser->id,
+    );
+
+    $importer->importFile($workbookPath);
+    @unlink($workbookPath);
+
+    $invoice = Invoice::query()->where('invoice_number', 'PG25-210')->firstOrFail();
+    $linkedProject = $invoice->project;
+
+    expect($linkedProject)->not->toBeNull()
+        ->and($linkedProject->number)->not->toBe('KG25-027')
+        ->and($linkedProject->name)->toContain('penanaman pohon')
+        ->and($invoice->subtotal)->toBe(16_732_800_000)
+        ->and($invoice->profit_total)->toBe(0)
+        ->and($invoice->tax_total)->toBe(1_840_608_000)
+        ->and($invoice->total)->toBe(18_573_408_000)
+        ->and($importer->notificationBody())->not->toContain('profit_total direkonstruksi');
+});
+
+it('binds shorthand KG027 to KG25-027 when invoice description matches project', function () {
+    $client = \App\Models\Common\Client::factory()->create(['company_id' => $this->testCompany->id]);
+
+    $spotProject = Project::query()->create([
+        'company_id' => $this->testCompany->id,
+        'project_type_id' => ProjectType::query()->where('name', 'Pengadaan')->value('id'),
+        'client_id' => $client->id,
+        'pic_id' => $this->testUser->id,
+        'number' => 'KG25-027',
+        'name' => 'JASA SPOT CHARTER KENDARAAN BOD 11-12 Agust 2025',
+        'status' => \App\Enums\Addons\ProjectStatus::Approved,
+        'is_imported' => true,
+    ]);
+
+    $workbookPath = sys_get_temp_dir() . '/legacy-import-kg027-match-' . uniqid() . '.xlsx';
+    createLegacyWorkbookWithKg027MatchingSpotCharter($workbookPath);
+
+    $importer = new LegacyProjectInvoiceWorkbookImport(
+        companyId: $this->testCompany->id,
+        actorId: $this->testUser->id,
+    );
+
+    $importer->importFile($workbookPath);
+    @unlink($workbookPath);
+
+    $invoice = Invoice::query()->where('invoice_number', 'PG25-211')->firstOrFail();
+
+    expect($invoice->project_id)->toBe($spotProject->id);
+});
+
 it('rejects imported invoice rows with zero total unless cancelled', function () {
     $workbookPath = sys_get_temp_dir() . '/legacy-import-zero-total-' . uniqid() . '.xlsx';
     createLegacyWorkbookWithZeroTotalRow($workbookPath);
@@ -388,7 +456,69 @@ it('prefers invoice row with project reference when workbook has duplicate invoi
 
     expect($invoice->project?->number)->toBe('KP26-009')
         ->and($invoice->approvalTransaction)->not->toBeNull()
-        ->and($invoice->lineItems()->count())->toBe(1);
+        ->and($invoice->lineItems()->count())->toBe(1)
+        ->and(Invoice::query()->where('invoice_number', 'PP26-232')->count())->toBe(1)
+        ->and($importer->notificationBody())->toContain('baris Excel digabung');
+});
+
+it('removes extra imported database duplicates when reimporting the same invoice number', function () {
+    $client = \App\Models\Common\Client::factory()->create(['company_id' => $this->testCompany->id]);
+    $projectTypeId = ProjectType::query()->where('name', 'Pengadaan Barang & Jasa')->value('id')
+        ?? ProjectType::query()->where('name', 'Pengadaan')->value('id');
+
+    $project = Project::query()->create([
+        'company_id' => $this->testCompany->id,
+        'project_type_id' => $projectTypeId,
+        'client_id' => $client->id,
+        'pic_id' => $this->testUser->id,
+        'number' => 'KP26-009',
+        'name' => 'Legacy KP Project',
+        'status' => \App\Enums\Addons\ProjectStatus::Approved,
+        'is_imported' => true,
+    ]);
+
+    foreach ([InvoiceStatus::Draft, InvoiceStatus::Paid] as $status) {
+        $invoice = new Invoice();
+        $invoice->forceFill([
+            'company_id' => $this->testCompany->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'invoice_number' => 'PP26-232',
+            'date' => '2026-07-04',
+            'due_date' => '2026-07-04',
+            'status' => $status,
+            'currency_code' => 'IDR',
+            'discount_method' => \App\Enums\Accounting\DocumentDiscountMethod::PerLineItem,
+            'subtotal' => 1_000_000,
+            'tax_total' => 110_000,
+            'total' => 1_110_000,
+            'actual_total' => 1_110_000,
+            'amount_paid' => $status === InvoiceStatus::Paid ? 1_110_000 : 0,
+            'is_imported' => true,
+            'hide_offering_items' => true,
+            'created_by' => $this->testUser->id,
+            'updated_by' => $this->testUser->id,
+        ])->saveQuietly();
+    }
+
+    expect(Invoice::query()->where('invoice_number', 'PP26-232')->count())->toBe(2);
+
+    $workbookPath = sys_get_temp_dir() . '/legacy-import-db-duplicate-' . uniqid() . '.xlsx';
+    createKppLegacyWorkbookWithDuplicateInvoiceRows($workbookPath);
+
+    $importer = new LegacyProjectInvoiceWorkbookImport(
+        companyId: $this->testCompany->id,
+        actorId: $this->testUser->id,
+        forceReimport: true,
+    );
+
+    $importer->importFile($workbookPath);
+    @unlink($workbookPath);
+
+    $remaining = Invoice::query()->where('invoice_number', 'PP26-232')->get();
+
+    expect($remaining)->toHaveCount(1)
+        ->and($importer->notificationBody())->toContain('invoice imported duplikat dihapus');
 });
 
 function ensureLegacyInvoiceImportDefaultsForCompany(int $companyId): void
@@ -833,6 +963,43 @@ function createLegacyWorkbookWithMissingProjectReference(string $path): void
     $invoice->fromArray([
         ['Nomor Invoice', '', 'Nomor Projek', 'Nomor Faktur', 'Offering Item', 'DPP', 'Profit', 'PPN', 'Total Setelah PPN', 'Status Bayar', 'Nilai Invoice yang dibayar'],
         ['', '20/01/2026', 'PG26-70001', 'EO26-70001', 'Missing Project Legacy Invoice', '', '', '1.100.000', '11.100.000', 'SENT', ''],
+    ]);
+
+    $writer = new Xlsx($spreadsheet);
+    $writer->save($path);
+}
+
+function createLegacyWorkbookWithKg027ShorthandMismatch(string $path): void
+{
+    $spreadsheet = new Spreadsheet();
+
+    $invoice = $spreadsheet->getActiveSheet();
+    $invoice->setTitle('Invoice');
+    $invoice->fromArray([
+        ['Nomor Invoice', '', 'Nomor Projek', 'Nomor Faktur', 'Offering Item', 'DPP', 'Profit', 'PPN', 'Total Setelah PPN', 'Status Bayar', 'Nilai Invoice yang dibayar'],
+        ['146', '31/07/2025', 'PG25-210', 'KG027', 'Tagihan Termin VI 10% Pekerjaan penanaman pohon rahibilitas daerah aliran sungai (DAS) dalam rangka pemenuhan kewajiban izin pinjam pakai kawasan hutan area lumut balai', '', '', '18,406,080', '185,734,080', 'PAID', '163,981,440'],
+    ]);
+
+    $supplement = new Worksheet($spreadsheet, 't');
+    $spreadsheet->addSheet($supplement);
+    $supplement->fromArray([
+        ['Bulan', 'Huruf', '', 'No Urut', 'No Invoice', 'Tanggal', 'No.Kontrak / SPK', 'PT', 'NO EO ', 'Judul Invoice', 'Nominal Invoice', 'Profit', 'Total stlh Profit', 'PPN', 'Total stlh PPN', 'Jatuh Tempo', 'POSISI Terakhir', 'PIC KPG', 'NO FAKTUR', 'Status Bayar', 'No Invoice', 'Nilai Invoice yang dibayar'],
+        ['Juli', 'PG25-', '', '210', 'PG25-210', '2025-07-31', '', 'PGE', 'KG027', 'Tagihan Termin VI 10% Pekerjaan penanaman pohon rahibilitas daerah aliran sungai (DAS) dalam rangka pemenuhan kewajiban izin pinjam pakai kawasan hutan area lumut balai', '123,669,577', '', '123,669,577', '13,603,653', '137,273,230', '', '', 'ROBBY', '', 'PAID', 'PG25-210', '163,981,440'],
+    ]);
+
+    $writer = new Xlsx($spreadsheet);
+    $writer->save($path);
+}
+
+function createLegacyWorkbookWithKg027MatchingSpotCharter(string $path): void
+{
+    $spreadsheet = new Spreadsheet();
+
+    $invoice = $spreadsheet->getActiveSheet();
+    $invoice->setTitle('Invoice');
+    $invoice->fromArray([
+        ['Nomor Invoice', '', 'Nomor Projek', 'Nomor Faktur', 'Offering Item', 'DPP', 'Profit', 'PPN', 'Total Setelah PPN', 'Status Bayar', 'Nilai Invoice yang dibayar'],
+        ['147', '31/07/2025', 'PG25-211', 'KG027', 'JASA SPOT CHARTER KENDARAAN BOD 11-12 Agust 2025', '5,000,000', '', '550,000', '5,550,000', 'SENT', ''],
     ]);
 
     $writer = new Xlsx($spreadsheet);

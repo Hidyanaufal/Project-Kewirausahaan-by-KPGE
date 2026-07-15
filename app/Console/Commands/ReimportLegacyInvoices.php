@@ -95,6 +95,14 @@ class ReimportLegacyInvoices extends Command
             });
 
             $mismatchCount = $previewRows->filter(fn (array $row) => $row[4] === 'beda')->count();
+            $dbDuplicateGroups = Invoice::query()
+                ->where('company_id', $companyId)
+                ->where('is_imported', true)
+                ->select('invoice_number')
+                ->groupBy('invoice_number')
+                ->havingRaw('COUNT(*) > 1')
+                ->pluck('invoice_number');
+            $excelUniqueCount = count($workbookInvoices);
 
             $this->table(
                 ['ID', 'Invoice', 'Total DB', 'Total Excel', 'Status'],
@@ -111,6 +119,16 @@ class ReimportLegacyInvoices extends Command
                 $invoices->count(),
                 $mismatchCount,
             ));
+            $this->line(sprintf(
+                'Excel setelah dedupe: %d nomor invoice unik. Duplikat imported di DB: %d nomor (akan disisakan 1, sisanya dihapus saat live).',
+                $excelUniqueCount,
+                $dbDuplicateGroups->count(),
+            ));
+
+            if ($dbDuplicateGroups->isNotEmpty()) {
+                $this->warn('Nomor duplikat DB: ' . $dbDuplicateGroups->take(10)->implode(', ')
+                    . ($dbDuplicateGroups->count() > 10 ? ', ...' : ''));
+            }
 
             if ($mismatchCount > 0) {
                 $this->line('Jalankan tanpa --dry-run untuk re-import dari Excel.');

@@ -319,14 +319,12 @@ class LegacyInvoiceSheetMismatchService
             ?: ($this->layout->valueAt($values, 'supplement', 'nominal_invoice') ?: null),
         );
 
-        if ($nominalInvoice > 0 && $preTaxTotal > $nominalInvoice) {
-            $subtotal = $nominalInvoice;
-            $profitTotal = $profit > 0 ? $profit : max($preTaxTotal - $nominalInvoice, 0);
-        } elseif ($profit > 0 && $preTaxTotal > $profit) {
+        if ($profit > 0) {
             $subtotal = max($preTaxTotal - $profit, 0);
             $profitTotal = $profit;
         } else {
-            $subtotal = $preTaxTotal;
+            // No explicit Profit column ⇒ entire pretax is DPP (do not invent margin).
+            $subtotal = $preTaxTotal > 0 ? $preTaxTotal : $nominalInvoice;
             $profitTotal = 0;
         }
 

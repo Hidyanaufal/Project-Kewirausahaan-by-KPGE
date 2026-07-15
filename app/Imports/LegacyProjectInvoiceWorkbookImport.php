@@ -64,19 +64,12 @@ class LegacyProjectInvoiceWorkbookImport
     public function previewMappedInvoices(string $filePath): array
     {
         [$service, $invoiceRows] = $this->bootstrapImport($filePath);
-        $mappedInvoices = [];
 
-        foreach ($invoiceRows as $row) {
-            $mapped = $service->previewMapInvoiceRow($row['values'] ?? []);
-
-            if (! $mapped || empty($mapped['invoice_number'])) {
-                continue;
-            }
-
-            $mappedInvoices[$mapped['invoice_number']] = $mapped;
-        }
-
-        return $mappedInvoices;
+        return collect($service->collapseInvoiceSheetRows($invoiceRows))
+            ->mapWithKeys(fn (array $entry, string $invoiceNumber) => [
+                $invoiceNumber => $entry['mapped'],
+            ])
+            ->all();
     }
 
     /**
@@ -148,6 +141,11 @@ class LegacyProjectInvoiceWorkbookImport
                 $invoices['with_total'] ?? 0,
                 $invoices['paid_with_payment'] ?? 0,
                 $invoices['zero_total_rejected'] ?? 0,
+            ),
+            sprintf(
+                'Dedup: %d baris Excel digabung, %d invoice imported duplikat dihapus dari DB.',
+                $invoices['excel_duplicates_collapsed'] ?? 0,
+                $invoices['db_duplicates_removed'] ?? 0,
             ),
         ];
 
