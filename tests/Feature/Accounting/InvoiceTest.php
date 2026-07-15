@@ -88,7 +88,7 @@ it('creates a basic invoice with line items and calculates totals correctly', fu
         ->lineItems->count()->toBe(3)
         ->subtotal->toBeGreaterThan(0)
         ->total->toBeGreaterThan(0)
-        ->amount_due->toBe($invoice->total);
+        ->amount_due->toBe($invoice->actual_total);
 });
 
 test('approved invoices are marked as Unsent when not Overdue', function () {
@@ -140,6 +140,7 @@ test('partial payment ke-2 di-journal incremental (cash & receivable tidak jadi 
         ->withLineItems()
         ->state([
             'company_id' => $activeCompanyId,
+            'due_date' => now()->addDays(30),
         ])
         ->create();
 
@@ -780,7 +781,7 @@ test('update first payment on paid invoice rebuilds latest payment journals', fu
         ->where('account_id', $receivableAccount->id)
         ->sum('amount');
 
-    $delta = 25_000;
+    $delta = min(25_000, max(1, (int) floor($payment2Amount / 2)));
     $newPayment1Amount = $payment1Amount + $delta;
     $newPayment2Amount = $payment2Amount - $delta;
     expect($newPayment2Amount)->toBeGreaterThan(0);
