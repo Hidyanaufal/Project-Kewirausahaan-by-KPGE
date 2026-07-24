@@ -164,9 +164,19 @@ class OpeningBalanceNameImportService
         $currency = CurrencyAccessor::getDefaultCurrency();
         $results = collect();
         $reservedCodes = collect();
+        // Precompute once — rejectStructuralParents ran O(n²) parent detection per Excel row.
+        $structuralParentIds = Account::parentAccountIdsFromCollection($accounts)->flip();
 
         foreach ($excelRows as $row) {
-            $dto = $this->matchRow($row, $byNormalizedName, $accounts, $currency, $companyId, $reservedCodes);
+            $dto = $this->matchRow(
+                $row,
+                $byNormalizedName,
+                $accounts,
+                $currency,
+                $companyId,
+                $reservedCodes,
+                $structuralParentIds,
+            );
             if ($dto->status === 'new' && $dto->suggestedCode) {
                 $reservedCodes->push($dto->suggestedCode);
             }
@@ -1738,11 +1748,8 @@ class OpeningBalanceNameImportService
      * @param  array<string, mixed>  $row
      * @param  Collection<string, Collection<int, Account>>  $byNormalizedName
      * @param  Collection<int, Account>  $accounts
-     */
-    /**
-     * @param  Collection<string, Collection<int, Account>>  $byNormalizedName
-     * @param  Collection<int, Account>  $accounts
      * @param  Collection<int, string>  $reservedCodes
+     * @param  Collection<int|string, int>  $structuralParentIds  flipped parent ID set from match()
      */
     private function matchRow(
         array $row,
@@ -1751,6 +1758,7 @@ class OpeningBalanceNameImportService
         string $currency,
         int $companyId,
         Collection $reservedCodes,
+        Collection $structuralParentIds,
     ): OpeningBalanceNameMatchDTO {
         $rowNumber = (int) $row['row_number'];
         $excelName = (string) $row['account_name'];
@@ -1818,7 +1826,7 @@ class OpeningBalanceNameImportService
         $parentQualified = $this->rejectStructuralParentsForNonZeroLeaf(
             $parentQualified,
             $balanceMinor,
-            $accounts,
+            $structuralParentIds,
         );
         if ($parentQualified->count() === 1) {
             /** @var Account $account */
@@ -1900,7 +1908,7 @@ class OpeningBalanceNameImportService
         $exactGroup = $this->rejectStructuralParentsForNonZeroLeaf(
             $exactGroup,
             $balanceMinor,
-            $accounts,
+            $structuralParentIds,
         );
 
         if ($exactGroup->count() === 1) {
@@ -1976,10 +1984,9 @@ class OpeningBalanceNameImportService
         }
 
         if ($balanceMinor !== 0 && $candidates !== []) {
-            $parentIds = Account::parentAccountIdsFromCollection($accounts)->flip();
             $candidates = array_values(array_filter(
                 $candidates,
-                fn (array $c): bool => ! $parentIds->has((int) $c['id']),
+                fn (array $c): bool => ! $structuralParentIds->has((int) $c['id']),
             ));
         }
 
@@ -2126,22 +2133,20 @@ class OpeningBalanceNameImportService
      * (Excel 8003 = 0 ke header Beban Lain-Lain).
      *
      * @param  Collection<int, Account>  $candidates
-     * @param  Collection<int, Account>  $accounts
+     * @param  Collection<int|string, int>  $structuralParentIds  flipped set from match()
      * @return Collection<int, Account>
      */
     private function rejectStructuralParentsForNonZeroLeaf(
         Collection $candidates,
         int $balanceMinor,
-        Collection $accounts,
+        Collection $structuralParentIds,
     ): Collection {
         if ($balanceMinor === 0 || $candidates->isEmpty()) {
             return $candidates;
         }
 
-        $parentIds = Account::parentAccountIdsFromCollection($accounts)->flip();
-
         return $candidates
-            ->reject(fn (Account $account) => $parentIds->has((int) $account->id))
+            ->reject(fn (Account $account) => $structuralParentIds->has((int) $account->id))
             ->values();
     }
 
