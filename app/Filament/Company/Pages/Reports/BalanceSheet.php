@@ -118,7 +118,7 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
         $companyId = $company->id;
 
         $asOfDate = $this->getFormattedAsOfDate();
-        $startDate = $this->reportService->getEarliestTransactionDate();
+        $startDate = $this->reportService->getEarliestTransactionDate($companyId);
 
         $accountsWithBalance = $this->accountService->getAccountBalances(
             $startDate,
@@ -131,8 +131,8 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 AccountCategory::Asset,
                 AccountCategory::Liability,
                 AccountCategory::Equity,
-                AccountCategory::Revenue,  // ← tambah
-                AccountCategory::Expense,  // ← tambah
+                AccountCategory::Revenue,
+                AccountCategory::Expense,
             ])
                 ->get();
 
@@ -147,10 +147,12 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             $startDate,
             $asOfDate,
             null,
-            $companyId
+            $companyId,
+            $accountsWithBalance,
         )->getAmount();
 
         $excludedFromTotals = Account::balanceSheetExcludedAccountIdsForCompany($companyId)->flip();
+        $hiddenClearingIds = Account::balanceSheetHiddenLineAccountIdsForCompany($companyId)->flip();
         $now = Carbon::now()->format('Y-m-d_H-i-s');
         $startFormatted = Carbon::parse($this->getFilterState('asOfDate'))->format('d M Y');
 
@@ -196,10 +198,17 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             ->groupBy(['category', 'type']);
 
         // Recursive walker untuk hierarki akun
-        $appendAccountRows = function ($accounts, $level = 1) use (&$appendAccountRows, &$rows, $toNumber, $balanceMap) {
+        $appendAccountRows = function ($accounts, $level = 1) use (&$appendAccountRows, &$rows, $toNumber, $balanceMap, $hiddenClearingIds) {
             $padding = $level * 15;
 
             foreach ($accounts as $account) {
+                if ($hiddenClearingIds->has($account->id)) {
+                    if ($account->children->isNotEmpty()) {
+                        $appendAccountRows($account->children, $level + 1);
+                    }
+                    continue;
+                }
+
                 $balance = $balanceMap[$account->id] ?? 0;
                 // Skip account jika balance = 0
                 if ($balance == 0) {
@@ -307,10 +316,21 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             }
 
             // subtotal per kategori (hanya tampilkan jika bukan 0)
+            // Total Assets = Current Assets - Contra Assets + Non-Current Assets
+            // (contra types contribute negatively; type subtotals remain positive).
             $categoryTotal = collect($types)
-                ->flatten()
-                ->filter(fn($a) => is_null($a->parent_id))
-                ->sum(fn($a) => $subtreeBalance($a));
+                ->map(function ($accountsByType, $type) use ($subtreeBalance) {
+                    $typeTotal = collect($accountsByType)
+                        ->filter(fn ($a) => is_null($a->parent_id))
+                        ->sum(fn ($a) => $subtreeBalance($a));
+
+                    $accountType = $type instanceof AccountType
+                        ? $type
+                        : AccountType::tryFrom((string) $type);
+
+                    return ($accountType?->isContra() ?? false) ? -$typeTotal : $typeTotal;
+                })
+                ->sum();
 
             // Inject computed equity (Laba Tahun Berjalan atau Retained Earnings) sebelum Total Equity
             $addComputedRetainedEarnings = Account::shouldInjectComputedEquityLineOnBalanceSheet($companyId);

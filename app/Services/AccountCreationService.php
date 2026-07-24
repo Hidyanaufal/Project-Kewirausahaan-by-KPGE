@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\Accounting\AccountType;
 use App\Helpers\AccountTypeHelper;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\AccountSubtype;
@@ -22,11 +23,12 @@ class AccountCreationService
             throw new InvalidArgumentException("Account code already exists: {$code}");
         }
 
-        $subtype = $this->resolveSubtype($companyId, $accountTypeLabel);
-        $accountType = AccountTypeHelper::map($accountTypeLabel);
+        $accountType = AccountTypeHelper::map($accountTypeLabel, $name);
         if ($accountType === null) {
             throw new InvalidArgumentException("Unknown account type: {$accountTypeLabel}");
         }
+
+        $subtype = $this->resolveSubtype($companyId, $accountTypeLabel, $name);
 
         $parentId = $parentAccountId ?? $this->resolveParentId($companyId, $code, $parentCodeHint);
 
@@ -59,12 +61,12 @@ class AccountCreationService
             return $existing;
         }
 
-        $accountType = AccountTypeHelper::map($accountTypeLabel);
+        $accountType = AccountTypeHelper::map($accountTypeLabel, $name);
         if ($accountType === null) {
             throw new InvalidArgumentException("Unknown account type: {$accountTypeLabel}");
         }
 
-        $subtype = $this->resolveSubtype($companyId, $accountTypeLabel);
+        $subtype = $this->resolveSubtype($companyId, $accountTypeLabel, $name);
 
         return Account::create([
             'company_id' => $companyId,
@@ -97,16 +99,32 @@ class AccountCreationService
         );
     }
 
-    private function resolveSubtype(int $companyId, string $accountTypeLabel): AccountSubtype
+    private function resolveSubtype(int $companyId, string $accountTypeLabel, ?string $accountName = null): AccountSubtype
     {
-        $accountType = AccountTypeHelper::map($accountTypeLabel);
+        $accountType = AccountTypeHelper::map($accountTypeLabel, $accountName);
         if ($accountType === null) {
             throw new InvalidArgumentException("Unknown account type: {$accountTypeLabel}");
         }
 
+        $subtypeName = $accountType === AccountType::ContraAsset
+            && AccountTypeHelper::isAllowanceContraAssetName((string) $accountName)
+            ? 'Allowance / Penyisihan'
+            : $accountTypeLabel;
+
         $subtype = AccountSubtype::query()
             ->where('company_id', $companyId)
-            ->where('name', $accountTypeLabel)
+            ->where('type', $accountType->value)
+            ->where('name', $subtypeName)
+            ->first();
+
+        if ($subtype) {
+            return $subtype;
+        }
+
+        // Fallback: any subtype with the resolved enum type.
+        $subtype = AccountSubtype::query()
+            ->where('company_id', $companyId)
+            ->where('type', $accountType->value)
             ->first();
 
         if ($subtype) {
@@ -115,7 +133,7 @@ class AccountCreationService
 
         return AccountSubtype::create([
             'company_id' => $companyId,
-            'name' => $accountTypeLabel,
+            'name' => $subtypeName,
             'category' => $accountType->getCategory(),
             'type' => $accountType->value,
             'inverse_cash_flow' => AccountTypeHelper::isInverseCashFlow($accountTypeLabel),

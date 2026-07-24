@@ -13,6 +13,7 @@ use App\Services\ReportService;
 use App\Transformers\BalanceSheetReportTransformer;
 use App\Utilities\Currency\CurrencyConverter;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 it('calculates contra equity net movement using account type normal balance', function () {
     $account = Account::factory()->make([
@@ -67,6 +68,58 @@ it('detects parent accounts for chart of accounts hierarchy', function () {
     expect($parent->fresh()->isParentAccount())->toBeTrue()
         ->and($child->fresh()->isParentAccount())->toBeFalse()
         ->and(Account::parentAccountIdsForCompany($company->id))->toContain($parent->id);
+});
+
+it('detects code-prefix parent accounts set-based without parent_id', function () {
+    $company = $this->testCompany;
+
+    $referenceEquity = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::Equity)
+        ->firstOrFail();
+
+    $parent = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $referenceEquity->subtype_id,
+        'code' => '8888',
+        'name' => 'BS Code Prefix Parent',
+        'parent_id' => null,
+    ]);
+
+    Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $referenceEquity->subtype_id,
+        'code' => '8888.10',
+        'name' => 'BS Code Prefix Child',
+        'parent_id' => null,
+    ]);
+
+    $parentIds = Account::parentAccountIdsForCompany($company->id);
+
+    expect($parentIds)->toContain($parent->id)
+        ->and($parent->fresh()->isParentAccount())->toBeTrue();
+});
+
+it('builds balance sheet retained earnings without extra balance aggregation queries', function () {
+    $company = $this->testCompany;
+    $asOf = Carbon::now()->toDateString();
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
+
+    $queries = collect(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    $balanceAggregations = $queries->filter(function (array $query) {
+        $sql = strtolower($query['query']);
+
+        return str_contains($sql, 'journal_entries')
+            && str_contains($sql, 'starting_balance');
+    });
+
+    expect($balanceAggregations)->toHaveCount(1);
 });
 
 it('excludes parent account balances from balance sheet equity category totals', function () {
@@ -168,20 +221,61 @@ it('excludes open balance equity clearing account from balance sheet category to
     $clearingAccount = Account::factory()->create([
         'company_id' => $company->id,
         'subtype_id' => $referenceEquity->subtype_id,
+        'category' => AccountCategory::Equity,
+        'type' => AccountType::Equity,
         'code' => '9996',
         'name' => 'Test Open Balance Equity',
     ]);
 
-    AccountDefault::query()->create([
-        'company_id' => $company->id,
-        'account_id' => $clearingAccount->id,
-        'key' => AccountDefaultKey::OpenBalance,
-    ]);
+    AccountDefault::query()->updateOrCreate(
+        [
+            'company_id' => $company->id,
+            'key' => AccountDefaultKey::OpenBalance->value,
+        ],
+        ['account_id' => $clearingAccount->id],
+    );
 
     expect(Account::balanceSheetExcludedAccountIdsForCompany($company->id))
+        ->toContain($clearingAccount->id)
+        ->and(Account::balanceSheetClearingAccountIdsForCompany($company->id))
         ->toContain($clearingAccount->id);
 
+    $amount = 3_500_000;
+    $bankAccount = $company->default->bankAccount;
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount)
+        ->create([
+            'posted_at' => now()->subDay()->toDateTimeString(),
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $bankAccount->account_id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount,
+    ]));
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $clearingAccount->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+
     $report = Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
+
+    $equityNames = collect($report->categories['Equity']->types ?? [])
+        ->flatMap(fn ($typeDto) => $typeDto->accounts ?? [])
+        ->map(fn ($dto) => $dto->accountName);
+
+    expect($equityNames)->not->toContain('Test Open Balance Equity');
 
     $equitySummary = CurrencyConverter::convertToFloat(
         $report->categories['Equity']->summary->endingBalance ?? '0'
@@ -207,6 +301,86 @@ it('excludes open balance equity clearing account from balance sheet category to
     expect(abs($equitySummary - ($expectedEquity + $retainedEarnings)))->toBeLessThan(0.02);
 });
 
+it('hides legacy RETAINED EARNING on balance sheet when Laba Ditahan exists', function () {
+    $company = $this->testCompany;
+    $asOf = Carbon::now()->toDateString();
+
+    $referenceEquity = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::Equity)
+        ->firstOrFail();
+
+    $labaDitahan = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $referenceEquity->subtype_id,
+        'category' => AccountCategory::Equity,
+        'type' => AccountType::Equity,
+        'code' => '3002.bs',
+        'name' => 'Laba Ditahan',
+    ]);
+
+    $legacyRe = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $referenceEquity->subtype_id,
+        'category' => AccountCategory::Equity,
+        'type' => AccountType::Equity,
+        'code' => '320001.bs',
+        'name' => 'RETAINED EARNING',
+    ]);
+
+    expect(Account::duplicateRetainedEarningsAccountIdsForCompany($company->id))
+        ->toContain($legacyRe->id)
+        ->not->toContain($labaDitahan->id)
+        ->and(Account::balanceSheetHiddenLineAccountIdsForCompany($company->id))
+        ->toContain($legacyRe->id)
+        ->and(Account::balanceSheetExcludedAccountIdsForCompany($company->id))
+        ->toContain($legacyRe->id);
+
+    $amount = 4_200_000;
+    $labaAmount = 1_500_000;
+    $bankAccount = $company->default->bankAccount;
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount + $labaAmount)
+        ->create([
+            'posted_at' => now()->subDay()->toDateTimeString(),
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $bankAccount->account_id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount + $labaAmount,
+    ]));
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $legacyRe->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $labaDitahan->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $labaAmount,
+    ]));
+
+    $report = Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
+
+    $equityNames = collect($report->categories['Equity']->types ?? [])
+        ->flatMap(fn ($typeDto) => $typeDto->accounts ?? [])
+        ->map(fn ($dto) => $dto->accountName);
+
+    expect($equityNames)->not->toContain('RETAINED EARNING')
+        ->and($equityNames)->toContain('Laba Ditahan');
+});
+
 it('detects dedicated retained earnings GL account for balance sheet aggregation', function () {
     $company = $this->testCompany;
 
@@ -227,7 +401,7 @@ it('detects dedicated retained earnings GL account for balance sheet aggregation
     expect(Account::shouldAddComputedRetainedEarningsToBalanceSheet($company->id))->toBeFalse();
 });
 
-it('skips computed retained earnings in balance sheet totals when GL retained earnings account exists', function () {
+it('injects Laba Tahun Berjalan when GL retained earnings exists alongside nominal accounts', function () {
     $company = $this->testCompany;
     $asOf = Carbon::now()->toDateString();
 
@@ -274,6 +448,10 @@ it('skips computed retained earnings in balance sheet totals when GL retained ea
         'amount' => $amount,
     ]));
 
+    expect(Account::shouldAddComputedRetainedEarningsToBalanceSheet($company->id))->toBeFalse()
+        ->and(Account::shouldInjectComputedEquityLineOnBalanceSheet($company->id))->toBeTrue()
+        ->and(Account::companyHasNominalAccounts($company->id))->toBeTrue();
+
     $report = Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
 
     expect($report->categories['Equity']->types ?? [])
@@ -297,12 +475,12 @@ it('skips computed retained earnings in balance sheet totals when GL retained ea
         $expectedEquityGl += ($balances['ending_balance'] ?? 0) / 100;
     }
 
-    $computedRetainedEarnings = Reporting::calculateRetainedEarnings($startDate, $asOf, null, $company->id)->getAmount() / 100;
+    $computedCurrentYearEarnings = Reporting::calculateRetainedEarnings($startDate, $asOf, null, $company->id)->getAmount() / 100;
 
-    expect(abs($equitySummary - $expectedEquityGl))->toBeLessThan(0.02);
+    expect(abs($equitySummary - ($expectedEquityGl + $computedCurrentYearEarnings)))->toBeLessThan(0.02);
 
-    if (abs($computedRetainedEarnings) > 0.01) {
-        expect(abs($equitySummary - ($expectedEquityGl + $computedRetainedEarnings)))->toBeGreaterThan(0.02);
+    if (abs($computedCurrentYearEarnings) > 0.01) {
+        expect($report->categories['Equity']->types ?? [])->toHaveKey('Laba Tahun Berjalan');
     }
 });
 
@@ -629,4 +807,84 @@ it('excludes mapped Laba Tahun Berjalan GL balance from equity totals in favor o
 
     expect(abs($displayedAmount - $computedAmount))->toBeLessThan(0.02)
         ->and(abs($displayedAmount - ($glAmount / 100)))->toBeGreaterThan(0.02);
+});
+
+it('computes total assets as current plus non-current minus contra assets', function () {
+    $company = $this->testCompany;
+    $asOf = Carbon::now()->toDateString();
+
+    $assetsBefore = CurrencyConverter::convertToFloat(
+        Reporting::buildBalanceSheetReport($asOf, [], null, $company->id)
+            ->categories['Assets']->summary->endingBalance ?? '0'
+    );
+
+    $contraSubtype = \App\Models\Accounting\AccountSubtype::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::ContraAsset)
+        ->firstOrFail();
+
+    $contraAsset = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $contraSubtype->id,
+        'category' => AccountCategory::Asset,
+        'type' => AccountType::ContraAsset,
+        'code' => '1499.bs',
+        'name' => 'BS Test Accumulated Depreciation',
+    ]);
+
+    $expenseAccount = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::OperatingExpense)
+        ->firstOrFail();
+
+    $amount = 175_000;
+    $bankAccount = $company->default->bankAccount;
+
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount)
+        ->create([
+            'posted_at' => now()->toDateTimeString(),
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $expenseAccount->id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount,
+    ]));
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $contraAsset->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+
+    $report = Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
+    $assets = $report->categories['Assets'];
+
+    $typeBalance = function (string $typeName) use ($assets): float {
+        if (! isset($assets->types[$typeName])) {
+            return 0.0;
+        }
+
+        return CurrencyConverter::convertToFloat($assets->types[$typeName]->summary->endingBalance ?? '0');
+    };
+
+    $current = $typeBalance('Current Assets');
+    $nonCurrent = $typeBalance('Non-Current Assets');
+    $contra = $typeBalance('Contra Assets');
+    $totalAssets = CurrencyConverter::convertToFloat($assets->summary->endingBalance ?? '0');
+
+    expect(abs($totalAssets - ($current - $contra + $nonCurrent)))->toBeLessThan(0.02)
+        ->and($contra)->toBeGreaterThanOrEqual(($amount / 100) - 0.02)
+        ->and(abs($totalAssets - ($assetsBefore - ($amount / 100))))->toBeLessThan(0.02);
 });

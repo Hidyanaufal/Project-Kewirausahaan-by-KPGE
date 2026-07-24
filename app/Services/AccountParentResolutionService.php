@@ -187,8 +187,11 @@ class AccountParentResolutionService
     public function normalizeName(string $name): string
     {
         $normalized = mb_strtolower(trim($name));
-        $normalized = str_replace(['.', ',', '(', ')', '-', '/'], ' ', $normalized);
+        $normalized = str_replace(['.', ',', '(', ')', '-', '/', '&'], ' ', $normalized);
         $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+        $normalized = trim($normalized);
+        // Excel sering "BEBAN …", sistem "Biaya …".
+        $normalized = preg_replace('/\bbeban\b/u', 'biaya', $normalized) ?? $normalized;
 
         return trim($normalized);
     }

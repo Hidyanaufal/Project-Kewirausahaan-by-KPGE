@@ -60,24 +60,15 @@ class OpeningBalanceImport implements ShouldQueue, ToModel, WithChunkReading, Wi
             return null;
         }
 
-        /** @var OpeningBalanceNameImportService $service */
-        $service = app(OpeningBalanceNameImportService::class);
-
-        if ($service->isNominalPnLAccount($account)) {
-            Log::info('OpeningBalanceImport - skipped nominal P&L account', [
-                'company_id' => $this->companyId,
-                'code' => $account->code,
-                'name' => $account->name,
-            ]);
-
-            return null;
-        }
-
         if (! Company::query()->whereKey($this->companyId)->exists()) {
             return null;
         }
 
-        $desiredMinor = $service->parseBalanceToMinor($balanceRaw, CurrencyAccessor::getDefaultCurrency());
+        /** @var OpeningBalanceNameImportService $service */
+        $service = app(OpeningBalanceNameImportService::class);
+
+        $excelSignedMinor = $service->parseBalanceToMinor($balanceRaw, CurrencyAccessor::getDefaultCurrency());
+        $desiredMinor = $service->excelSignedToDesiredMinor($account, $excelSignedMinor);
         $service->postOpeningBalanceAdjustment($this->companyId, $account, $this->year, $desiredMinor);
 
         return $account;

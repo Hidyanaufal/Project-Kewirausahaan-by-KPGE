@@ -182,8 +182,9 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
 
-        $start = Carbon::parse($this->getFilterState('startDate'));
-        $end = Carbon::parse($this->getFilterState('endDate'));
+        // Trial Balance uses as-of date; Advance template shows activity from earliest txn through as-of.
+        $end = Carbon::parse($this->getFilterState('asOfDate'))->endOfDay();
+        $start = Carbon::parse($this->reportService->getEarliestTransactionDate((int) $company->id) ?? $end->toDateString())->startOfDay();
         $now = Carbon::now()->format('Y-m-d_H-i-s');
 
         $startFormatted = $start->format('d M Y');
@@ -200,9 +201,11 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
             'End Bal Credit',
         ];
 
-        // Ambil semua akun aktif
+        // Ambil semua akun aktif (exclude parent/header + clearing OBE/CYE)
+        $excludedIds = Account::trialBalanceExcludedAccountIdsForCompany((int) $company->id)->all();
         $accounts = Account::where('archived', false)
             ->where('company_id', $company->id)
+            ->when($excludedIds !== [], fn ($q) => $q->whereNotIn('id', $excludedIds))
             ->get(['id', 'code', 'name', 'type']);
 
         // Urutkan berdasarkan AccountType yang diinginkan
@@ -376,20 +379,21 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
         $report = $this->report;
 
-        $start = Carbon::parse($report->getStartDate());
+        // ReportDTO for Trial Balance has no startDate; use as-of filter (Carbon::parse(null) would become today).
+        $asOf = Carbon::parse($this->getFilterState('asOfDate'));
         $now = Carbon::now()->format('Y-m-d_H-i-s');
 
-        $startFormatted = $start->format('d M Y');
+        $asOfFormatted = $asOf->format('d M Y');
 
         $toNumber = fn($v) => is_null($v)
             ? 0
-            : (float) str_replace(',', '.', preg_replace('/[^\d]/', '', $v));
+            : (float) str_replace(',', '.', preg_replace('/[^\d.]/', '', $v));
 
         $data = [
             'filename'      => "{$company->name} Trial Balance Classic {$now}.pdf",
             'company_name'  => $company->name,
             'report_title'  => "Trial Balance Classic",
-            'report_period' => "As of {$startFormatted}",
+            'report_period' => "As of {$asOfFormatted}",
             'columns'       => [
                 "Account No",
                 "Account Name",
