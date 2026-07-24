@@ -184,16 +184,151 @@ class Account extends Model
 
     /**
      * Account IDs that should be excluded from balance-sheet category totals (parent/header accounts).
+     * Set-based: parent_id children + in-memory code-prefix detection (no N+1 EXISTS per account).
      *
      * @return Collection<int, int>
      */
     public static function parentAccountIdsForCompany(int $companyId): Collection
     {
-        return static::query()
+        $accounts = static::query()
             ->where('company_id', $companyId)
-            ->get(['id', 'code', 'company_id'])
-            ->filter(static fn (self $account): bool => $account->isParentAccount())
-            ->pluck('id');
+            ->get(['id', 'code', 'parent_id', 'name']);
+
+        return static::parentAccountIdsFromCollection($accounts);
+    }
+
+    /**
+     * Detect parent/header account IDs from an already-loaded account collection.
+     *
+     * @param  Collection<int, self>  $accounts
+     * @return Collection<int, int>
+     */
+    public static function parentAccountIdsFromCollection(Collection $accounts): Collection
+    {
+        $parentIds = $accounts
+            ->pluck('parent_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $byCode = [];
+        foreach ($accounts as $account) {
+            $code = trim((string) $account->code);
+            if ($code === '') {
+                continue;
+            }
+            $byCode[$code][] = (int) $account->id;
+        }
+
+        $codes = array_keys($byCode);
+        $prefixParentIds = [];
+
+        foreach ($codes as $code) {
+            $isParent = false;
+
+            foreach ($codes as $otherCode) {
+                if ($otherCode === $code) {
+                    continue;
+                }
+
+                if (str_starts_with($otherCode, $code . '.') || str_starts_with($otherCode, $code . '-')) {
+                    $isParent = true;
+                    break;
+                }
+
+                if (
+                    ctype_digit($code)
+                    && strlen($code) >= 3
+                    && str_starts_with($otherCode, $code)
+                    && strlen($otherCode) > strlen($code)
+                ) {
+                    $isParent = true;
+                    break;
+                }
+            }
+
+            if ($isParent) {
+                foreach ($byCode[$code] as $id) {
+                    $prefixParentIds[] = $id;
+                }
+            }
+        }
+
+        return $parentIds
+            ->merge($prefixParentIds)
+            ->unique()
+            ->values();
+    }
+
+    /**
+     * System clearing accounts (Open Balance Equity / Laba Tahun Berjalan) — parkir import / computed equity.
+     * Ditampilkan di COA, tapi disembunyikan dari baris laporan dan tidak masuk total neraca.
+     *
+     * @return Collection<int, int>
+     */
+    public static function balanceSheetClearingAccountIdsForCompany(int $companyId): Collection
+    {
+        return AccountDefault::query()
+            ->where('company_id', $companyId)
+            ->whereIn('key', [
+                AccountDefaultKey::OpenBalance,
+                AccountDefaultKey::CurrentYearEarnings,
+            ])
+            ->pluck('account_id')
+            ->unique()
+            ->values();
+    }
+
+    /**
+     * Legacy RETAINED EARNING IDs when Laba Ditahan (atau RE lain yang dipilih) sudah ada —
+     * hindari dobel equity di laporan.
+     *
+     * @param  Collection<int, self>|null  $accounts
+     * @return Collection<int, int>
+     */
+    public static function duplicateRetainedEarningsAccountIdsForCompany(
+        int $companyId,
+        ?Collection $accounts = null,
+    ): Collection {
+        $accounts ??= static::query()
+            ->where('company_id', $companyId)
+            ->get(['id', 'code', 'parent_id', 'name']);
+
+        $retainedLike = $accounts
+            ->filter(function (self $account): bool {
+                $normalized = mb_strtolower(trim((string) $account->name));
+
+                return in_array($normalized, ['retained earning', 'retained earnings', 'laba ditahan'], true)
+                    || str_contains($normalized, 'retained earn')
+                    || str_contains($normalized, 'laba ditahan');
+            })
+            ->values();
+
+        if ($retainedLike->count() <= 1) {
+            return collect();
+        }
+
+        $preferred = $retainedLike->first(
+            fn (self $account): bool => str_contains(mb_strtolower((string) $account->name), 'laba ditahan')
+        ) ?? $retainedLike->first();
+
+        return $retainedLike
+            ->reject(fn (self $account): bool => $account->id === $preferred->id)
+            ->pluck('id')
+            ->values();
+    }
+
+    /**
+     * Akun yang disembunyikan dari baris Balance Sheet: clearing (OBE/CYE) + RETAINED EARNING legacy.
+     *
+     * @return Collection<int, int>
+     */
+    public static function balanceSheetHiddenLineAccountIdsForCompany(int $companyId): Collection
+    {
+        return static::balanceSheetClearingAccountIdsForCompany($companyId)
+            ->merge(static::duplicateRetainedEarningsAccountIdsForCompany($companyId))
+            ->unique()
+            ->values();
     }
 
     /**
@@ -204,17 +339,38 @@ class Account extends Model
      */
     public static function balanceSheetExcludedAccountIdsForCompany(int $companyId): Collection
     {
-        $excluded = static::parentAccountIdsForCompany($companyId);
-
-        $clearingAccountIds = AccountDefault::query()
+        $accounts = static::query()
             ->where('company_id', $companyId)
-            ->whereIn('key', [
-                AccountDefaultKey::OpenBalance,
-                AccountDefaultKey::CurrentYearEarnings,
-            ])
-            ->pluck('account_id');
+            ->get(['id', 'code', 'parent_id', 'name']);
 
-        return $excluded->merge($clearingAccountIds)->unique()->values();
+        $excluded = static::parentAccountIdsFromCollection($accounts);
+
+        return $excluded
+            ->merge(static::balanceSheetClearingAccountIdsForCompany($companyId))
+            ->merge(static::duplicateRetainedEarningsAccountIdsForCompany($companyId, $accounts))
+            ->unique()
+            ->values();
+    }
+
+    /**
+     * Account IDs hidden from Trial Balance: parents + clearing (OBE / CYE)
+     * + akun RETAINED EARNING legacy jika sudah ada Laba Ditahan (hindari dobel equity).
+     *
+     * @return Collection<int, int>
+     */
+    public static function trialBalanceExcludedAccountIdsForCompany(int $companyId): Collection
+    {
+        $accounts = static::query()
+            ->where('company_id', $companyId)
+            ->get(['id', 'code', 'parent_id', 'name']);
+
+        $excluded = static::parentAccountIdsFromCollection($accounts);
+
+        return $excluded
+            ->merge(static::balanceSheetClearingAccountIdsForCompany($companyId))
+            ->merge(static::duplicateRetainedEarningsAccountIdsForCompany($companyId, $accounts))
+            ->unique()
+            ->values();
     }
 
     /**
@@ -233,6 +389,8 @@ class Account extends Model
     /**
      * Whether a computed equity line (Laba Tahun Berjalan or Retained Earnings) should be injected.
      * When Laba Tahun Berjalan is mapped via Account Default, always inject regardless of GL retained earnings.
+     * When dedicated RE GL exists but CYE is not mapped, still inject if the company has nominal (P&L)
+     * accounts — prior RE lives in the GL account while YTD net income must appear as CYE.
      */
     public static function shouldInjectComputedEquityLineOnBalanceSheet(int $companyId): bool
     {
@@ -240,12 +398,31 @@ class Account extends Model
             return true;
         }
 
-        return static::shouldAddComputedRetainedEarningsToBalanceSheet($companyId);
+        if (static::shouldAddComputedRetainedEarningsToBalanceSheet($companyId)) {
+            return true;
+        }
+
+        return static::companyHasNominalAccounts($companyId);
     }
 
     public static function shouldShowComputedCurrentYearEarningsOnBalanceSheet(int $companyId): bool
     {
-        return static::getCurrentYearEarningsAccount($companyId) !== null;
+        return static::getCurrentYearEarningsAccount($companyId) !== null
+            || (
+                ! static::shouldAddComputedRetainedEarningsToBalanceSheet($companyId)
+                && static::companyHasNominalAccounts($companyId)
+            );
+    }
+
+    /**
+     * Whether the company has any revenue/expense leaf accounts (used to decide CYE inject fallback).
+     */
+    public static function companyHasNominalAccounts(int $companyId): bool
+    {
+        return static::query()
+            ->where('company_id', $companyId)
+            ->whereIn('category', [AccountCategory::Revenue, AccountCategory::Expense])
+            ->exists();
     }
 
     /**
@@ -305,6 +482,19 @@ class Account extends Model
                 'label' => $ltjAccount->name,
                 'code' => $ltjAccount->code,
                 'typeName' => $ltjAccount->name,
+            ];
+        }
+
+        // Dedicated RE GL holds prior retained earnings; label YTD net income as Laba Tahun Berjalan.
+        if (
+            $companyId !== null
+            && ! static::shouldAddComputedRetainedEarningsToBalanceSheet($companyId)
+            && static::companyHasNominalAccounts($companyId)
+        ) {
+            return [
+                'label' => 'Laba Tahun Berjalan',
+                'code' => 'CYE',
+                'typeName' => 'Laba Tahun Berjalan',
             ];
         }
 

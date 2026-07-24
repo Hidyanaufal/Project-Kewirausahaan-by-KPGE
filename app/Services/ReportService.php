@@ -37,9 +37,9 @@ class ReportService
         protected AccountService $accountService,
     ) {}
 
-    public function getEarliestTransactionDate(): string
+    public function getEarliestTransactionDate(?int $companyId = null): string
     {
-        return $this->accountService->getEarliestTransactionDate();
+        return $this->accountService->getEarliestTransactionDate($companyId);
     }
 
     /**
@@ -167,24 +167,38 @@ class ReportService
         return $netCashFlow;
     }
 
-    public function calculateRetainedEarnings(?string $startDate, string $endDate, $projectId = null, $companyId = null): Money
+    /**
+     * @param  \Illuminate\Support\Collection<int, Account>|null  $accounts  Optional pre-loaded balances (avoids extra full scans).
+     */
+    public function calculateRetainedEarnings(?string $startDate, string $endDate, $projectId = null, $companyId = null, $accounts = null): Money
     {
-        $startDate ??= Carbon::parse($this->accountService->getEarliestTransactionDate())->toDateTimeString();
-        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)->where('category', AccountCategory::Revenue)->get();
+        if ($accounts === null) {
+            $startDate ??= Carbon::parse($this->accountService->getEarliestTransactionDate(
+                $companyId !== null ? (int) $companyId : null
+            ))->toDateTimeString();
+            $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)->get();
+        }
 
-        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)->where('category', AccountCategory::Expense)->get();
+        $revenueAccounts = $accounts->where('category', AccountCategory::Revenue);
+        $expenseAccounts = $accounts->where('category', AccountCategory::Expense);
 
         $revenueTotal = 0;
         $expenseTotal = 0;
 
         foreach ($revenueAccounts as $account) {
             $revenueBalances = $this->calculateAccountBalances($account);
-            $revenueTotal += $revenueBalances['ending_balance'] ?? $revenueBalances['net_movement'];
+            $amount = $revenueBalances['ending_balance'] ?? $revenueBalances['net_movement'];
+            // Contra revenue (e.g. sales returns) has a debit-normal balance shown as positive;
+            // net revenue must subtract it: Revenue − Contra Revenue.
+            $revenueTotal += $account->type->isContra() ? -$amount : $amount;
         }
 
         foreach ($expenseAccounts as $account) {
             $expenseBalances = $this->calculateAccountBalances($account);
-            $expenseTotal += $expenseBalances['ending_balance'] ?? $expenseBalances['net_movement'];
+            $amount = $expenseBalances['ending_balance'] ?? $expenseBalances['net_movement'];
+            // Contra expense has a credit-normal balance shown as positive;
+            // net expenses must subtract it: Expenses − Contra Expenses.
+            $expenseTotal += $account->type->isContra() ? -$amount : $amount;
         }
 
         $retainedEarnings = $revenueTotal - $expenseTotal;
@@ -375,16 +389,27 @@ class ReportService
     public function buildTrialBalanceReport(string $trialBalanceType, string $asOfDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
     {
         $asOfDateCarbon = Carbon::parse($asOfDate);
-        $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate());
+        $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate(
+            $companyId !== null ? (int) $companyId : null
+        ));
 
         $orderedCategories = AccountCategory::getOrderedCategories();
 
         $isPostClosingTrialBalance = $trialBalanceType === 'postClosing';
 
-        $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
-            ->when($isPostClosingTrialBalance, fn (Builder $query) => $query->whereNotIn('category', [AccountCategory::Revenue, AccountCategory::Expense]))
+        // One aggregation pass; for post-closing, keep Revenue/Expense in memory only for RE calculation.
+        $allAccounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
             ->orderByRaw('LENGTH(code), code')
             ->get();
+
+        $accounts = $isPostClosingTrialBalance
+            ? $allAccounts->whereNotIn('category', [AccountCategory::Revenue, AccountCategory::Expense])
+            : $allAccounts;
+
+        // Parent/header + clearing (OBE / CYE): jangan tampil di TB (OBE sering sisa parkir import).
+        $excludedIds = $companyId !== null
+            ? Account::trialBalanceExcludedAccountIdsForCompany((int) $companyId)->flip()
+            : collect();
 
         $balanceFields = ['debit_balance', 'credit_balance'];
 
@@ -400,9 +425,18 @@ class ReportService
 
             /** @var Account $account */
             foreach ($accountsInCategory as $account) {
+                if ($excludedIds->has($account->id)) {
+                    continue;
+                }
+
                 $accountBalances = $this->calculateAccountBalances($account);
 
                 $endingBalance = $accountBalances['ending_balance'] ?? $accountBalances['net_movement'];
+
+                // Skip accounts with a zero ending balance (both debit and credit would be 0).
+                if ((int) $endingBalance === 0) {
+                    continue;
+                }
 
                 $trialBalance = $this->calculateTrialBalancesForAccount($account, $endingBalance);
 
@@ -423,22 +457,31 @@ class ReportService
             }
 
             if ($category === AccountCategory::Equity && $isPostClosingTrialBalance) {
-                $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), $projectId, $companyId)->getAmount();
-                $isCredit = $retainedEarningsAmount >= 0;
+                $retainedEarningsAmount = $this->calculateRetainedEarnings(
+                    $startDateCarbon->toDateTimeString(),
+                    $asOfDateCarbon->toDateTimeString(),
+                    $projectId,
+                    $companyId,
+                    $allAccounts,
+                )->getAmount();
 
-                $categorySummaryBalances[$isCredit ? 'credit_balance' : 'debit_balance'] += abs($retainedEarningsAmount);
+                if ((int) $retainedEarningsAmount !== 0) {
+                    $isCredit = $retainedEarningsAmount >= 0;
 
-                $categoryAccounts[] = new AccountDTO(
-                    'Retained Earnings',
-                    'RE',
-                    null,
-                    $this->formatBalances([
-                        'debit_balance' => $isCredit ? 0 : abs($retainedEarningsAmount),
-                        'credit_balance' => $isCredit ? $retainedEarningsAmount : 0,
-                    ]),
-                    startDate: $startDateCarbon->toDateString(),
-                    endDate: $asOfDateCarbon->toDateString(),
-                );
+                    $categorySummaryBalances[$isCredit ? 'credit_balance' : 'debit_balance'] += abs($retainedEarningsAmount);
+
+                    $categoryAccounts[] = new AccountDTO(
+                        'Retained Earnings',
+                        'RE',
+                        null,
+                        $this->formatBalances([
+                            'debit_balance' => $isCredit ? 0 : abs($retainedEarningsAmount),
+                            'credit_balance' => $isCredit ? $retainedEarningsAmount : 0,
+                        ]),
+                        startDate: $startDateCarbon->toDateString(),
+                        endDate: $asOfDateCarbon->toDateString(),
+                    );
+                }
             }
 
             foreach ($categorySummaryBalances as $balanceType => $balance) {
@@ -507,22 +550,23 @@ class ReportService
         $companyId = null,
         $projectTypeId = null,
     ): ReportDTO {
-        // Query only relevant accounts and sort them at the query level
-        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
-            ->where('category', AccountCategory::Revenue)
+        // Single aggregation pass; split Revenue / COGS / Expense in memory.
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
+            ->whereIn('category', [AccountCategory::Revenue, AccountCategory::Expense])
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $cogsAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
-            ->whereRelation('subtype', 'name', 'Cost of Goods Sold')
-            ->orderByRaw('LENGTH(code), code')
-            ->get();
+        $revenueAccounts = $accounts->where('category', AccountCategory::Revenue);
 
-        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
+        $cogsAccounts = $accounts
             ->where('category', AccountCategory::Expense)
-            ->whereRelation('subtype', 'name', '!=', 'Cost of Goods Sold')
-            ->orderByRaw('LENGTH(code), code')
-            ->get();
+            ->filter(fn (Account $account) => $account->subtype?->name === 'Cost of Goods Sold')
+            ->values();
+
+        $expenseAccounts = $accounts
+            ->where('category', AccountCategory::Expense)
+            ->filter(fn (Account $account) => $account->subtype?->name !== 'Cost of Goods Sold')
+            ->values();
 
         $accountCategories = [];
         $totalRevenue = 0;
@@ -560,7 +604,12 @@ class ReportService
 
                 if ($category !== null) {
                     $accountBalances = $this->calculateAccountBalances($account);
-                    $movement = $accountBalances['net_movement'];
+                    // Contra accounts (e.g. Sales Returns, Purchase Discounts) have opposite
+                    // normal balances shown as positive; category totals and line amounts must
+                    // subtract them so Net Revenue / Net Expenses remain correct.
+                    $movement = $account->type->isContra()
+                        ? -$accountBalances['net_movement']
+                        : $accountBalances['net_movement'];
                     $netMovement += $movement;
                     $group['total'] += $movement;
 
@@ -820,17 +869,26 @@ class ReportService
     public function buildBalanceSheetReport(string $asOfDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
     {
         $asOfDateCarbon = Carbon::parse($asOfDate);
-        $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate());
+        $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate(
+            $companyId !== null ? (int) $companyId : null
+        ));
 
         $orderedCategories = array_filter(AccountCategory::getOrderedCategories(), fn (AccountCategory $category) => $category->isReal());
 
-        $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
-            ->whereIn('category', $orderedCategories)
+        // One aggregation: real accounts for BS lines + Revenue/Expense for retained earnings.
+        $allAccounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
+        $accounts = $allAccounts->whereIn('category', $orderedCategories);
+
         $excludedFromTotals = $companyId !== null
             ? Account::balanceSheetExcludedAccountIdsForCompany((int) $companyId)->flip()
+            : collect();
+
+        // OBE / CYE / RETAINED EARNING legacy: sama seperti Trial Balance — jangan tampilkan baris.
+        $hiddenClearingIds = $companyId !== null
+            ? Account::balanceSheetHiddenLineAccountIdsForCompany((int) $companyId)->flip()
             : collect();
 
         $accountCategories = [];
@@ -852,6 +910,10 @@ class ReportService
             /** @var Account $account */
             foreach ($accounts as $account) {
                 if ($account->type->getCategory() === $category) {
+                    if ($hiddenClearingIds->has($account->id)) {
+                        continue;
+                    }
+
                     $accountBalances = $this->calculateAccountBalances($account);
                     $endingBalance = $accountBalances['ending_balance'] ?? $accountBalances['net_movement'];
 
@@ -870,14 +932,27 @@ class ReportService
                     $categoryAccountsByType[$accountType][] = $accountDTO;
 
                     if (! $excludedFromTotals->has($account->id)) {
-                        $categorySummaryBalances['ending_balance'] += $endingBalance;
+                        // Contra accounts (e.g. Accumulated Depreciation) have credit-normal balances
+                        // shown as positive amounts; category totals must subtract them:
+                        // Total Assets = Current Assets - Contra Assets + Non-Current Assets
+                        // (same pattern for Liabilities / Equity contra types).
+                        $categoryContribution = $account->type->isContra()
+                            ? -$endingBalance
+                            : $endingBalance;
+                        $categorySummaryBalances['ending_balance'] += $categoryContribution;
                         $subCategoryTotals[$accountType] = ($subCategoryTotals[$accountType] ?? 0) + $endingBalance;
                     }
                 }
             }
 
             if ($category === AccountCategory::Equity) {
-                $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), $projectId, $companyId)->getAmount();
+                $retainedEarningsAmount = $this->calculateRetainedEarnings(
+                    $startDateCarbon->toDateTimeString(),
+                    $asOfDateCarbon->toDateTimeString(),
+                    $projectId,
+                    $companyId,
+                    $allAccounts,
+                )->getAmount();
 
                 $addComputedRetainedEarnings = $companyId === null
                     || Account::shouldInjectComputedEquityLineOnBalanceSheet((int) $companyId);

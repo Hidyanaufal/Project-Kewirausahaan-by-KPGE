@@ -2,6 +2,7 @@
 
 namespace App\Helpers;
 
+use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\AccountType;
 
 class AccountTypeHelper
@@ -35,14 +36,49 @@ class AccountTypeHelper
         'Other Income',
     ];
 
-    public static function map(string $key): ?AccountType
+    public static function map(string $key, ?string $accountName = null): ?AccountType
     {
-        return self::database[$key] ?? null;
+        $base = self::database[$key] ?? null;
+        if ($base === null) {
+            return null;
+        }
+
+        // Penyisihan / allowance di Excel sering berlabel AR/asset, tapi seharusnya Contra Asset (kredit).
+        if (
+            $accountName !== null
+            && self::isAllowanceContraAssetName($accountName)
+            && $base->getCategory() === AccountCategory::Asset
+            && ! $base->isContra()
+        ) {
+            return AccountType::ContraAsset;
+        }
+
+        return $base;
+    }
+
+    /**
+     * Nama akun penyisihan piutang / allowance (bukan beban penyisihan).
+     */
+    public static function isAllowanceContraAssetName(string $accountName): bool
+    {
+        $name = mb_strtolower(trim($accountName));
+        if ($name === '') {
+            return false;
+        }
+
+        // Beban/expense penyisihan tetap expense — jangan override ke contra.
+        if (str_contains($name, 'beban') || str_contains($name, 'biaya')) {
+            return false;
+        }
+
+        return str_contains($name, 'penyisihan')
+            || str_contains($name, 'allowance')
+            || (str_contains($name, 'provisi') && str_contains($name, 'piutang'));
     }
 
     public static function isInverseCashFlow(string $key): bool
     {
-        return !in_array($key, self::inverseCashFlow, true);
+        return ! in_array($key, self::inverseCashFlow, true);
     }
 
     public static function isBankAccount(string $key): bool
