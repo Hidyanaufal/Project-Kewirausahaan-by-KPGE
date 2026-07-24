@@ -200,6 +200,9 @@ class Account extends Model
     /**
      * Detect parent/header account IDs from an already-loaded account collection.
      *
+     * Uses sorted codes + binary search (O(n log n)) instead of nested O(n²) scans,
+     * which timed out on large COAs (e.g. KPPE) under PHP max_execution_time.
+     *
      * @param  Collection<int, self>  $accounts
      * @return Collection<int, int>
      */
@@ -221,29 +224,38 @@ class Account extends Model
         }
 
         $codes = array_keys($byCode);
+        sort($codes, SORT_STRING);
+
         $prefixParentIds = [];
+        $count = count($codes);
 
         foreach ($codes as $code) {
             $isParent = false;
 
-            foreach ($codes as $otherCode) {
-                if ($otherCode === $code) {
-                    continue;
-                }
-
-                if (str_starts_with($otherCode, $code . '.') || str_starts_with($otherCode, $code . '-')) {
+            foreach (['.', '-'] as $separator) {
+                $prefix = $code.$separator;
+                $pos = static::codeLowerBound($codes, $prefix);
+                if ($pos < $count && str_starts_with($codes[$pos], $prefix)) {
                     $isParent = true;
                     break;
                 }
+            }
 
+            if (
+                ! $isParent
+                && ctype_digit($code)
+                && strlen($code) >= 3
+            ) {
+                $pos = static::codeLowerBound($codes, $code);
+                if ($pos < $count && $codes[$pos] === $code) {
+                    $pos++;
+                }
                 if (
-                    ctype_digit($code)
-                    && strlen($code) >= 3
-                    && str_starts_with($otherCode, $code)
-                    && strlen($otherCode) > strlen($code)
+                    $pos < $count
+                    && str_starts_with($codes[$pos], $code)
+                    && strlen($codes[$pos]) > strlen($code)
                 ) {
                     $isParent = true;
-                    break;
                 }
             }
 
@@ -258,6 +270,28 @@ class Account extends Model
             ->merge($prefixParentIds)
             ->unique()
             ->values();
+    }
+
+    /**
+     * First index in a sorted string list where value >= $needle (binary search).
+     *
+     * @param  list<string>  $sortedCodes
+     */
+    private static function codeLowerBound(array $sortedCodes, string $needle): int
+    {
+        $low = 0;
+        $high = count($sortedCodes);
+
+        while ($low < $high) {
+            $mid = intdiv($low + $high, 2);
+            if ($sortedCodes[$mid] < $needle) {
+                $low = $mid + 1;
+            } else {
+                $high = $mid;
+            }
+        }
+
+        return $low;
     }
 
     /**
