@@ -650,6 +650,27 @@ class OpeningBalanceNameImportService
                         $account->update(['name' => $name]);
                     }
                 }
+
+                // Akun existing yang masih CurrentAsset tapi nama penyisihan → naikkan ke ContraAsset
+                // sebelum posting, supaya sisi D/C mengikuti normal credit.
+                if ($execute && $this->accountCreation->ensureAllowanceContraAssetClassification($account)) {
+                    $detail .= ' | type→contra_asset';
+                    $flipped = $this->accountCreation->flipOpeningBalanceImportDebits($account);
+                    if ($flipped > 0) {
+                        $detail .= " | flipped {$flipped} OB tx";
+                    }
+                    // Prefetch starting balance dihitung dengan tipe lama — refresh.
+                    $company = Company::query()->findOrFail($companyId);
+                    $fyStart = $this->computeFiscalYearStartForYear($company, $year)->toDateTimeString();
+                    $fresh = $this->accountService->getStartingBalance(
+                        $account->fresh(),
+                        $fyStart,
+                        override: true,
+                        projectId: null,
+                        companyId: $companyId,
+                    );
+                    $startingByAccountId[$account->id] = $fresh?->getAmount() ?? 0;
+                }
             } else {
                 $plan[] = [$rowNumber, $name, $action ?? '?', 'invalid action', '-'];
 
