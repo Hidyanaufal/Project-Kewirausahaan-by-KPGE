@@ -1818,9 +1818,6 @@ it('keeps balance sheet equation after importing asset liability equity and pnl 
     $liabilitySubtype = \App\Models\Accounting\AccountSubtype::query()
         ->where('type', AccountType::CurrentLiability)
         ->firstOrFail();
-    $equitySubtype = \App\Models\Accounting\AccountSubtype::query()
-        ->where('type', AccountType::Equity)
-        ->firstOrFail();
     $revenueSubtype = \App\Models\Accounting\AccountSubtype::query()
         ->where('type', AccountType::OperatingRevenue)
         ->firstOrFail();
@@ -1846,14 +1843,6 @@ it('keeps balance sheet equation after importing asset liability equity and pnl 
     ]);
     Account::factory()->create([
         'company_id' => $company->id,
-        'subtype_id' => $equitySubtype->id,
-        'category' => AccountCategory::Equity,
-        'type' => AccountType::Equity,
-        'code' => '3200.ob',
-        'name' => 'RETAINED EARNING',
-    ]);
-    Account::factory()->create([
-        'company_id' => $company->id,
         'subtype_id' => $revenueSubtype->id,
         'category' => AccountCategory::Revenue,
         'type' => AccountType::OperatingRevenue,
@@ -1870,11 +1859,12 @@ it('keeps balance sheet equation after importing asset liability equity and pnl 
     ]);
 
     $excel = storage_path('framework/testing/obni-bs-equation-pnl.xlsx');
+    // Import ke Retained Earnings dari helper (bukan RETAINED EARNING duplikat yang di-exclude di BS).
     obniMakeExcel($excel, [
         ['', '1100.ob', 'Kas Neraca Pnl', 'Cash/Bank', '10.000.000,00'],
         ['', '2100.ob', 'Utang Neraca Pnl', 'Account Payable', '3.000.000,00'],
         ['', '3004', 'Current Earning of The Year', 'Equity', '4.000.000,00'],
-        ['', '3200.ob', 'RETAINED EARNING', 'Equity', '3.000.000,00'],
+        ['', '3200.re', 'Retained Earnings', 'Equity', '3.000.000,00'],
         ['', '4100.ob', 'Pendapatan Neraca Pnl', 'Revenue', '6.000.000,00'],
         ['', '5100.ob', 'Beban Neraca Pnl', 'Expense', '2.000.000,00'],
     ]);
@@ -2196,16 +2186,7 @@ it('keeps excel Laba Ditahan and does not park orphan RETAINED EARNING into OBE'
 it('plugs unbalanced journals to opening equity so trial balance debit equals credit', function () {
     $company = $this->testCompany;
     $reference = obniCashReference($company->id);
-    $openingEquity = obniConfigureOpeningEquity($reference);
-
-    Account::factory()->create([
-        'company_id' => $company->id,
-        'subtype_id' => $reference->subtype_id,
-        'category' => AccountCategory::Equity,
-        'type' => AccountType::Equity,
-        'code' => '3200.01',
-        'name' => 'RETAINED EARNING',
-    ]);
+    obniConfigureOpeningEquity($reference);
 
     $cash = Account::factory()->create([
         'company_id' => $company->id,
