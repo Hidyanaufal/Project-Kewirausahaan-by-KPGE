@@ -1111,23 +1111,21 @@ class ReportService
                         $companyId !== null ? (int) $companyId : null
                     );
 
-                    // Drill-down to Income Statement cutover window (e.g. 31/12/2025–31/12/2025)
-                    // so LTJ opens the OB cutover figures, not the live FY period.
                     $fyStart = $this->resolveFiscalYearStartForDate(
                         $asOfDateCarbon,
                         $companyId !== null ? (int) $companyId : null,
                     );
                     $asOfDay = $asOfDateCarbon->copy()->startOfDay();
-                    $cutoverDay = $this->resolveOpeningBalanceCutoverDate(
-                        $asOfDateCarbon,
-                        $companyId !== null ? (int) $companyId : null,
-                    );
-                    $drillDownStart = $asOfDay->gte($fyStart)
-                        ? $cutoverDay
+
+                    // LTJ dengan RE GL: drill-down ke Income Statement FY (bukan cutover saja).
+                    $useYtdDrillDown = $companyId !== null
+                        && Account::shouldShowComputedCurrentYearEarningsOnBalanceSheet((int) $companyId)
+                        && $asOfDay->gte($fyStart);
+
+                    $drillDownStart = $useYtdDrillDown
+                        ? $fyStart->copy()->startOfDay()
                         : $startDateCarbon->copy()->startOfDay();
-                    $drillDownEnd = $asOfDay->gte($fyStart)
-                        ? $cutoverDay
-                        : $asOfDateCarbon->copy()->startOfDay();
+                    $drillDownEnd = $asOfDateCarbon->copy()->startOfDay();
 
                     $retainedEarningsDTO = new AccountDTO(
                         $computedEquityLine['label'],
