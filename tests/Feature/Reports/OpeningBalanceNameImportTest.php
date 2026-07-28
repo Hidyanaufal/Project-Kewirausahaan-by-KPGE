@@ -728,6 +728,351 @@ it('imports revenue and expense rows from opening balance name import', function
         ->and((int) $revenueEntry->amount)->toBe($revenueMinor);
 });
 
+it('keeps pre-cutover reports unchanged and applies opening balance from fyStart minus one second', function () {
+    $company = $this->testCompany;
+    $reference = obniCashReference($company->id);
+    obniConfigureOpeningEquity($reference);
+    $year = 2026;
+
+    $revenueSubtype = \App\Models\Accounting\AccountSubtype::query()
+        ->where('type', AccountType::OperatingRevenue)
+        ->firstOrFail();
+    $expenseSubtype = \App\Models\Accounting\AccountSubtype::query()
+        ->where('type', AccountType::OperatingExpense)
+        ->where('name', '!=', 'Cost of Goods Sold')
+        ->firstOrFail();
+
+    $revenue = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $revenueSubtype->id,
+        'category' => AccountCategory::Revenue,
+        'type' => AccountType::OperatingRevenue,
+        'code' => '4910.cut',
+        'name' => 'Pendapatan Cutover OB',
+    ]);
+    $expense = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $expenseSubtype->id,
+        'category' => AccountCategory::Expense,
+        'type' => AccountType::OperatingExpense,
+        'code' => '5910.cut',
+        'name' => 'Beban Cutover OB',
+    ]);
+    $cash = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $reference->subtype_id,
+        'category' => $reference->category,
+        'type' => $reference->type,
+        'code' => '1000.cut',
+        'name' => 'Kas Cutover OB',
+    ]);
+
+    $excel = storage_path('framework/testing/obni-is-cutover.xlsx');
+    obniMakeExcel($excel, [
+        ['', '1000.cut', 'Kas Cutover OB', 'Cash/Bank', '3.000.000,00'],
+        ['', '4910.cut', 'Pendapatan Cutover OB', 'Revenue', '5.000.000,00'],
+        ['', '5910.cut', 'Beban Cutover OB', 'Expense', '2.000.000,00'],
+    ]);
+
+    /** @var OpeningBalanceNameImportService $service */
+    $service = app(OpeningBalanceNameImportService::class);
+    $matches = $service->matchFromExcel($company->id, $excel);
+    $mapping = $service->buildAutoApprovedMappingFromMatches($company->id, $year, $excel, $matches);
+    $service->importApprovedMapping($mapping, execute: true);
+
+    $fyStart = $service->computeFiscalYearStartForYear($company, $year);
+    $cutoverAt = $fyStart->copy()->subSecond();
+    $dayBeforeCutoverEnd = $cutoverAt->copy()->subDay()->endOfDay();
+    $revenueMinor = $service->parseBalanceToMinor('5.000.000,00');
+    $expenseMinor = $service->parseBalanceToMinor('2.000.000,00');
+    $cashMinor = $service->parseBalanceToMinor('3.000.000,00');
+
+    $obTxn = Transaction::query()
+        ->where('company_id', $company->id)
+        ->where('meta->addon', 'opening_balance_import')
+        ->where('meta->account_code', $revenue->code)
+        ->first();
+
+    expect($obTxn)->not->toBeNull();
+    // Transaction.posted_at is cast to date — cutover is the calendar day before FY start (31/12).
+    expect(Carbon::parse($obTxn->posted_at)->toDateString())->toBe($cutoverAt->toDateString());
+
+    // End on cutover day (any start): cutover figures. End before cutover: real period data.
+    $yearStart = $fyStart->copy()->subYear();
+    expect(app(\App\Services\ReportService::class)->isIncomeStatementCutoverWindow(
+        $yearStart->toDateString(),
+        $cutoverAt->toDateString(),
+        $company->id,
+    ))->toBeTrue()
+        ->and(app(\App\Services\ReportService::class)->shouldUseIncomeStatementPeriodMovement(
+            $yearStart->toDateString(),
+            $dayBeforeCutoverEnd->toDateString(),
+            $company->id,
+        ))->toBeTrue();
+
+    $isYearThroughCutover = \App\Facades\Reporting::buildIncomeStatementReport(
+        $yearStart->toDateTimeString(),
+        $cutoverAt->copy()->endOfDay()->toDateTimeString(),
+        [],
+        null,
+        $company->id,
+    );
+    $revenueYearEnd = collect($isYearThroughCutover->categories['Revenue']->accounts ?? [])
+        ->first(fn ($a) => $a->accountId === $revenue->id);
+    expect($revenueYearEnd)->not->toBeNull();
+    expect(abs(
+        \App\Utilities\Currency\CurrencyConverter::convertToFloat($revenueYearEnd->balance->netMovement ?? '0')
+        - ($revenueMinor / 100)
+    ))->toBeLessThan(0.02);
+
+    // Before cutover day: period filter = real pre-OB activity only.
+    $isBefore = \App\Facades\Reporting::buildIncomeStatementReport(
+        $yearStart->toDateTimeString(),
+        $dayBeforeCutoverEnd->toDateTimeString(),
+        [],
+        null,
+        $company->id,
+    );
+    $revenueBefore = collect($isBefore->categories['Revenue']->accounts ?? [])
+        ->first(fn ($a) => $a->accountId === $revenue->id);
+    $expenseBefore = collect($isBefore->categories['Expenses']->accounts ?? [])
+        ->first(fn ($a) => $a->accountId === $expense->id);
+
+    expect($revenueBefore)->toBeNull()
+        ->and($expenseBefore)->toBeNull();
+
+    // Cutover window 31/12–31/12: as-of ending (cutover figures).
+    $isCutover = \App\Facades\Reporting::buildIncomeStatementReport(
+        $cutoverAt->copy()->startOfDay()->toDateTimeString(),
+        $cutoverAt->copy()->endOfDay()->toDateTimeString(),
+        [],
+        null,
+        $company->id,
+    );
+    expect(app(\App\Services\ReportService::class)->isIncomeStatementCutoverWindow(
+        $cutoverAt->toDateString(),
+        $cutoverAt->toDateString(),
+        $company->id,
+    ))->toBeTrue();
+
+    $revenueCutover = collect($isCutover->categories['Revenue']->accounts ?? [])
+        ->first(fn ($a) => $a->accountId === $revenue->id);
+    $expenseCutover = collect($isCutover->categories['Expenses']->accounts ?? [])
+        ->first(fn ($a) => $a->accountId === $expense->id);
+
+    expect($revenueCutover)->not->toBeNull()
+        ->and($expenseCutover)->not->toBeNull();
+
+    $revenueCutoverAmount = \App\Utilities\Currency\CurrencyConverter::convertToFloat(
+        $revenueCutover->balance->netMovement ?? '0'
+    );
+    $expenseCutoverAmount = \App\Utilities\Currency\CurrencyConverter::convertToFloat(
+        $expenseCutover->balance->netMovement ?? '0'
+    );
+
+    expect(abs($revenueCutoverAmount - ($revenueMinor / 100)))->toBeLessThan(0.02)
+        ->and(abs($expenseCutoverAmount - ($expenseMinor / 100)))->toBeLessThan(0.02);
+
+    // Cutover window 31/12–01/01: same cutover figures.
+    expect(app(\App\Services\ReportService::class)->isIncomeStatementCutoverWindow(
+        $cutoverAt->toDateString(),
+        $fyStart->toDateString(),
+        $company->id,
+    ))->toBeTrue();
+
+    $isCutoverToFy = \App\Facades\Reporting::buildIncomeStatementReport(
+        $cutoverAt->copy()->startOfDay()->toDateTimeString(),
+        $fyStart->copy()->endOfDay()->toDateTimeString(),
+        [],
+        null,
+        $company->id,
+    );
+    $revenueCutoverToFy = collect($isCutoverToFy->categories['Revenue']->accounts ?? [])
+        ->first(fn ($a) => $a->accountId === $revenue->id);
+    expect($revenueCutoverToFy)->not->toBeNull();
+    expect(abs(
+        \App\Utilities\Currency\CurrencyConverter::convertToFloat($revenueCutoverToFy->balance->netMovement ?? '0')
+        - ($revenueMinor / 100)
+    ))->toBeLessThan(0.02);
+
+    // Cutover → mid FY: cutover snapshot + FY transactions (not period-only on 31/12).
+    $midYearEnd = $fyStart->copy()->addMonths(6)->endOfDay();
+    $extraFromFy = 1_250_000;
+    expect(app(\App\Services\ReportService::class)->isIncomeStatementCutoverWindow(
+        $cutoverAt->toDateString(),
+        $midYearEnd->toDateString(),
+        $company->id,
+    ))->toBeTrue();
+
+    $fyTxn = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $company->default->bankAccount->id,
+        ])
+        ->asJournal($extraFromFy)
+        ->create(['posted_at' => $fyStart->copy()->addDays(10)->toDateTimeString()]);
+    $fyTxn->journalEntries()->create(array_merge([
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ], [
+        'account_id' => $company->default->bankAccount->account->id,
+        'type' => \App\Enums\Accounting\JournalEntryType::Debit,
+        'amount' => $extraFromFy,
+    ]));
+    $fyTxn->journalEntries()->create(array_merge([
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ], [
+        'account_id' => $revenue->id,
+        'type' => \App\Enums\Accounting\JournalEntryType::Credit,
+        'amount' => $extraFromFy,
+    ]));
+
+    $isCutoverThroughMid = \App\Facades\Reporting::buildIncomeStatementReport(
+        $cutoverAt->copy()->startOfDay()->toDateTimeString(),
+        $midYearEnd->toDateTimeString(),
+        [],
+        null,
+        $company->id,
+    );
+    $revenueCutoverMid = collect($isCutoverThroughMid->categories['Revenue']->accounts ?? [])
+        ->first(fn ($a) => $a->accountId === $revenue->id);
+    expect($revenueCutoverMid)->not->toBeNull();
+    expect(abs(
+        \App\Utilities\Currency\CurrencyConverter::convertToFloat($revenueCutoverMid->balance->netMovement ?? '0')
+        - (($revenueMinor + $extraFromFy) / 100)
+    ))->toBeLessThan(0.02);
+
+    // FY start day: period mode from zero — OB cutover is outside the period.
+    expect(app(\App\Services\ReportService::class)->shouldUseIncomeStatementPeriodMovement(
+        $fyStart->toDateString(),
+        $fyStart->toDateString(),
+        $company->id,
+    ))->toBeTrue();
+
+    $isFyStart = \App\Facades\Reporting::buildIncomeStatementReport(
+        $fyStart->toDateTimeString(),
+        $fyStart->copy()->endOfDay()->toDateTimeString(),
+        [],
+        null,
+        $company->id,
+    );
+    // FY-only day may include the extraFromFy txn above if posted on addDays(10), not on fyStart day.
+    expect(collect($isFyStart->categories['Revenue']->accounts ?? [])
+        ->first(fn ($a) => $a->accountId === $revenue->id))->toBeNull();
+
+    // Mid-year range only includes activity inside that range (filter must change totals).
+    $midStart = $fyStart->copy()->addMonths(3)->startOfDay();
+    $midEnd = $fyStart->copy()->addMonths(6)->endOfDay();
+    $earlyRevenue = 400_000;
+    $extraRevenue = 750_000;
+    $bank = $company->default->bankAccount;
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $earlyTxn = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bank->id,
+        ])
+        ->asJournal($earlyRevenue)
+        ->create(['posted_at' => $fyStart->copy()->addMonth()->toDateTimeString()]);
+    $earlyTxn->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $bank->account->id,
+        'type' => \App\Enums\Accounting\JournalEntryType::Debit,
+        'amount' => $earlyRevenue,
+    ]));
+    $earlyTxn->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $revenue->id,
+        'type' => \App\Enums\Accounting\JournalEntryType::Credit,
+        'amount' => $earlyRevenue,
+    ]));
+
+    $txn = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bank->id,
+        ])
+        ->asJournal($extraRevenue)
+        ->create(['posted_at' => $midStart->copy()->addDay()->toDateTimeString()]);
+    $txn->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $bank->account->id,
+        'type' => \App\Enums\Accounting\JournalEntryType::Debit,
+        'amount' => $extraRevenue,
+    ]));
+    $txn->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $revenue->id,
+        'type' => \App\Enums\Accounting\JournalEntryType::Credit,
+        'amount' => $extraRevenue,
+    ]));
+
+    $isMid = \App\Facades\Reporting::buildIncomeStatementReport(
+        $midStart->toDateTimeString(),
+        $midEnd->toDateTimeString(),
+        [],
+        null,
+        $company->id,
+    );
+    $isFullFy = \App\Facades\Reporting::buildIncomeStatementReport(
+        $fyStart->toDateTimeString(),
+        $midEnd->toDateTimeString(),
+        [],
+        null,
+        $company->id,
+    );
+    $midRevenue = \App\Utilities\Currency\CurrencyConverter::convertToFloat(
+        $isMid->categories['Revenue']->summary->netMovement ?? '0'
+    );
+    $fullRevenue = \App\Utilities\Currency\CurrencyConverter::convertToFloat(
+        $isFullFy->categories['Revenue']->summary->netMovement ?? '0'
+    );
+
+    expect(abs($midRevenue - ($extraRevenue / 100)))->toBeLessThan(0.02)
+        ->and(abs($fullRevenue - (($earlyRevenue + $extraRevenue + $extraFromFy) / 100)))->toBeLessThan(0.02)
+        ->and($midRevenue)->not->toBe($fullRevenue);
+
+    $accountService = app(AccountService::class);
+    expect($accountService->getStartingBalance($revenue->fresh(), $fyStart->toDateTimeString(), true, null, $company->id)?->getAmount())
+        ->toBe($revenueMinor)
+        ->and($accountService->getStartingBalance($expense->fresh(), $fyStart->toDateTimeString(), true, null, $company->id)?->getAmount())
+        ->toBe($expenseMinor)
+        ->and($accountService->getStartingBalance($cash->fresh(), $fyStart->toDateTimeString(), true, null, $company->id)?->getAmount())
+        ->toBe($cashMinor);
+
+    // Balance sheet as-of FY start stays balanced; LTJ drill-down opens cutover day.
+    $bs = \App\Facades\Reporting::buildBalanceSheetReport($fyStart->toDateString(), [], null, $company->id);
+    $assets = \App\Utilities\Currency\CurrencyConverter::convertToFloat(
+        $bs->categories['Assets']->summary->endingBalance ?? '0'
+    );
+    $liabilities = \App\Utilities\Currency\CurrencyConverter::convertToFloat(
+        $bs->categories['Liabilities']->summary->endingBalance ?? '0'
+    );
+    $equity = \App\Utilities\Currency\CurrencyConverter::convertToFloat(
+        $bs->categories['Equity']->summary->endingBalance ?? '0'
+    );
+
+    expect(abs($assets - ($liabilities + $equity)))->toBeLessThan(0.02);
+
+    $ltjAccount = null;
+    foreach ($bs->categories['Equity']->types ?? [] as $type) {
+        foreach ($type->accounts ?? [] as $accountDto) {
+            if ($accountDto->accountId === null && $accountDto->startDate !== null) {
+                $ltjAccount = $accountDto;
+                break 2;
+            }
+        }
+    }
+
+    expect($ltjAccount)->not->toBeNull()
+        ->and($ltjAccount->startDate)->toBe($cutoverAt->toDateString())
+        ->and($ltjAccount->endDate)->toBe($cutoverAt->toDateString());
+});
+
 it('auto-approves exact map and create rows and imports via shared service method', function () {
     $company = $this->testCompany;
     $reference = obniCashReference($company->id);
