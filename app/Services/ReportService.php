@@ -550,31 +550,8 @@ class ReportService
         $companyId = null,
         $projectTypeId = null,
     ): ReportDTO {
-        $companyIdInt = $companyId !== null ? (int) $companyId : null;
-        $startCarbon = Carbon::parse($startDate)->startOfDay();
-        $endCarbon = Carbon::parse($endDate);
-
-        $cutover = $this->resolveIncomeStatementCutoverDay($startCarbon, $endCarbon, $companyIdInt);
-        $useCutoverEnding = $this->isIncomeStatementCutoverWindow($startCarbon, $endCarbon, $companyIdInt);
-
-        // Pre-cutover ranges that include the cutover day (e.g. 01/01/2025–31/12/2025):
-        // query only through the day before cutover so OB journals are excluded.
-        $queryStart = $startCarbon->toDateTimeString();
-        $queryEnd = $endCarbon->toDateTimeString();
-        $dtoStart = $startCarbon->toDateString();
-        $dtoEnd = $endCarbon->toDateString();
-
-        if (
-            ! $useCutoverEnding
-            && $cutover !== null
-            && $startCarbon->lt($cutover)
-            && $endCarbon->copy()->startOfDay()->gte($cutover)
-        ) {
-            $queryEnd = $cutover->copy()->subDay()->endOfDay()->toDateTimeString();
-            $dtoEnd = $cutover->copy()->subDay()->toDateString();
-        }
-
-        $accounts = $this->accountService->getAccountBalances($queryStart, $queryEnd, [], $projectId, $companyId, $projectTypeId)
+        // Single aggregation pass; split Revenue / COGS / Expense in memory.
+        $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
             ->whereIn('category', [AccountCategory::Revenue, AccountCategory::Expense])
             ->orderByRaw('LENGTH(code), code')
             ->get();
@@ -615,7 +592,7 @@ class ReportService
         // Process each category group
         foreach ($categoryGroups as $label => $group) {
             $categoryAccounts = [];
-            $categoryTotal = 0;
+            $netMovement = 0;
 
             foreach ($group['accounts'] as $account) {
                 // Use the category type based on label
@@ -627,35 +604,29 @@ class ReportService
 
                 if ($category !== null) {
                     $accountBalances = $this->calculateAccountBalances($account);
-                    $rawAmount = $useCutoverEnding
-                        ? ($accountBalances['ending_balance'] ?? $accountBalances['net_movement'] ?? 0)
-                        : ($accountBalances['net_movement'] ?? 0);
-
-                    // Contra accounts shown positive must subtract from category totals.
-                    $amount = $account->type->isContra() ? -$rawAmount : $rawAmount;
-
-                    // Skip zero lines so detail drill-down matches activity in scope.
-                    if ($amount === 0) {
-                        continue;
-                    }
-
-                    $categoryTotal += $amount;
-                    $group['total'] += $amount;
+                    // Contra accounts (e.g. Sales Returns, Purchase Discounts) have opposite
+                    // normal balances shown as positive; category totals and line amounts must
+                    // subtract them so Net Revenue / Net Expenses remain correct.
+                    $movement = $account->type->isContra()
+                        ? -$accountBalances['net_movement']
+                        : $accountBalances['net_movement'];
+                    $netMovement += $movement;
+                    $group['total'] += $movement;
 
                     $categoryAccounts[] = new AccountDTO(
                         $account->name,
                         $account->code,
                         $account->id,
-                        $this->formatBalances(['net_movement' => $amount]),
-                        $dtoStart,
-                        $dtoEnd,
+                        $this->formatBalances(['net_movement' => $movement]),
+                        Carbon::parse($startDate)->toDateString(),
+                        Carbon::parse($endDate)->toDateString(),
                     );
                 }
             }
 
             $accountCategories[$label] = new AccountCategoryDTO(
                 accounts: $categoryAccounts,
-                summary: $this->formatBalances(['net_movement' => $categoryTotal])
+                summary: $this->formatBalances(['net_movement' => $netMovement])
             );
         }
 
@@ -668,125 +639,9 @@ class ReportService
             categories: $accountCategories,
             overallTotal: $formattedReportTotalBalances,
             fields: $columns,
-            startDate: $startCarbon->copy(),
-            endDate: Carbon::parse($dtoEnd)->endOfDay(),
+            startDate: Carbon::parse($startDate),
+            endDate: Carbon::parse($endDate),
         );
-    }
-
-    /**
-     * Cutover window: start is OB cutover day and end is that day or the next (FY start).
-     * Examples: 31/12/2025–31/12/2025 or 31/12/2025–01/01/2026 → as-of ending (cutover figures).
-     */
-    public function isIncomeStatementCutoverWindow(
-        \DateTimeInterface | string $startDate,
-        \DateTimeInterface | string $endDate,
-        ?int $companyId = null,
-    ): bool {
-        $start = Carbon::parse($startDate)->startOfDay();
-        $end = Carbon::parse($endDate)->startOfDay();
-        $cutover = $this->resolveIncomeStatementCutoverDay($start, $end, $companyId);
-
-        if ($cutover === null || ! $start->equalTo($cutover)) {
-            return false;
-        }
-
-        return $end->equalTo($cutover) || $end->equalTo($cutover->copy()->addDay());
-    }
-
-    /**
-     * @deprecated Use {@see isIncomeStatementCutoverWindow()} inverted for period mode.
-     */
-    public function shouldUseIncomeStatementPeriodMovement(
-        \DateTimeInterface | string $startDate,
-        \DateTimeInterface | string $endDate,
-        ?int $companyId = null,
-    ): bool {
-        return ! $this->isIncomeStatementCutoverWindow($startDate, $endDate, $companyId);
-    }
-
-    /**
-     * OB cutover day relevant to the filter (day before a fiscal year start).
-     */
-    public function resolveIncomeStatementCutoverDay(
-        \DateTimeInterface | string $startDate,
-        \DateTimeInterface | string $endDate,
-        ?int $companyId = null,
-    ): ?Carbon {
-        $start = Carbon::parse($startDate)->startOfDay();
-        $end = Carbon::parse($endDate)->startOfDay();
-
-        if ($this->isOpeningBalanceCutoverDay($start, $companyId)) {
-            return $start->copy();
-        }
-
-        if ($this->isOpeningBalanceCutoverDay($end, $companyId)) {
-            return $end->copy();
-        }
-
-        // e.g. end = 01/01/2026 → cutover 31/12/2025
-        $dayBeforeEnd = $end->copy()->subDay();
-        if ($this->isOpeningBalanceCutoverDay($dayBeforeEnd, $companyId) && $dayBeforeEnd->gte($start)) {
-            return $dayBeforeEnd;
-        }
-
-        // Cutover at end of FY that contains start (e.g. start in 2025 → 31/12/2025)
-        $fyStart = $this->resolveFiscalYearStartForDate($start, $companyId);
-        $cutover = $fyStart->copy()->addYear()->subDay();
-        if ($cutover->gte($start) && $cutover->lte($end) && $this->isOpeningBalanceCutoverDay($cutover, $companyId)) {
-            return $cutover;
-        }
-
-        return null;
-    }
-
-    /**
-     * True when $date is the calendar day immediately before a fiscal year start (OB cutover).
-     */
-    public function isOpeningBalanceCutoverDay(\DateTimeInterface | string $date, ?int $companyId = null): bool
-    {
-        $day = Carbon::parse($date)->startOfDay();
-        $nextDay = $day->copy()->addDay();
-        $fyStart = $this->resolveFiscalYearStartForDate($nextDay, $companyId);
-
-        return $nextDay->equalTo($fyStart);
-    }
-
-    /**
-     * Calendar day of opening-balance cutover for the fiscal year that contains $asOf
-     * (day before that FY start — e.g. 2025-12-31 when FY starts 2026-01-01).
-     */
-    public function resolveOpeningBalanceCutoverDate(\DateTimeInterface | string $asOf, ?int $companyId = null): Carbon
-    {
-        $fyStart = $this->resolveFiscalYearStartForDate($asOf, $companyId);
-
-        return $fyStart->copy()->subDay()->startOfDay();
-    }
-
-    /**
-     * Fiscal year start (month/day from company locale) for the FY that contains $date.
-     */
-    public function resolveFiscalYearStartForDate(\DateTimeInterface | string $date, ?int $companyId = null): Carbon
-    {
-        $date = Carbon::parse($date)->startOfDay();
-
-        if ($companyId !== null) {
-            $company = \App\Models\Company::query()->find($companyId);
-            if ($company?->locale !== null) {
-                $template = Carbon::parse($company->locale->fiscalYearStartDate())->startOfDay();
-                $fyStart = $date->copy()
-                    ->month($template->month)
-                    ->day($template->day)
-                    ->startOfDay();
-
-                if ($date->lt($fyStart)) {
-                    $fyStart->subYear();
-                }
-
-                return $fyStart;
-            }
-        }
-
-        return $date->copy()->startOfYear()->startOfDay();
     }
 
     public function buildCashFlowStatementReport(string $startDate, string $endDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
@@ -1109,31 +964,13 @@ class ReportService
                         $companyId !== null ? (int) $companyId : null
                     );
 
-                    // Drill-down to Income Statement cutover window (e.g. 31/12/2025–31/12/2025)
-                    // so LTJ opens the OB cutover figures, not the live FY period.
-                    $fyStart = $this->resolveFiscalYearStartForDate(
-                        $asOfDateCarbon,
-                        $companyId !== null ? (int) $companyId : null,
-                    );
-                    $asOfDay = $asOfDateCarbon->copy()->startOfDay();
-                    $cutoverDay = $this->resolveOpeningBalanceCutoverDate(
-                        $asOfDateCarbon,
-                        $companyId !== null ? (int) $companyId : null,
-                    );
-                    $drillDownStart = $asOfDay->gte($fyStart)
-                        ? $cutoverDay
-                        : $startDateCarbon->copy()->startOfDay();
-                    $drillDownEnd = $asOfDay->gte($fyStart)
-                        ? $cutoverDay
-                        : $asOfDateCarbon->copy()->startOfDay();
-
                     $retainedEarningsDTO = new AccountDTO(
                         $computedEquityLine['label'],
                         $computedEquityLine['code'],
                         null,
                         $this->formatBalances(['ending_balance' => $retainedEarningsAmount]),
-                        startDate: $drillDownStart->toDateString(),
-                        endDate: $drillDownEnd->toDateString(),
+                        startDate: $startDateCarbon->toDateString(),
+                        endDate: $asOfDateCarbon->toDateString(),
                     );
                 }
             }
