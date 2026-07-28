@@ -388,7 +388,12 @@ class ReportService
 
     public function buildTrialBalanceReport(string $trialBalanceType, string $asOfDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
     {
+        // Date-only as-of (e.g. '2025-12-31') must include the full calendar day so
+        // cutover clears posted at 23:59:59 are in scope — same as Filament UI.
         $asOfDateCarbon = Carbon::parse($asOfDate);
+        if (! str_contains(trim((string) $asOfDate), ' ')) {
+            $asOfDateCarbon = $asOfDateCarbon->endOfDay();
+        }
         $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate(
             $companyId !== null ? (int) $companyId : null
         ));
