@@ -77,7 +77,7 @@ class PaymentsRelationManager extends RelationManager
                                 return $bill->currency_code;
                             })
                             ->live(onBlur: true)
-                            ->helperText(function (RelationManager $livewire, $state, ?Transaction $record) {
+                            ->helperText(function (Forms\Get $get, RelationManager $livewire, $state, ?Transaction $record) {
                                 /** @var Bill $ownerRecord */
                                 $ownerRecord = $livewire->getOwnerRecord();
 
@@ -87,16 +87,15 @@ class PaymentsRelationManager extends RelationManager
                                     return null;
                                 }
 
-                                $amountDue = $ownerRecord->amount_due;
-
                                 $amount = CurrencyConverter::convertToCents($state, 'USD');
 
                                 if ($amount <= 0) {
                                     return 'Please enter a valid positive amount';
                                 }
 
+                                $pph23Cents = self::parseMoneyStateToCents($get('pph23'));
+                                $amountDue = $ownerRecord->paymentAmountForPph23($pph23Cents);
                                 $currentPaymentAmount = $record?->amount ?? 0;
-
                                 $newAmountDue = $amountDue - $amount + $currentPaymentAmount;
 
                                 return match (true) {
@@ -120,6 +119,15 @@ class PaymentsRelationManager extends RelationManager
                                 $bill = $livewire->getOwnerRecord();
 
                                 return $bill->currency_code;
+                            })
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function ($state, Forms\Set $set, RelationManager $livewire) {
+                                /** @var Bill $bill */
+                                $bill = $livewire->getOwnerRecord();
+                                $pph23Cents = self::parseMoneyStateToCents($state);
+                                $amountCents = $bill->paymentAmountForPph23($pph23Cents);
+
+                                $set('amount', CurrencyConverter::convertCentsToFormatSimple($amountCents, 'USD'));
                             }),
                     ])->columns(3),
                 Forms\Components\Placeholder::make('currency_conversion')
@@ -237,7 +245,7 @@ class PaymentsRelationManager extends RelationManager
                     ->mountUsing(function (Form $form) {
                         /** @var Bill $record */
                         $record = $this->getOwnerRecord()->fresh();
-                        $defaultPph23 = $record->defaultPph23FromInitialTransaction();
+                        $defaultPph23 = $record->defaultPph23ForPaymentForm();
 
                         $form->fill([
                             'transaction_code' => Transaction::getNextDocumentNumber(TransactionType::Withdrawal),
@@ -254,16 +262,7 @@ class PaymentsRelationManager extends RelationManager
                         $record = $this->getOwnerRecord();
 
                         DB::transaction(function () use ($record, $data) {
-                            $pph23Cents = ! empty($data['pph23']) ? (int) $data['pph23'] : null;
-
-                            $record->update([
-                                'pph23' => $pph23Cents,
-                            ]);
-
-                            $record->recordPayment([
-                                ...$data,
-                                'pph23' => $pph23Cents,
-                            ]);
+                            $record->recordPaymentWithPph23($data);
                         });
 
                         $action->success();
@@ -280,5 +279,24 @@ class PaymentsRelationManager extends RelationManager
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    protected static function parseMoneyStateToCents(mixed $state): int
+    {
+        if (blank($state)) {
+            return 0;
+        }
+
+        if (is_int($state)) {
+            return $state;
+        }
+
+        $string = (string) $state;
+
+        if (! CurrencyConverter::isValidAmount($string, 'USD')) {
+            return 0;
+        }
+
+        return CurrencyConverter::convertToCents($string, 'USD');
     }
 }
