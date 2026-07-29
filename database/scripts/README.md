@@ -1,5 +1,54 @@
 # Excel Multi-Sheet Migration Tool
 
+> **DEPRECATED** — Script Python ini **tidak lagi digunakan** untuk import invoice.
+> Import invoice legacy harus melalui Laravel agar jurnal akuntansi (approval + payment) ter-generate dengan benar.
+
+## Jalur import resmi
+
+```bash
+# Via UI: Projects → Import Legacy Project & Invoice
+
+# Via CLI (re-import / perbaikan data):
+php artisan legacy:reimport-invoices {companyId} \
+  --file="Copy File of Master Project & Invoice - kpg(1).xlsx" \
+  --only-broken
+
+# Preview tanpa perubahan:
+php artisan legacy:reimport-invoices {companyId} --file="..." --dry-run
+
+# Re-import KPP (company 2) dan/atau KPPE (company 3):
+php artisan legacy:reimport-invoices-preset kpp --dry-run
+php artisan legacy:reimport-invoices-preset kppe --dry-run
+php artisan legacy:reimport-invoices-preset both --dry-run
+
+# Jalankan live (tanpa --dry-run):
+php artisan legacy:reimport-invoices-preset both
+
+# Audit selisih sheet Invoice vs supplement (t):
+php artisan legacy:invoice-sheet-mismatch audit \
+  --file="Copy File of Master Project & Invoice - kpg(1).xlsx" \
+  --company={companyId}
+
+# Perbaiki sheet Invoice di Excel agar cocok dengan supplement:
+php artisan legacy:invoice-sheet-mismatch fix-excel \
+  --file="Copy File of Master Project & Invoice - kpg(1).xlsx" \
+  --output="Copy File of Master Project & Invoice - kpg(1)-fixed.xlsx"
+
+# Re-import invoice DB yang totalnya tidak cocok dengan supplement:
+php artisan legacy:invoice-sheet-mismatch fix-db \
+  --file="Copy File of Master Project & Invoice - kpg(1).xlsx" \
+  --company={companyId} \
+  --dry-run
+```
+
+## Mengapa script ini deprecated?
+
+- Insert SQL langsung ke `invoices` **tanpa** jurnal approval/payment
+- Mengalikan nominal `* 100` (salah — sistem menyimpan whole rupiah)
+- Tidak compatible dengan model invoice + accounting saat ini
+
+---
+
 A lightweight tool for migrating multi-sheet Excel data (with specific naming patterns) into a MySQL database. Supports sheet order control, dynamic mapping, and validation.
 
 ## 🚀 Features

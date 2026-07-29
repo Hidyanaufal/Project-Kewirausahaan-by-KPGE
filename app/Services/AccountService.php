@@ -357,10 +357,6 @@ class AccountService
             $query->whereIn('accounts.id', $accountIds);
         }
 
-        if ($companyId !== null) {
-            $query->where('accounts.company_id', $companyId);
-        }
-
         if ($entityId !== null) {
             $entityId = (int) $entityId;
             if ($entityId < 0) {
@@ -372,8 +368,10 @@ class AccountService
             }
         }
 
-        // Join invoices & bills for filtering
-        if ($projectId !== null || $companyId !== null || $projectTypeId !== null) {
+        $needsMultichannelJoins = ($projectId !== null && $projectId !== '')
+            || ($projectTypeId !== null && $projectTypeId !== '');
+
+        if ($needsMultichannelJoins) {
             $this->joinInvoicesBillsProjectsForMultichannelScope($query);
 
             // Exclude invoice journals when invoice is cancelled (keep data for audit, exclude from reports).
@@ -390,12 +388,20 @@ class AccountService
                 $projectTypeId !== null && $projectTypeId !== '' ? (int) $projectTypeId : null,
             );
         } else {
-            // Still exclude cancelled invoices even when no multichannel filters are applied.
-            $this->joinInvoicesBillsProjectsForMultichannelScope($query);
+            // Default report path: filter company on transactions directly; avoid heavy LEFT JOINs.
+            if ($companyId !== null && $companyId !== '') {
+                $query->where('transactions.company_id', (int) $companyId);
+            }
+
+            // Exclude cancelled invoice journals without joining invoices/bills/projects.
             $query->where(function (Builder $q) {
                 $q->where('transactions.transactionable_type', '!=', Invoice::class)
-                    ->orWhereNull('invoices.id')
-                    ->orWhere('invoices.status', '!=', InvoiceStatus::Cancelled->value);
+                    ->orWhereNotExists(function ($subQuery) {
+                        $subQuery->select(DB::raw(1))
+                            ->from('invoices')
+                            ->whereColumn('invoices.id', 'transactions.transactionable_id')
+                            ->where('invoices.status', InvoiceStatus::Cancelled->value);
+                    });
             });
         }
 
@@ -596,9 +602,15 @@ class AccountService
         return $this->getAccountBalances($startDate, $endDate, $accountIds, $projectId, $companyId);
     }
 
-    public function getEarliestTransactionDate(): string
+    public function getEarliestTransactionDate(?int $companyId = null): string
     {
-        $earliestDate = Transaction::min('posted_at');
+        $query = Transaction::query();
+
+        if ($companyId !== null) {
+            $query->where('company_id', $companyId);
+        }
+
+        $earliestDate = $query->min('posted_at');
 
         return $earliestDate ?? company_today()->toDateTimeString();
     }

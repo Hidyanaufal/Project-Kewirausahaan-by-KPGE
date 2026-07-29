@@ -72,7 +72,7 @@ class ReconcileBalanceSheetRetainedEarnings extends Command
         $equity = CurrencyConverter::convertToFloat($report->categories['Equity']->summary->endingBalance ?? '0');
         $diff = $assets - $liabilities - $equity;
 
-        $startDate = $reportService->getEarliestTransactionDate();
+        $startDate = $reportService->getEarliestTransactionDate($companyId);
         $computedRe = $reportService->calculateRetainedEarnings($startDate, $asOf, null, $companyId)->getAmount() / 100;
         $addComputed = Account::shouldAddComputedRetainedEarningsToBalanceSheet($companyId);
 

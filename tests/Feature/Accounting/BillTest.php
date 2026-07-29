@@ -155,8 +155,204 @@ test('record payment posts pph23 to hutang pph23 payable account', function () {
         ->where('type', JournalEntryType::Credit)
         ->sum('amount');
 
-    expect($payableCredit)->toBeGreaterThan(0)
+    expect($payableCredit)->toBe($manualPph23)
         ->and($prepaidCredit)->toBe(0);
+});
+
+test('record payment with lowered pph23 realigns amount and posts manual hutang pph23', function () {
+    $companyId = $this->testCompany->id;
+
+    $bill = Bill::factory()
+        ->withLineItems()
+        ->initialized()
+        ->state([
+            'company_id' => $companyId,
+            'due_date' => now()->addDays(30),
+            'discount_method' => DocumentDiscountMethod::PerLineItem,
+        ])
+        ->create();
+
+    $bill->refresh();
+
+    $defaultPph23 = (int) $bill->pph23;
+    $manualPph23 = max($defaultPph23 - 50_000, 1_000);
+    expect($manualPph23)->toBeLessThan($defaultPph23);
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $companyId)
+        ->where('enabled', true)
+        ->first();
+
+    expect($bankAccount)->not->toBeNull();
+
+    // Simulate form submit where Amount still equals the old amount_due (before PPh 23 change).
+    $staleAmountDue = (int) $bill->amount_due;
+    $expectedCash = max((int) $bill->total - $manualPph23, 0);
+
+    $bill->recordPaymentWithPph23([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $staleAmountDue,
+        'pph23' => $manualPph23,
+        'notes' => 'Lowered PPh23 full pay',
+    ]);
+
+    $bill->refresh();
+
+    expect($bill->status)->toBe(BillStatus::Paid)
+        ->and((int) $bill->pph23)->toBe($manualPph23)
+        ->and((int) $bill->amount_paid)->toBe($expectedCash);
+
+    $paymentTrx = Transaction::query()
+        ->where('transactionable_type', Bill::class)
+        ->where('transactionable_id', $bill->id)
+        ->where('is_payment', true)
+        ->orderByDesc('id')
+        ->first();
+
+    $payableAccount = Account::getAccountsPPh23Payable($companyId);
+
+    $payableCredit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $payableAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+
+    expect($paymentTrx)->not->toBeNull()
+        ->and((int) ($paymentTrx->meta['pph23_cents'] ?? 0))->toBe($manualPph23)
+        ->and((int) ($paymentTrx->meta['amount_in_document_currency_cents'] ?? 0))->toBe($expectedCash)
+        ->and($payableCredit)->toBe($manualPph23);
+});
+
+test('record payment with raised pph23 realigns amount and posts manual hutang pph23', function () {
+    $companyId = $this->testCompany->id;
+
+    $bill = Bill::factory()
+        ->withLineItems()
+        ->initialized()
+        ->state([
+            'company_id' => $companyId,
+            'due_date' => now()->addDays(30),
+            'discount_method' => DocumentDiscountMethod::PerLineItem,
+        ])
+        ->create();
+
+    $bill->refresh();
+
+    $defaultPph23 = (int) $bill->pph23;
+    $manualPph23 = $defaultPph23 + 50_000;
+    expect($manualPph23)->toBeLessThan((int) $bill->total);
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $companyId)
+        ->where('enabled', true)
+        ->first();
+
+    expect($bankAccount)->not->toBeNull();
+
+    $staleAmountDue = (int) $bill->amount_due;
+    $expectedCash = max((int) $bill->total - $manualPph23, 0);
+
+    $bill->recordPaymentWithPph23([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $staleAmountDue,
+        'pph23' => $manualPph23,
+        'notes' => 'Raised PPh23 full pay',
+    ]);
+
+    $bill->refresh();
+
+    expect($bill->status)->toBe(BillStatus::Paid)
+        ->and((int) $bill->pph23)->toBe($manualPph23)
+        ->and((int) $bill->amount_paid)->toBe($expectedCash);
+
+    $paymentTrx = Transaction::query()
+        ->where('transactionable_type', Bill::class)
+        ->where('transactionable_id', $bill->id)
+        ->where('is_payment', true)
+        ->orderByDesc('id')
+        ->first();
+
+    $payableAccount = Account::getAccountsPPh23Payable($companyId);
+
+    $payableCredit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $payableAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+
+    expect($paymentTrx)->not->toBeNull()
+        ->and((int) ($paymentTrx->meta['pph23_cents'] ?? 0))->toBe($manualPph23)
+        ->and((int) ($paymentTrx->meta['amount_in_document_currency_cents'] ?? 0))->toBe($expectedCash)
+        ->and($payableCredit)->toBe($manualPph23);
+});
+
+test('record payment with zero pph23 pays full total and skips hutang pph23 journal', function () {
+    $companyId = $this->testCompany->id;
+
+    $bill = Bill::factory()
+        ->withLineItems()
+        ->initialized()
+        ->state([
+            'company_id' => $companyId,
+            'due_date' => now()->addDays(30),
+            'discount_method' => DocumentDiscountMethod::PerLineItem,
+        ])
+        ->create();
+
+    $bill->refresh();
+
+    expect((int) $bill->pph23)->toBeGreaterThan(0);
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $companyId)
+        ->where('enabled', true)
+        ->first();
+
+    expect($bankAccount)->not->toBeNull();
+
+    $billTotal = (int) $bill->total;
+
+    // User sets Amount = full total and PPh 23 = 0 (explicit), even if form still had old amount_due.
+    $bill->recordPaymentWithPph23([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $billTotal,
+        'pph23' => 0,
+        'notes' => 'Zero PPh23 full pay',
+    ]);
+
+    $bill->refresh();
+
+    expect($bill->status)->toBe(BillStatus::Paid)
+        ->and((int) $bill->pph23)->toBe(0)
+        ->and((int) $bill->actual_total)->toBe($billTotal)
+        ->and((int) $bill->amount_paid)->toBe($billTotal);
+
+    $paymentTrx = Transaction::query()
+        ->where('transactionable_type', Bill::class)
+        ->where('transactionable_id', $bill->id)
+        ->where('is_payment', true)
+        ->orderByDesc('id')
+        ->first();
+
+    $payableAccount = Account::getAccountsPPh23Payable($companyId);
+
+    $payableCredit = (int) JournalEntry::query()
+        ->where('transaction_id', $paymentTrx->id)
+        ->where('account_id', $payableAccount->id)
+        ->where('type', JournalEntryType::Credit)
+        ->sum('amount');
+
+    expect($paymentTrx)->not->toBeNull()
+        ->and(array_key_exists('pph23_cents', $paymentTrx->meta ?? []))->toBeTrue()
+        ->and((int) $paymentTrx->meta['pph23_cents'])->toBe(0)
+        ->and((int) ($paymentTrx->meta['amount_in_document_currency_cents'] ?? 0))->toBe($billTotal)
+        ->and($payableCredit)->toBe(0);
 });
 
 test('bill payment without pph23 payable default throws', function () {

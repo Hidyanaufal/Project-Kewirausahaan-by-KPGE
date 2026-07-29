@@ -464,7 +464,7 @@ class BillResource extends Resource
                             })
                             ->mountUsing(function (Bill $record, Form $form) {
                                 $record = $record->fresh();
-                                $defaultPph23 = $record->defaultPph23FromInitialTransaction();
+                                $defaultPph23 = $record->defaultPph23ForPaymentForm();
 
                                 $form->fill([
                                     'posted_at' => company_today()->toDateString(),
@@ -505,14 +505,12 @@ class BillResource extends Resource
                                             ->required()
                                             ->money(fn(Bill $record) => $record->currency_code)
                                             ->live(onBlur: true)
-                                            ->helperText(function (Bill $record, $state) {
+                                            ->helperText(function (Forms\Get $get, Bill $record, $state) {
                                                 $billCurrency = $record->currency_code;
 
                                                 if (! CurrencyConverter::isValidAmount($state, 'USD')) {
                                                     return null;
                                                 }
-
-                                                $amountDue = $record->amount_due;
 
                                                 $amount = CurrencyConverter::convertToCents($state, 'USD');
 
@@ -520,6 +518,8 @@ class BillResource extends Resource
                                                     return 'Please enter a valid positive amount';
                                                 }
 
+                                                $pph23Cents = static::parseBillPaymentMoneyStateToCents($get('pph23'));
+                                                $amountDue = $record->paymentAmountForPph23($pph23Cents);
                                                 $newAmountDue = $amountDue - $amount;
 
                                                 return match (true) {
@@ -538,7 +538,14 @@ class BillResource extends Resource
                                         Forms\Components\TextInput::make('pph23')
                                             ->label('PPh 23')
                                             ->nullable()
-                                            ->money(fn (Bill $record) => $record->currency_code),
+                                            ->money(fn (Bill $record) => $record->currency_code)
+                                            ->live(onBlur: true)
+                                            ->afterStateUpdated(function ($state, Forms\Set $set, Bill $record) {
+                                                $pph23Cents = static::parseBillPaymentMoneyStateToCents($state);
+                                                $amountCents = $record->paymentAmountForPph23($pph23Cents);
+
+                                                $set('amount', CurrencyConverter::convertCentsToFormatSimple($amountCents, 'USD'));
+                                            }),
                                     ])->columns(3),
                                 Forms\Components\Placeholder::make('currency_conversion')
                                     ->label('Currency Conversion')
@@ -603,16 +610,7 @@ class BillResource extends Resource
                             ])
                             ->action(function (Bill $record, Tables\Actions\Action $action, array $data) {
                                 DB::transaction(function () use ($record, $data) {
-                                    $pph23Cents = ! empty($data['pph23']) ? (int) $data['pph23'] : null;
-
-                                    $record->update([
-                                        'pph23' => $pph23Cents,
-                                    ]);
-
-                                    $record->recordPayment([
-                                        ...$data,
-                                        'pph23' => $pph23Cents,
-                                    ]);
+                                    $record->recordPaymentWithPph23($data);
                                 });
 
                                 $action->success();
@@ -626,6 +624,25 @@ class BillResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    protected static function parseBillPaymentMoneyStateToCents(mixed $state): int
+    {
+        if (blank($state)) {
+            return 0;
+        }
+
+        if (is_int($state)) {
+            return $state;
+        }
+
+        $string = (string) $state;
+
+        if (! CurrencyConverter::isValidAmount($string, 'USD')) {
+            return 0;
+        }
+
+        return CurrencyConverter::convertToCents($string, 'USD');
     }
 
     public static function getPages(): array

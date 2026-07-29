@@ -37,9 +37,9 @@ class ReportService
         protected AccountService $accountService,
     ) {}
 
-    public function getEarliestTransactionDate(): string
+    public function getEarliestTransactionDate(?int $companyId = null): string
     {
-        return $this->accountService->getEarliestTransactionDate();
+        return $this->accountService->getEarliestTransactionDate($companyId);
     }
 
     /**
@@ -167,24 +167,38 @@ class ReportService
         return $netCashFlow;
     }
 
-    public function calculateRetainedEarnings(?string $startDate, string $endDate, $projectId = null, $companyId = null): Money
+    /**
+     * @param  \Illuminate\Support\Collection<int, Account>|null  $accounts  Optional pre-loaded balances (avoids extra full scans).
+     */
+    public function calculateRetainedEarnings(?string $startDate, string $endDate, $projectId = null, $companyId = null, $accounts = null): Money
     {
-        $startDate ??= Carbon::parse($this->accountService->getEarliestTransactionDate())->toDateTimeString();
-        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)->where('category', AccountCategory::Revenue)->get();
+        if ($accounts === null) {
+            $startDate ??= Carbon::parse($this->accountService->getEarliestTransactionDate(
+                $companyId !== null ? (int) $companyId : null
+            ))->toDateTimeString();
+            $accounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)->get();
+        }
 
-        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId)->where('category', AccountCategory::Expense)->get();
+        $revenueAccounts = $accounts->where('category', AccountCategory::Revenue);
+        $expenseAccounts = $accounts->where('category', AccountCategory::Expense);
 
         $revenueTotal = 0;
         $expenseTotal = 0;
 
         foreach ($revenueAccounts as $account) {
             $revenueBalances = $this->calculateAccountBalances($account);
-            $revenueTotal += $revenueBalances['ending_balance'] ?? $revenueBalances['net_movement'];
+            $amount = $revenueBalances['ending_balance'] ?? $revenueBalances['net_movement'];
+            // Contra revenue (e.g. sales returns) has a debit-normal balance shown as positive;
+            // net revenue must subtract it: Revenue − Contra Revenue.
+            $revenueTotal += $account->type->isContra() ? -$amount : $amount;
         }
 
         foreach ($expenseAccounts as $account) {
             $expenseBalances = $this->calculateAccountBalances($account);
-            $expenseTotal += $expenseBalances['ending_balance'] ?? $expenseBalances['net_movement'];
+            $amount = $expenseBalances['ending_balance'] ?? $expenseBalances['net_movement'];
+            // Contra expense has a credit-normal balance shown as positive;
+            // net expenses must subtract it: Expenses − Contra Expenses.
+            $expenseTotal += $account->type->isContra() ? -$amount : $amount;
         }
 
         $retainedEarnings = $revenueTotal - $expenseTotal;
@@ -374,17 +388,33 @@ class ReportService
 
     public function buildTrialBalanceReport(string $trialBalanceType, string $asOfDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
     {
+        // Date-only as-of (e.g. '2025-12-31') must include the full calendar day so
+        // cutover clears posted at 23:59:59 are in scope — same as Filament UI.
         $asOfDateCarbon = Carbon::parse($asOfDate);
-        $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate());
+        if (! str_contains(trim((string) $asOfDate), ' ')) {
+            $asOfDateCarbon = $asOfDateCarbon->endOfDay();
+        }
+        $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate(
+            $companyId !== null ? (int) $companyId : null
+        ));
 
         $orderedCategories = AccountCategory::getOrderedCategories();
 
         $isPostClosingTrialBalance = $trialBalanceType === 'postClosing';
 
-        $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
-            ->when($isPostClosingTrialBalance, fn (Builder $query) => $query->whereNotIn('category', [AccountCategory::Revenue, AccountCategory::Expense]))
+        // One aggregation pass; for post-closing, keep Revenue/Expense in memory only for RE calculation.
+        $allAccounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
             ->orderByRaw('LENGTH(code), code')
             ->get();
+
+        $accounts = $isPostClosingTrialBalance
+            ? $allAccounts->whereNotIn('category', [AccountCategory::Revenue, AccountCategory::Expense])
+            : $allAccounts;
+
+        // Parent/header + clearing (OBE / CYE): jangan tampil di TB (OBE sering sisa parkir import).
+        $excludedIds = $companyId !== null
+            ? Account::trialBalanceExcludedAccountIdsForCompany((int) $companyId)->flip()
+            : collect();
 
         $balanceFields = ['debit_balance', 'credit_balance'];
 
@@ -400,9 +430,18 @@ class ReportService
 
             /** @var Account $account */
             foreach ($accountsInCategory as $account) {
+                if ($excludedIds->has($account->id)) {
+                    continue;
+                }
+
                 $accountBalances = $this->calculateAccountBalances($account);
 
                 $endingBalance = $accountBalances['ending_balance'] ?? $accountBalances['net_movement'];
+
+                // Skip accounts with a zero ending balance (both debit and credit would be 0).
+                if ((int) $endingBalance === 0) {
+                    continue;
+                }
 
                 $trialBalance = $this->calculateTrialBalancesForAccount($account, $endingBalance);
 
@@ -423,22 +462,31 @@ class ReportService
             }
 
             if ($category === AccountCategory::Equity && $isPostClosingTrialBalance) {
-                $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), $projectId, $companyId)->getAmount();
-                $isCredit = $retainedEarningsAmount >= 0;
+                $retainedEarningsAmount = $this->calculateRetainedEarnings(
+                    $startDateCarbon->toDateTimeString(),
+                    $asOfDateCarbon->toDateTimeString(),
+                    $projectId,
+                    $companyId,
+                    $allAccounts,
+                )->getAmount();
 
-                $categorySummaryBalances[$isCredit ? 'credit_balance' : 'debit_balance'] += abs($retainedEarningsAmount);
+                if ((int) $retainedEarningsAmount !== 0) {
+                    $isCredit = $retainedEarningsAmount >= 0;
 
-                $categoryAccounts[] = new AccountDTO(
-                    'Retained Earnings',
-                    'RE',
-                    null,
-                    $this->formatBalances([
-                        'debit_balance' => $isCredit ? 0 : abs($retainedEarningsAmount),
-                        'credit_balance' => $isCredit ? $retainedEarningsAmount : 0,
-                    ]),
-                    startDate: $startDateCarbon->toDateString(),
-                    endDate: $asOfDateCarbon->toDateString(),
-                );
+                    $categorySummaryBalances[$isCredit ? 'credit_balance' : 'debit_balance'] += abs($retainedEarningsAmount);
+
+                    $categoryAccounts[] = new AccountDTO(
+                        'Retained Earnings',
+                        'RE',
+                        null,
+                        $this->formatBalances([
+                            'debit_balance' => $isCredit ? 0 : abs($retainedEarningsAmount),
+                            'credit_balance' => $isCredit ? $retainedEarningsAmount : 0,
+                        ]),
+                        startDate: $startDateCarbon->toDateString(),
+                        endDate: $asOfDateCarbon->toDateString(),
+                    );
+                }
             }
 
             foreach ($categorySummaryBalances as $balanceType => $balance) {
@@ -507,22 +555,36 @@ class ReportService
         $companyId = null,
         $projectTypeId = null,
     ): ReportDTO {
-        // Query only relevant accounts and sort them at the query level
-        $revenueAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
-            ->where('category', AccountCategory::Revenue)
+        $companyIdInt = $companyId !== null ? (int) $companyId : null;
+        $startCarbon = Carbon::parse($startDate)->startOfDay();
+        $endCarbon = Carbon::parse($endDate);
+
+        $useCutoverEnding = $this->isIncomeStatementCutoverWindow($startCarbon, $endCarbon, $companyIdInt);
+
+        // Cutover as-of / cutover+FY: ending_balance. Otherwise period net_movement.
+        // When start=cutover and end in the new FY, ending through endDate = cutover snapshot + FY activity
+        // (not "period txs on 31/12" alone).
+        $queryStart = $startCarbon->toDateTimeString();
+        $queryEnd = $endCarbon->toDateTimeString();
+        $dtoStart = $startCarbon->toDateString();
+        $dtoEnd = $endCarbon->toDateString();
+
+        $accounts = $this->accountService->getAccountBalances($queryStart, $queryEnd, [], $projectId, $companyId, $projectTypeId)
+            ->whereIn('category', [AccountCategory::Revenue, AccountCategory::Expense])
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
-        $cogsAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
-            ->whereRelation('subtype', 'name', 'Cost of Goods Sold')
-            ->orderByRaw('LENGTH(code), code')
-            ->get();
+        $revenueAccounts = $accounts->where('category', AccountCategory::Revenue);
 
-        $expenseAccounts = $this->accountService->getAccountBalances($startDate, $endDate, [], $projectId, $companyId, $projectTypeId)
+        $cogsAccounts = $accounts
             ->where('category', AccountCategory::Expense)
-            ->whereRelation('subtype', 'name', '!=', 'Cost of Goods Sold')
-            ->orderByRaw('LENGTH(code), code')
-            ->get();
+            ->filter(fn (Account $account) => $account->subtype?->name === 'Cost of Goods Sold')
+            ->values();
+
+        $expenseAccounts = $accounts
+            ->where('category', AccountCategory::Expense)
+            ->filter(fn (Account $account) => $account->subtype?->name !== 'Cost of Goods Sold')
+            ->values();
 
         $accountCategories = [];
         $totalRevenue = 0;
@@ -548,7 +610,7 @@ class ReportService
         // Process each category group
         foreach ($categoryGroups as $label => $group) {
             $categoryAccounts = [];
-            $netMovement = 0;
+            $categoryTotal = 0;
 
             foreach ($group['accounts'] as $account) {
                 // Use the category type based on label
@@ -560,24 +622,35 @@ class ReportService
 
                 if ($category !== null) {
                     $accountBalances = $this->calculateAccountBalances($account);
-                    $movement = $accountBalances['net_movement'];
-                    $netMovement += $movement;
-                    $group['total'] += $movement;
+                    $rawAmount = $useCutoverEnding
+                        ? ($accountBalances['ending_balance'] ?? $accountBalances['net_movement'] ?? 0)
+                        : ($accountBalances['net_movement'] ?? 0);
+
+                    // Contra accounts shown positive must subtract from category totals.
+                    $amount = $account->type->isContra() ? -$rawAmount : $rawAmount;
+
+                    // Skip zero lines so detail drill-down matches activity in scope.
+                    if ($amount === 0) {
+                        continue;
+                    }
+
+                    $categoryTotal += $amount;
+                    $group['total'] += $amount;
 
                     $categoryAccounts[] = new AccountDTO(
                         $account->name,
                         $account->code,
                         $account->id,
-                        $this->formatBalances(['net_movement' => $movement]),
-                        Carbon::parse($startDate)->toDateString(),
-                        Carbon::parse($endDate)->toDateString(),
+                        $this->formatBalances(['net_movement' => $amount]),
+                        $dtoStart,
+                        $dtoEnd,
                     );
                 }
             }
 
             $accountCategories[$label] = new AccountCategoryDTO(
                 accounts: $categoryAccounts,
-                summary: $this->formatBalances(['net_movement' => $netMovement])
+                summary: $this->formatBalances(['net_movement' => $categoryTotal])
             );
         }
 
@@ -590,9 +663,132 @@ class ReportService
             categories: $accountCategories,
             overallTotal: $formattedReportTotalBalances,
             fields: $columns,
-            startDate: Carbon::parse($startDate),
-            endDate: Carbon::parse($endDate),
+            startDate: $startCarbon->copy(),
+            endDate: Carbon::parse($dtoEnd)->endOfDay(),
         );
+    }
+
+    /**
+     * Use as-of ending_balance when:
+     * - endDate is the OB cutover day (e.g. 01/01/2025–31/12/2025 or 31/12–31/12), or
+     * - startDate is the cutover day and endDate is on/after it (e.g. 31/12/2025–01/01/2026
+     *   or 31/12/2025–28/07/2026 → cutover snapshot + activity from FY start, not period-only on 31/12).
+     * End date before cutover → period net_movement (real pre-OB activity).
+     */
+    public function isIncomeStatementCutoverWindow(
+        \DateTimeInterface | string $startDate,
+        \DateTimeInterface | string $endDate,
+        ?int $companyId = null,
+    ): bool {
+        $start = Carbon::parse($startDate)->startOfDay();
+        $end = Carbon::parse($endDate)->startOfDay();
+
+        if ($this->isOpeningBalanceCutoverDay($end, $companyId)) {
+            return true;
+        }
+
+        // 31/12/2025 → any later date in/after FY: ending through endDate.
+        if ($this->isOpeningBalanceCutoverDay($start, $companyId) && $end->gte($start)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @deprecated Use {@see isIncomeStatementCutoverWindow()} inverted for period mode.
+     */
+    public function shouldUseIncomeStatementPeriodMovement(
+        \DateTimeInterface | string $startDate,
+        \DateTimeInterface | string $endDate,
+        ?int $companyId = null,
+    ): bool {
+        return ! $this->isIncomeStatementCutoverWindow($startDate, $endDate, $companyId);
+    }
+
+    /**
+     * OB cutover day relevant to the filter (day before a fiscal year start).
+     */
+    public function resolveIncomeStatementCutoverDay(
+        \DateTimeInterface | string $startDate,
+        \DateTimeInterface | string $endDate,
+        ?int $companyId = null,
+    ): ?Carbon {
+        $start = Carbon::parse($startDate)->startOfDay();
+        $end = Carbon::parse($endDate)->startOfDay();
+
+        if ($this->isOpeningBalanceCutoverDay($start, $companyId)) {
+            return $start->copy();
+        }
+
+        if ($this->isOpeningBalanceCutoverDay($end, $companyId)) {
+            return $end->copy();
+        }
+
+        // e.g. end = 01/01/2026 → cutover 31/12/2025
+        $dayBeforeEnd = $end->copy()->subDay();
+        if ($this->isOpeningBalanceCutoverDay($dayBeforeEnd, $companyId) && $dayBeforeEnd->gte($start)) {
+            return $dayBeforeEnd;
+        }
+
+        // Cutover at end of FY that contains start (e.g. start in 2025 → 31/12/2025)
+        $fyStart = $this->resolveFiscalYearStartForDate($start, $companyId);
+        $cutover = $fyStart->copy()->addYear()->subDay();
+        if ($cutover->gte($start) && $cutover->lte($end) && $this->isOpeningBalanceCutoverDay($cutover, $companyId)) {
+            return $cutover;
+        }
+
+        return null;
+    }
+
+    /**
+     * True when $date is the calendar day immediately before a fiscal year start (OB cutover).
+     */
+    public function isOpeningBalanceCutoverDay(\DateTimeInterface | string $date, ?int $companyId = null): bool
+    {
+        $day = Carbon::parse($date)->startOfDay();
+        $nextDay = $day->copy()->addDay();
+        $fyStart = $this->resolveFiscalYearStartForDate($nextDay, $companyId);
+
+        return $nextDay->equalTo($fyStart);
+    }
+
+    /**
+     * Calendar day of opening-balance cutover for the fiscal year that contains $asOf
+     * (day before that FY start — e.g. 2025-12-31 when FY starts 2026-01-01).
+     */
+    public function resolveOpeningBalanceCutoverDate(\DateTimeInterface | string $asOf, ?int $companyId = null): Carbon
+    {
+        $fyStart = $this->resolveFiscalYearStartForDate($asOf, $companyId);
+
+        return $fyStart->copy()->subDay()->startOfDay();
+    }
+
+    /**
+     * Fiscal year start (month/day from company locale) for the FY that contains $date.
+     */
+    public function resolveFiscalYearStartForDate(\DateTimeInterface | string $date, ?int $companyId = null): Carbon
+    {
+        $date = Carbon::parse($date)->startOfDay();
+
+        if ($companyId !== null) {
+            $company = \App\Models\Company::query()->find($companyId);
+            if ($company?->locale !== null) {
+                $template = Carbon::parse($company->locale->fiscalYearStartDate())->startOfDay();
+                $fyStart = $date->copy()
+                    ->month($template->month)
+                    ->day($template->day)
+                    ->startOfDay();
+
+                if ($date->lt($fyStart)) {
+                    $fyStart->subYear();
+                }
+
+                return $fyStart;
+            }
+        }
+
+        return $date->copy()->startOfYear()->startOfDay();
     }
 
     public function buildCashFlowStatementReport(string $startDate, string $endDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
@@ -820,17 +1016,26 @@ class ReportService
     public function buildBalanceSheetReport(string $asOfDate, array $columns = [], $projectId = null, $companyId = null): ReportDTO
     {
         $asOfDateCarbon = Carbon::parse($asOfDate);
-        $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate());
+        $startDateCarbon = Carbon::parse($this->accountService->getEarliestTransactionDate(
+            $companyId !== null ? (int) $companyId : null
+        ));
 
         $orderedCategories = array_filter(AccountCategory::getOrderedCategories(), fn (AccountCategory $category) => $category->isReal());
 
-        $accounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
-            ->whereIn('category', $orderedCategories)
+        // One aggregation: real accounts for BS lines + Revenue/Expense for retained earnings.
+        $allAccounts = $this->accountService->getAccountBalances($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), [], $projectId, $companyId)
             ->orderByRaw('LENGTH(code), code')
             ->get();
 
+        $accounts = $allAccounts->whereIn('category', $orderedCategories);
+
         $excludedFromTotals = $companyId !== null
             ? Account::balanceSheetExcludedAccountIdsForCompany((int) $companyId)->flip()
+            : collect();
+
+        // OBE / CYE / RETAINED EARNING legacy: sama seperti Trial Balance — jangan tampilkan baris.
+        $hiddenClearingIds = $companyId !== null
+            ? Account::balanceSheetHiddenLineAccountIdsForCompany((int) $companyId)->flip()
             : collect();
 
         $accountCategories = [];
@@ -852,6 +1057,10 @@ class ReportService
             /** @var Account $account */
             foreach ($accounts as $account) {
                 if ($account->type->getCategory() === $category) {
+                    if ($hiddenClearingIds->has($account->id)) {
+                        continue;
+                    }
+
                     $accountBalances = $this->calculateAccountBalances($account);
                     $endingBalance = $accountBalances['ending_balance'] ?? $accountBalances['net_movement'];
 
@@ -870,14 +1079,27 @@ class ReportService
                     $categoryAccountsByType[$accountType][] = $accountDTO;
 
                     if (! $excludedFromTotals->has($account->id)) {
-                        $categorySummaryBalances['ending_balance'] += $endingBalance;
+                        // Contra accounts (e.g. Accumulated Depreciation) have credit-normal balances
+                        // shown as positive amounts; category totals must subtract them:
+                        // Total Assets = Current Assets - Contra Assets + Non-Current Assets
+                        // (same pattern for Liabilities / Equity contra types).
+                        $categoryContribution = $account->type->isContra()
+                            ? -$endingBalance
+                            : $endingBalance;
+                        $categorySummaryBalances['ending_balance'] += $categoryContribution;
                         $subCategoryTotals[$accountType] = ($subCategoryTotals[$accountType] ?? 0) + $endingBalance;
                     }
                 }
             }
 
             if ($category === AccountCategory::Equity) {
-                $retainedEarningsAmount = $this->calculateRetainedEarnings($startDateCarbon->toDateTimeString(), $asOfDateCarbon->toDateTimeString(), $projectId, $companyId)->getAmount();
+                $retainedEarningsAmount = $this->calculateRetainedEarnings(
+                    $startDateCarbon->toDateTimeString(),
+                    $asOfDateCarbon->toDateTimeString(),
+                    $projectId,
+                    $companyId,
+                    $allAccounts,
+                )->getAmount();
 
                 $addComputedRetainedEarnings = $companyId === null
                     || Account::shouldInjectComputedEquityLineOnBalanceSheet((int) $companyId);
@@ -889,13 +1111,29 @@ class ReportService
                         $companyId !== null ? (int) $companyId : null
                     );
 
+                    $fyStart = $this->resolveFiscalYearStartForDate(
+                        $asOfDateCarbon,
+                        $companyId !== null ? (int) $companyId : null,
+                    );
+                    $asOfDay = $asOfDateCarbon->copy()->startOfDay();
+
+                    // LTJ dengan RE GL: drill-down ke Income Statement FY (bukan cutover saja).
+                    $useYtdDrillDown = $companyId !== null
+                        && Account::shouldShowComputedCurrentYearEarningsOnBalanceSheet((int) $companyId)
+                        && $asOfDay->gte($fyStart);
+
+                    $drillDownStart = $useYtdDrillDown
+                        ? $fyStart->copy()->startOfDay()
+                        : $startDateCarbon->copy()->startOfDay();
+                    $drillDownEnd = $asOfDateCarbon->copy()->startOfDay();
+
                     $retainedEarningsDTO = new AccountDTO(
                         $computedEquityLine['label'],
                         $computedEquityLine['code'],
                         null,
                         $this->formatBalances(['ending_balance' => $retainedEarningsAmount]),
-                        startDate: $startDateCarbon->toDateString(),
-                        endDate: $asOfDateCarbon->toDateString(),
+                        startDate: $drillDownStart->toDateString(),
+                        endDate: $drillDownEnd->toDateString(),
                     );
                 }
             }

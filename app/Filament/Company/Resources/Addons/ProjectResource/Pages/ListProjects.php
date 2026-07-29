@@ -26,6 +26,7 @@ class ListProjects extends ListRecords
                 context: [
                     'companyId' => AuthHelper::currentCompany(),
                     'actorId' => AuthHelper::currentUser(),
+                    'forceReimport' => true,
                 ],
             ),
         ];

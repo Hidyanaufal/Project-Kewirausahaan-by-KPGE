@@ -2,17 +2,11 @@
 
 namespace App\Imports;
 
-use App\Enums\Accounting\JournalEntryType;
 use App\Models\Accounting\Account;
-use App\Models\Accounting\JournalEntry;
-use App\Models\Accounting\Transaction;
 use App\Models\Company;
-use App\Services\AccountService;
+use App\Services\OpeningBalanceNameImportService;
 use App\Utilities\Currency\CurrencyAccessor;
-use App\Utilities\Currency\CurrencyConverter;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
@@ -57,9 +51,6 @@ class OpeningBalanceImport implements ShouldQueue, ToModel, WithChunkReading, Wi
             return null;
         }
 
-        // Jangan "replace" / post saldo untuk account parent supaya tidak double dengan saldo anak-anaknya.
-        // Parent detection dibuat lebih robust dari sekadar relasi `children()`, karena di beberapa COA,
-        // struktur parent-child bisa terdeteksi via pola kode (mis. 1100.02, 1100-02, atau prefix numerik).
         if ($account->isParentAccount()) {
             Log::info('OpeningBalanceImport - skipped parent account balance to prevent double counting', [
                 'company_id' => $this->companyId,
@@ -69,73 +60,16 @@ class OpeningBalanceImport implements ShouldQueue, ToModel, WithChunkReading, Wi
             return null;
         }
 
-        $company = Company::query()->find($this->companyId);
-        if (! $company) {
+        if (! Company::query()->whereKey($this->companyId)->exists()) {
             return null;
         }
 
-        $fyStart = $this->computeFiscalYearStartForYear($company, $this->year);
-        $postedAt = $fyStart->copy()->subSecond()->toDateTimeString();
-        $startDateTime = $fyStart->toDateTimeString();
+        /** @var OpeningBalanceNameImportService $service */
+        $service = app(OpeningBalanceNameImportService::class);
 
-        /** @var AccountService $accountService */
-        $accountService = app(AccountService::class);
-
-        $currentStarting = $accountService->getStartingBalance(
-            $account,
-            $startDateTime,
-            override: true,
-            projectId: null,
-            companyId: $this->companyId,
-        );
-        $currentMinor = $currentStarting?->getAmount() ?? 0;
-
-        $desiredMinor = $this->parseBalanceToMinor($balanceRaw, CurrencyAccessor::getDefaultCurrency());
-        $diff = $desiredMinor - $currentMinor;
-
-        if ($diff === 0) {
-            return null;
-        }
-
-        $openingEquity = Account::getOpeningBalanceAccount($this->companyId);
-
-        [$accountEntryType, $equityEntryType] = $this->determineEntryTypes($account, $diff);
-        $amount = abs($diff);
-
-        DB::transaction(function () use ($account, $openingEquity, $postedAt, $amount, $accountEntryType, $equityEntryType) {
-            $transaction = Transaction::create([
-                'company_id' => $this->companyId,
-                'bank_account_id' => null,
-                'type' => 'journal',
-                'description' => "Saldo Awal FY-{$this->year} (Import Adjust)",
-                'posted_at' => $postedAt,
-                'amount' => $amount,
-                'reviewed' => false,
-                'meta' => [
-                    'addon' => 'opening_balance_import',
-                    'year' => $this->year,
-                    'account_code' => $account->code,
-                ],
-            ]);
-
-            JournalEntry::create([
-                'company_id' => $this->companyId,
-                'transaction_id' => $transaction->id,
-                'account_id' => $account->id,
-                'type' => $accountEntryType,
-                'amount' => $amount,
-                'description' => "Saldo Awal FY-{$this->year} - {$account->code}",
-            ]);
-
-            JournalEntry::create([
-                'company_id' => $this->companyId,
-                'transaction_id' => $transaction->id,
-                'account_id' => $openingEquity->id,
-                'type' => $equityEntryType,
-                'amount' => $amount,
-                'description' => "Saldo Awal FY-{$this->year} (Counter)",
-            ]);
-        });
+        $excelSignedMinor = $service->parseBalanceToMinor($balanceRaw, CurrencyAccessor::getDefaultCurrency());
+        $desiredMinor = $service->excelSignedToDesiredMinor($account, $excelSignedMinor);
+        $service->postOpeningBalanceAdjustment($this->companyId, $account, $this->year, $desiredMinor);
 
         return $account;
     }
@@ -162,43 +96,5 @@ class OpeningBalanceImport implements ShouldQueue, ToModel, WithChunkReading, Wi
         }
 
         return null;
-    }
-
-    private function computeFiscalYearStartForYear(Company $company, int $year): Carbon
-    {
-        $currentYear = company_today()->year;
-        $baseStart = Carbon::parse($company->locale->fiscalYearStartDate())->startOfDay();
-
-        return $baseStart->subYears($currentYear - $year)->startOfDay();
-    }
-
-    private function parseBalanceToMinor(string | float | int $raw, string $currency): int
-    {
-        if (is_string($raw)) {
-            $raw = trim($raw);
-            $raw = str_replace([' ', "\u{00A0}"], '', $raw);
-            $raw = str_replace('.', '', $raw);   // ribuan (ID style)
-            $raw = str_replace(',', '.', $raw);  // desimal (ID style)
-        }
-
-        return CurrencyConverter::convertToCents((float) $raw, $currency);
-    }
-
-    /**
-     * @return array{0: JournalEntryType, 1: JournalEntryType}
-     */
-    private function determineEntryTypes(Account $account, int $diff): array
-    {
-        $normalDebit = $account->type->isNormalDebitBalance();
-
-        if ($normalDebit) {
-            $accountType = $diff > 0 ? JournalEntryType::Debit : JournalEntryType::Credit;
-        } else {
-            $accountType = $diff > 0 ? JournalEntryType::Credit : JournalEntryType::Debit;
-        }
-
-        $equityType = $accountType === JournalEntryType::Debit ? JournalEntryType::Credit : JournalEntryType::Debit;
-
-        return [$accountType, $equityType];
     }
 }
