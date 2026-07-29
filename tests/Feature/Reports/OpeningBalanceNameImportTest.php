@@ -1044,7 +1044,7 @@ it('keeps pre-cutover reports unchanged and applies opening balance from fyStart
         ->and($accountService->getStartingBalance($cash->fresh(), $fyStart->toDateTimeString(), true, null, $company->id)?->getAmount())
         ->toBe($cashMinor);
 
-    // Balance sheet as-of FY start stays balanced; LTJ drill-down opens cutover day.
+    // Balance sheet as-of FY start stays balanced; LTJ drill-down uses FY YTD (fyStart → asOf).
     $bs = \App\Facades\Reporting::buildBalanceSheetReport($fyStart->toDateString(), [], null, $company->id);
     $assets = \App\Utilities\Currency\CurrencyConverter::convertToFloat(
         $bs->categories['Assets']->summary->endingBalance ?? '0'
@@ -1069,8 +1069,8 @@ it('keeps pre-cutover reports unchanged and applies opening balance from fyStart
     }
 
     expect($ltjAccount)->not->toBeNull()
-        ->and($ltjAccount->startDate)->toBe($cutoverAt->toDateString())
-        ->and($ltjAccount->endDate)->toBe($cutoverAt->toDateString());
+        ->and($ltjAccount->startDate)->toBe($fyStart->toDateString())
+        ->and($ltjAccount->endDate)->toBe($fyStart->toDateString());
 });
 
 it('auto-approves exact map and create rows and imports via shared service method', function () {

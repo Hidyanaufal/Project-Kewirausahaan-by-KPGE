@@ -575,8 +575,11 @@ test('update partial payment recalculates journals and invoice status', function
         ->where('enabled', true)
         ->firstOrFail();
 
-    $paymentAmount = (int) floor($invoice->amount_due / 2);
-    expect($paymentAmount)->toBeGreaterThan(0);
+    // Status Overpaid/Paid compares against actual_total (PPh23-adjusted), not total/amount_due.
+    $payable = (int) ($invoice->actual_total ?? $invoice->total);
+    $paymentAmount = (int) floor($payable / 2);
+    expect($paymentAmount)->toBeGreaterThan(0)
+        ->and($paymentAmount)->toBeLessThan($payable);
 
     $invoice->recordPayment([
         'posted_at' => now()->toDateString(),
@@ -590,7 +593,9 @@ test('update partial payment recalculates journals and invoice status', function
     $payment = $invoice->payments()->firstOrFail();
     expect($invoice->status)->toBe(InvoiceStatus::Partial);
 
-    $newAmount = $paymentAmount + 10_000;
+    $delta = min(10_000, max(1, (int) floor(($payable - $paymentAmount) / 2)));
+    $newAmount = $paymentAmount + $delta;
+    expect($newAmount)->toBeLessThan($payable);
 
     $invoice->updatePayment($payment, [
         'posted_at' => now()->toDateString(),
