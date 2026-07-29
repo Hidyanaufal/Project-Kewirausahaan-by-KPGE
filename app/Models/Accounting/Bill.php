@@ -397,6 +397,75 @@ class Bill extends Document
         ]);
     }
 
+    /**
+     * Cash portion for a payment given a (possibly manual) PPh 23 amount.
+     * actual_total = total - pph23, so remaining cash due = total - amount_paid - pph23.
+     */
+    public function paymentAmountForPph23(?int $pph23Cents): int
+    {
+        return max(
+            (int) $this->total - (int) ($this->amount_paid ?? 0) - (int) ($pph23Cents ?? 0),
+            0
+        );
+    }
+
+    /**
+     * Prefer stored bill.pph23 on the payment form (including explicit 0); fall back to 2% of expense journals.
+     */
+    public function defaultPph23ForPaymentForm(): int
+    {
+        if ($this->pph23 !== null) {
+            return (int) $this->pph23;
+        }
+
+        return $this->defaultPph23FromInitialTransaction();
+    }
+
+    /**
+     * Parse form/API pph23: explicit 0 is valid; blank/missing stays null (auto 2% on create/update).
+     * Note: empty(0) === true in PHP, so do not use empty() here.
+     */
+    public static function parsePph23Cents(array $data): ?int
+    {
+        if (! array_key_exists('pph23', $data) || $data['pph23'] === null || $data['pph23'] === '') {
+            return null;
+        }
+
+        return (int) $data['pph23'];
+    }
+
+    /**
+     * Update pph23 then record payment, aligning cash amount when the payment is a full-pay intent
+     * so status reaches Paid and Hutang PPh 23 journals are posted with the manual value.
+     */
+    public function recordPaymentWithPph23(array $data): void
+    {
+        $pph23Cents = static::parsePph23Cents($data);
+        $amountCents = (int) $data['amount'];
+        $previousAmountDue = (int) $this->amount_due;
+        $projectedFullPay = $this->paymentAmountForPph23($pph23Cents);
+
+        $isFullPayIntent = $amountCents === $previousAmountDue
+            || $amountCents === $projectedFullPay
+            || $amountCents === (int) $this->total - (int) ($this->amount_paid ?? 0);
+
+        $this->update([
+            'pph23' => $pph23Cents,
+        ]);
+
+        $this->refresh();
+
+        if ($isFullPayIntent) {
+            $amountCents = (int) $this->amount_due;
+        }
+
+        $this->recordPayment([
+            ...$data,
+            'amount' => $amountCents,
+            'pph23' => $pph23Cents,
+        ]);
+    }
+
     public function defaultPph23FromInitialTransaction(): int
     {
         $initialTransaction = $this->initialTransaction;
