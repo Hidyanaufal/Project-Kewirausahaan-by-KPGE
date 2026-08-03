@@ -84,9 +84,14 @@ UI tidak memfilter `archived`; Advance memfilter → set akun bisa beda.
 
 `formatCentsToMoney` sudah major units; `toNumber(...) / 100` mengecilkan angka.
 
-### 5.7 Balance Sheet Details (sekunder)
+### 5.7 Balance Sheet Details — hierarki vs tipe akun
 
-`buildReportEnhanced` sudah memakai `getAccountBalances` + `getFormattedAsOfDate()` (`endOfDay`). Cutoff OB seharusnya selaras; sisa risiko presentasi hierarki vs Summary flat. Diverifikasi parity leaf ending; ubah kode hanya jika ada selisih nyata.
+`buildReportEnhanced` mengelompokkan per `AccountType` lalu menelusuri **semua** anak COA di bawah parent. Akun **ContraAsset** yang `parent_id`-nya mengarah ke parent **CurrentAsset** (contoh: Penyisihan Provisi Kerugian Piutang di bawah Piutang) ikut ditampilkan dan dijumlahkan di Current Asset, sehingga:
+
+- nilai penyisihan **ditambah** ke Total Current asset (harusnya di Contra Assets lalu **dikurangi** dari Total ASSET);
+- Total ASSET export = UI + 2× saldo penyisihan.
+
+UI Summary (`buildBalanceSheetReport`) mengelompokkan tiap akun menurut **tipenya sendiri**, tanpa mengikat anak ke tipe parent.
 
 ---
 
@@ -95,8 +100,8 @@ UI tidak memfilter `archived`; Advance memfilter → set akun bisa beda.
 1. Refactor `__buildReportAdvance` → `getAccountBalances` + `calculateAccountBalances` + `calculateTrialBalancesForAccount`; datetime penuh; tanpa filter archived; TOTALS `/100` sekali.
 2. Classic: konversi money via `CurrencyConverter::convertToFloat` tanpa `/100` ekstra.
 3. Tes regresi: OB di `23:59:59`, parity ending Advance vs `buildTrialBalanceReport`, TOTALS = sum baris.
-4. Verifikasi parity BS Details vs Summary per leaf.
-
+4. BS Details: walker hierarki hanya anak **tipe sama**; akun tipe beda dari parent jadi root di section tipenya; Total ASSET tetap Current − Contra + Non-Current.
+5. Tes regresi: ContraAsset child di bawah CurrentAsset parent → section Contra + Total ASSET = Summary.
 ---
 
 ## 7. File terkait
