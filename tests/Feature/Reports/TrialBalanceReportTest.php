@@ -2,12 +2,15 @@
 
 use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\AccountType;
+use App\Enums\Accounting\JournalEntryType;
 use App\Facades\Accounting;
 use App\Facades\Reporting;
 use App\Factories\ReportDateFactory;
 use App\Filament\Company\Pages\Reports\TrialBalance;
 use App\Models\Accounting\Account;
 use App\Models\Accounting\Transaction;
+use App\Utilities\Currency\CurrencyConverter;
+use Carbon\Carbon;
 
 use function Pest\Livewire\livewire;
 
@@ -347,4 +350,149 @@ it('excludes opening balance equity clearing account from trial balance', functi
         ->map(fn ($dto) => $dto->accountName);
 
     expect($equityNames)->not->toContain('OPENING BALANCE EQUITY TB Test');
+});
+
+it('includes cutover opening-balance journals at 23:59:59 in advance export ending balances', function () {
+    $company = $this->testCompany;
+    $cutoverDay = Carbon::parse('2025-12-31');
+    $obPostedAt = $cutoverDay->copy()->endOfDay()->toDateTimeString(); // 23:59:59
+    $asOf = $cutoverDay->toDateString();
+    $amount = 3_500_000;
+
+    $bankAccount = $company->default->bankAccount;
+    $assetAccount = $bankAccount->account;
+
+    $revenue = Account::query()
+        ->where('company_id', $company->id)
+        ->where('category', AccountCategory::Revenue)
+        ->whereDoesntHave('children')
+        ->firstOrFail();
+
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount)
+        ->create([
+            'posted_at' => $obPostedAt,
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $assetAccount->id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount,
+    ]));
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $revenue->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+
+    $uiReport = Reporting::buildTrialBalanceReport('standard', $asOf, [], null, $company->id);
+    $uiByName = collect($uiReport->categories)
+        ->flatMap(fn ($cat) => $cat->accounts)
+        ->keyBy(fn ($dto) => $dto->accountName);
+
+    $component = livewire(TrialBalance::class)
+        ->set('filters.asOfDate', $asOf)
+        ->set('deferredFilters.asOfDate', $asOf)
+        ->call('applyFilters');
+
+    $advance = $component->instance()->__buildReportAdvance();
+    $accountRows = collect($advance['rows'])
+        ->filter(fn ($row) => ($row['data'][1] ?? '') !== 'TOTAL' && ($row['data'][1] ?? '') !== '')
+        ->values();
+
+    $advanceByName = $accountRows->keyBy(fn ($row) => $row['data'][1]);
+
+    expect($advanceByName->keys())->toContain($assetAccount->name);
+
+    $assetAdvance = $advanceByName[$assetAccount->name]['data'];
+    $assetUi = $uiByName[$assetAccount->name];
+    $uiDebit = CurrencyConverter::convertToFloat($assetUi->balance->debitBalance ?? '0');
+    $uiCredit = CurrencyConverter::convertToFloat($assetUi->balance->creditBalance ?? '0');
+
+    expect((float) $assetAdvance[6])->toEqual($uiDebit)
+        ->and((float) $assetAdvance[7])->toEqual($uiCredit);
+
+    // Ending debit must reflect OB amount — not dropped by date-only midnight cutoff.
+    expect((float) $assetAdvance[6])->toBeGreaterThanOrEqual($amount / 100);
+});
+
+it('keeps advance export ending balances in parity with buildTrialBalanceReport and totals equal sum of rows', function () {
+    $company = $this->testCompany;
+    $asOf = now()->toDateString();
+    $amount = 1_250_000;
+
+    $bankAccount = $company->default->bankAccount;
+    $assetAccount = $bankAccount->account;
+    $expense = Account::query()
+        ->where('company_id', $company->id)
+        ->where('category', AccountCategory::Expense)
+        ->whereDoesntHave('children')
+        ->firstOrFail();
+
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount)
+        ->create([
+            'posted_at' => now()->subDay()->toDateTimeString(),
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $expense->id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount,
+    ]));
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $assetAccount->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+
+    $uiReport = Reporting::buildTrialBalanceReport('standard', $asOf, [], null, $company->id);
+    $uiByName = collect($uiReport->categories)
+        ->flatMap(fn ($cat) => $cat->accounts)
+        ->keyBy(fn ($dto) => $dto->accountName);
+
+    $component = livewire(TrialBalance::class)
+        ->set('filters.asOfDate', $asOf)
+        ->set('deferredFilters.asOfDate', $asOf)
+        ->call('applyFilters');
+
+    $advance = $component->instance()->__buildReportAdvance();
+    $rows = collect($advance['rows']);
+    $accountRows = $rows->filter(fn ($row) => ($row['data'][1] ?? '') !== 'TOTAL')->values();
+    $totalRow = $rows->first(fn ($row) => ($row['data'][1] ?? '') === 'TOTAL');
+
+    foreach ($accountRows as $row) {
+        $name = $row['data'][1];
+        expect($uiByName->has($name))->toBeTrue("UI TB missing account {$name}");
+
+        $ui = $uiByName[$name];
+        expect((float) $row['data'][6])->toEqual(CurrencyConverter::convertToFloat($ui->balance->debitBalance ?? '0'))
+            ->and((float) $row['data'][7])->toEqual(CurrencyConverter::convertToFloat($ui->balance->creditBalance ?? '0'));
+    }
+
+    $sumEndDebit = $accountRows->sum(fn ($row) => (float) $row['data'][6]);
+    $sumEndCredit = $accountRows->sum(fn ($row) => (float) $row['data'][7]);
+
+    expect((float) $totalRow['data'][6])->toEqual($sumEndDebit)
+        ->and((float) $totalRow['data'][7])->toEqual($sumEndCredit);
 });

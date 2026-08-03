@@ -6,16 +6,16 @@ use App\Contracts\EnhancedReport;
 use App\Contracts\ExportableReport;
 use App\DTO\ReportDTO;
 use App\Enums\Accounting\AccountType;
-use App\Enums\Accounting\InvoiceStatus;
 use App\Filament\Forms\Components\DateRangeSelect;
 use App\Helpers\AuthHelper;
 use App\Models\Accounting\Account;
-use App\Models\Accounting\Invoice;
 use App\Models\Company;
+use App\Services\AccountService;
 use App\Services\ExportService;
 use App\Services\ReportService;
 use App\Support\Column;
 use App\Transformers\TrialBalanceReportTransformer;
+use App\Utilities\Currency\CurrencyConverter;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -24,7 +24,6 @@ use Filament\Forms;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\MaxWidth;
-use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -36,10 +35,13 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
 
     protected ExportService $exportService;
 
-    public function boot(ReportService $reportService, ExportService $exportService): void
+    protected AccountService $accountService;
+
+    public function boot(ReportService $reportService, ExportService $exportService, AccountService $accountService): void
     {
         $this->reportService = $reportService;
         $this->exportService = $exportService;
+        $this->accountService = $accountService;
     }
 
     protected function initializeDefaultFilters(): void
@@ -181,14 +183,15 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
     public function __buildReportAdvance(): array
     {
         $company = Company::find($this->getFilterState('company_id') ?? AuthHelper::currentCompany());
+        $companyId = (int) $company->id;
 
-        // Trial Balance uses as-of date; Advance template shows activity from earliest txn through as-of.
+        // Same datetime bounds as ReportService::buildTrialBalanceReport / Filament UI
+        // (date-only as-of → endOfDay so cutover OB at 23:59:59 is included).
         $end = Carbon::parse($this->getFilterState('asOfDate'))->endOfDay();
-        $start = Carbon::parse($this->reportService->getEarliestTransactionDate((int) $company->id) ?? $end->toDateString())->startOfDay();
+        $start = Carbon::parse(
+            $this->reportService->getEarliestTransactionDate($companyId) ?? $end->toDateTimeString()
+        );
         $now = Carbon::now()->format('Y-m-d_H-i-s');
-
-        $startFormatted = $start->format('d M Y');
-        $endFormatted = $end->format('d M Y');
 
         $header = [
             'Account No',
@@ -201,97 +204,26 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
             'End Bal Credit',
         ];
 
-        // Ambil semua akun aktif (exclude parent/header + clearing OBE/CYE)
-        $excludedIds = Account::trialBalanceExcludedAccountIdsForCompany((int) $company->id)->all();
-        $accounts = Account::where('archived', false)
-            ->where('company_id', $company->id)
-            ->when($excludedIds !== [], fn ($q) => $q->whereNotIn('id', $excludedIds))
-            ->get(['id', 'code', 'name', 'type']);
+        $excludedIds = Account::trialBalanceExcludedAccountIdsForCompany($companyId)->flip();
 
-        // Urutkan berdasarkan AccountType yang diinginkan
-        $typeOrder = array_flip(array_map(fn($type) => $type->value, $this->getOrderedAccountTypes()));
+        $accounts = $this->accountService->getAccountBalances(
+            $start->toDateTimeString(),
+            $end->toDateTimeString(),
+            [],
+            null,
+            $companyId,
+        )
+            ->orderByRaw('LENGTH(code), code')
+            ->get();
+
+        $typeOrder = array_flip(array_map(fn ($type) => $type->value, $this->getOrderedAccountTypes()));
         $accounts = $accounts->sortBy(function ($account) use ($typeOrder) {
             $typeValue = $account->type?->value ?? '';
-            return $typeOrder[$typeValue] ?? 999; // Type yang tidak ada di urutan akan di akhir
+
+            return $typeOrder[$typeValue] ?? 999;
         })->values();
 
-        $accountIds = $accounts->pluck('id')->toArray();
-        $scale = 100; // ubah ke 1 jika amount sudah dalam rupiah
-        $cancelled = InvoiceStatus::Cancelled->value;
-
-        // Opening balance: semua transaksi sebelum tanggal start
-        $opening = DB::table('journal_entries')
-            ->join('transactions', 'journal_entries.transaction_id', '=', 'transactions.id')
-            ->leftJoin('invoices', function ($join) {
-                $join->on('invoices.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Invoice::class);
-            })
-            ->select(
-                'journal_entries.account_id',
-                DB::raw("SUM(CASE WHEN journal_entries.type = 'debit' THEN journal_entries.amount ELSE 0 END) as opening_debit"),
-                DB::raw("SUM(CASE WHEN journal_entries.type = 'credit' THEN journal_entries.amount ELSE 0 END) as opening_credit")
-            )
-            ->where('journal_entries.company_id', $company->id)
-            ->whereIn('journal_entries.account_id', $accountIds)
-            ->where('transactions.posted_at', '<', $start->toDateString())
-            ->where(function ($q) use ($cancelled) {
-                $q->where('transactions.transactionable_type', '!=', Invoice::class)
-                    ->orWhereNull('invoices.id')
-                    ->orWhere('invoices.status', '!=', $cancelled);
-            })
-            ->groupBy('journal_entries.account_id')
-            ->pluck('opening_debit', 'journal_entries.account_id')
-            ->toArray();
-
-        $openingCredit = DB::table('journal_entries')
-            ->join('transactions', 'journal_entries.transaction_id', '=', 'transactions.id')
-            ->leftJoin('invoices', function ($join) {
-                $join->on('invoices.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Invoice::class);
-            })
-            ->select(
-                'journal_entries.account_id',
-                DB::raw("SUM(CASE WHEN journal_entries.type = 'credit' THEN journal_entries.amount ELSE 0 END) as opening_credit")
-            )
-            ->where('journal_entries.company_id', $company->id)
-            ->whereIn('journal_entries.account_id', $accountIds)
-            ->where('transactions.posted_at', '<', $start->toDateString())
-            ->where(function ($q) use ($cancelled) {
-                $q->where('transactions.transactionable_type', '!=', Invoice::class)
-                    ->orWhereNull('invoices.id')
-                    ->orWhere('invoices.status', '!=', $cancelled);
-            })
-            ->groupBy('journal_entries.account_id')
-            ->pluck('opening_credit', 'journal_entries.account_id')
-            ->toArray();
-
-        // Mutasi selama periode (Change)
-        $period = DB::table('journal_entries')
-            ->join('transactions', 'journal_entries.transaction_id', '=', 'transactions.id')
-            ->leftJoin('invoices', function ($join) {
-                $join->on('invoices.id', '=', 'transactions.transactionable_id')
-                    ->where('transactions.transactionable_type', '=', Invoice::class);
-            })
-            ->select(
-                'journal_entries.account_id',
-                DB::raw("SUM(CASE WHEN journal_entries.type = 'debit' THEN journal_entries.amount ELSE 0 END) as period_debit"),
-                DB::raw("SUM(CASE WHEN journal_entries.type = 'credit' THEN journal_entries.amount ELSE 0 END) as period_credit")
-            )
-            ->where('journal_entries.company_id', $company->id)
-            ->whereIn('journal_entries.account_id', $accountIds)
-            ->whereBetween('transactions.posted_at', [$start->toDateString(), $end->toDateString()])
-            ->where(function ($q) use ($cancelled) {
-                $q->where('transactions.transactionable_type', '!=', Invoice::class)
-                    ->orWhereNull('invoices.id')
-                    ->orWhere('invoices.status', '!=', $cancelled);
-            })
-            ->groupBy('journal_entries.account_id')
-            ->get()
-            ->keyBy('account_id');
-
         $rows = collect();
-
-        // Total keseluruhan
         $totals = [
             'op_debit' => 0,
             'op_credit' => 0,
@@ -302,27 +234,34 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         ];
 
         foreach ($accounts as $account) {
-            $aid = $account->id;
-
-            $opDebit = ($opening[$aid] ?? 0);
-            $opCredit = ($openingCredit[$aid] ?? 0);
-
-            $chgDebit = $period[$aid]->period_debit ?? 0;
-            $chgCredit = $period[$aid]->period_credit ?? 0;
-
-            // Hitung ending balance
-            $endDebit = 0;
-            $endCredit = 0;
-            $balance = ($opDebit - $opCredit) + ($chgDebit - $chgCredit);
-
-            if ($balance > 0) {
-                $endDebit = $balance;
-            } elseif ($balance < 0) {
-                $endCredit = abs($balance);
+            if ($excludedIds->has($account->id)) {
+                continue;
             }
 
-            // Skip akun tanpa aktivitas
-            if ($opDebit == 0 && $opCredit == 0 && $chgDebit == 0 && $chgCredit == 0 && $endDebit == 0 && $endCredit == 0) {
+            $accountBalances = $this->reportService->calculateAccountBalances($account);
+            $endingBalance = (int) ($accountBalances['ending_balance'] ?? $accountBalances['net_movement'] ?? 0);
+            $startingBalance = (int) ($accountBalances['starting_balance'] ?? 0);
+            $chgDebit = (int) ($account->total_debit ?? 0);
+            $chgCredit = (int) ($account->total_credit ?? 0);
+
+            $opSides = $this->reportService->calculateTrialBalancesForAccount($account, $startingBalance);
+            $endSides = $this->reportService->calculateTrialBalancesForAccount($account, $endingBalance);
+
+            $opDebit = (int) ($opSides['debit_balance'] ?? 0);
+            $opCredit = (int) ($opSides['credit_balance'] ?? 0);
+            $endDebit = (int) ($endSides['debit_balance'] ?? 0);
+            $endCredit = (int) ($endSides['credit_balance'] ?? 0);
+
+            if (
+                $opDebit === 0 && $opCredit === 0
+                && $chgDebit === 0 && $chgCredit === 0
+                && $endDebit === 0 && $endCredit === 0
+            ) {
+                continue;
+            }
+
+            // Skip zero ending like the UI trial balance (still show activity-only rows only if ending ≠ 0).
+            if ($endingBalance === 0) {
                 continue;
             }
 
@@ -339,15 +278,14 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
                 ],
             ]);
 
-            $totals['op_debit'] += $opDebit / $scale;
-            $totals['op_credit'] += $opCredit / $scale;
-            $totals['chg_debit'] += $chgDebit / $scale;
-            $totals['chg_credit'] += $chgCredit / $scale;
-            $totals['end_debit'] += $endDebit / $scale;
-            $totals['end_credit'] += $endCredit / $scale;
+            $totals['op_debit'] += $opDebit;
+            $totals['op_credit'] += $opCredit;
+            $totals['chg_debit'] += $chgDebit;
+            $totals['chg_credit'] += $chgCredit;
+            $totals['end_debit'] += $endDebit;
+            $totals['end_credit'] += $endCredit;
         }
 
-        // Tambahkan total di akhir
         $rows->push([
             'data' => [
                 '',
@@ -365,12 +303,12 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         ]);
 
         return [
-            'filename'      => "{$company->name} Trial Balance Advance {$now}.pdf",
-            'company_name'  => $company->name,
-            'report_title'  => "Trial Balance (Advance)",
-            'report_period' => "From {$startFormatted} to {$endFormatted}",
-            'columns'       => $header,
-            'rows'          => $rows->toArray(),
+            'filename' => "{$company->name} Trial Balance Advance {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'Trial Balance (Advance)',
+            'report_period' => 'From ' . $start->format('d M Y') . ' to ' . $end->format('d M Y'),
+            'columns' => $header,
+            'rows' => $rows->toArray(),
         ];
     }
 
@@ -385,22 +323,30 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
 
         $asOfFormatted = $asOf->format('d M Y');
 
-        $toNumber = fn($v) => is_null($v)
-            ? 0
-            : (float) str_replace(',', '.', preg_replace('/[^\d.]/', '', $v));
+        // Transformer balances are already major-unit money strings (formatCentsToMoney) — do not /100 again.
+        $toMajor = static function ($v): float {
+            if ($v === null || $v === '') {
+                return 0.0;
+            }
+            if (is_int($v) || is_float($v)) {
+                return (float) $v;
+            }
+
+            return CurrencyConverter::convertToFloat((string) $v);
+        };
 
         $data = [
-            'filename'      => "{$company->name} Trial Balance Classic {$now}.pdf",
-            'company_name'  => $company->name,
-            'report_title'  => "Trial Balance Classic",
+            'filename' => "{$company->name} Trial Balance Classic {$now}.pdf",
+            'company_name' => $company->name,
+            'report_title' => 'Trial Balance Classic',
             'report_period' => "As of {$asOfFormatted}",
-            'columns'       => [
-                "Account No",
-                "Account Name",
-                "Debit",
-                "Credit",
+            'columns' => [
+                'Account No',
+                'Account Name',
+                'Debit',
+                'Credit',
             ],
-            'rows'          => [],
+            'rows' => [],
         ];
 
         $rows = collect();
@@ -415,12 +361,12 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         ];
 
         $categories = $report->getCategories();
-        
+
         // Sort categories berdasarkan urutan
         usort($categories, function ($a, $b) use ($categoryOrder) {
             $aName = strtoupper($a->header['account_name'] ?? '');
             $bName = strtoupper($b->header['account_name'] ?? '');
-            
+
             // Normalize category names
             $aKey = match (true) {
                 str_contains($aName, 'ASSET') => 'Assets',
@@ -430,7 +376,7 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
                 str_contains($aName, 'EXPENSE') => 'Expenses',
                 default => $aName,
             };
-            
+
             $bKey = match (true) {
                 str_contains($bName, 'ASSET') => 'Assets',
                 str_contains($bName, 'LIABILIT') => 'Liabilities',
@@ -439,25 +385,25 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
                 str_contains($bName, 'EXPENSE') => 'Expenses',
                 default => $bName,
             };
-            
+
             $aOrder = $categoryOrder[$aKey] ?? 999;
             $bOrder = $categoryOrder[$bKey] ?? 999;
-            
+
             if ($aOrder !== $bOrder) {
                 return $aOrder <=> $bOrder;
             }
-            
+
             return $aName <=> $bName;
         });
 
         // Urutkan accounts dalam setiap category berdasarkan type
-        $typeOrder = array_flip(array_map(fn($type) => $type->value, $this->getOrderedAccountTypes()));
-        
+        $typeOrder = array_flip(array_map(fn ($type) => $type->value, $this->getOrderedAccountTypes()));
+
         // Get account types untuk sorting
         $accountIds = [];
         foreach ($categories as $cat) {
             foreach ($cat->data as $item) {
-                $accountId = is_array($item['account_name']) 
+                $accountId = is_array($item['account_name'])
                     ? ($item['account_name']['id'] ?? null)
                     : null;
                 if ($accountId) {
@@ -465,9 +411,9 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
                 }
             }
         }
-        
+
         $accountTypes = [];
-        if (!empty($accountIds)) {
+        if (! empty($accountIds)) {
             $accounts = Account::whereIn('id', $accountIds)->get(['id', 'type']);
             foreach ($accounts as $acc) {
                 $accountTypes[$acc->id] = $acc->type?->value ?? '';
@@ -490,10 +436,11 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
 
             // Sort accounts dalam category berdasarkan type
             $sortedData = collect($cat->data)->sortBy(function ($item) use ($accountTypes, $typeOrder) {
-                $accountId = is_array($item['account_name']) 
+                $accountId = is_array($item['account_name'])
                     ? ($item['account_name']['id'] ?? null)
                     : null;
                 $typeValue = $accountId ? ($accountTypes[$accountId] ?? '') : '';
+
                 return $typeOrder[$typeValue] ?? 999;
             })->values();
 
@@ -503,15 +450,15 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
                     ? ($item['account_name']['name'] ?? '')
                     : $item['account_name'];
 
-                $debit  = $toNumber($item['debit_balance'] ?? 0) / 100;
-                $credit = $toNumber($item['credit_balance'] ?? 0) / 100;
+                $debit = $toMajor($item['debit_balance'] ?? 0);
+                $credit = $toMajor($item['credit_balance'] ?? 0);
 
                 $rows->push([
                     'data' => [
                         '__str' . $accountCode,
                         $accountName,
                         $debit,
-                        $credit
+                        $credit,
                     ],
                     'style' => ['padding-left' => '15px'],
                 ]);
@@ -519,17 +466,17 @@ class TrialBalance extends BaseReportPage implements EnhancedReport
         }
 
         $totals = $report->getOverallTotals();
-        if (!empty($totals)) {
+        if (! empty($totals)) {
             $rows->push([
                 'data' => [
                     '',
                     '',
-                    $toNumber($totals['debit_balance']) / 100,
-                    $toNumber($totals['credit_balance']) / 100,
+                    $toMajor($totals['debit_balance'] ?? 0),
+                    $toMajor($totals['credit_balance'] ?? 0),
                 ],
                 'style' => [
                     'font-weight' => 'bold',
-                    'color'       => 'rgb(6, 6, 174)',
+                    'color' => 'rgb(6, 6, 174)',
                 ],
             ]);
         }

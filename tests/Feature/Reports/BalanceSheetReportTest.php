@@ -15,6 +15,8 @@ use App\Utilities\Currency\CurrencyConverter;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
+use function Pest\Livewire\livewire;
+
 it('calculates contra equity net movement using account type normal balance', function () {
     $account = Account::factory()->make([
         'category' => AccountCategory::Equity,
@@ -887,4 +889,118 @@ it('computes total assets as current plus non-current minus contra assets', func
     expect(abs($totalAssets - ($current - $contra + $nonCurrent)))->toBeLessThan(0.02)
         ->and($contra)->toBeGreaterThanOrEqual(($amount / 100) - 0.02)
         ->and(abs($totalAssets - ($assetsBefore - ($amount / 100))))->toBeLessThan(0.02);
+});
+
+it('keeps balance sheet details export leaf endings in parity with summary for cutover OB at 23:59:59', function () {
+    $company = $this->testCompany;
+    $cutoverDay = Carbon::parse('2025-12-31');
+    $obPostedAt = $cutoverDay->copy()->endOfDay()->toDateTimeString();
+    $asOf = $cutoverDay->toDateString();
+    $amount = 4_200_000;
+
+    $bankAccount = $company->default->bankAccount;
+    $assetAccount = $bankAccount->account;
+    $equity = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::Equity)
+        ->whereDoesntHave('children')
+        ->whereNotIn('id', Account::balanceSheetHiddenLineAccountIdsForCompany($company->id))
+        ->firstOrFail();
+
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount)
+        ->create([
+            'posted_at' => $obPostedAt,
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $assetAccount->id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount,
+    ]));
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $equity->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+
+    // Same as-of datetime the Filament page uses (endOfDay).
+    $asOfDateTime = $cutoverDay->copy()->endOfDay()->toDateTimeString();
+    $summary = Reporting::buildBalanceSheetReport($asOfDateTime, [], null, $company->id);
+    $summaryByCode = collect($summary->categories)
+        ->flatMap(fn ($cat) => collect($cat->types ?? [])->flatMap(fn ($type) => $type->accounts ?? []))
+        ->filter(fn ($dto) => $dto->accountId !== null)
+        ->keyBy(fn ($dto) => $dto->accountCode);
+
+    $component = livewire(\App\Filament\Company\Pages\Reports\BalanceSheet::class)
+        ->set('filters.asOfDate', $asOf)
+        ->set('deferredFilters.asOfDate', $asOf)
+        ->call('applyFilters');
+
+    $details = $component->instance()->buildReportEnhanced();
+    $excluded = Account::balanceSheetExcludedAccountIdsForCompany($company->id)->flip();
+    $hidden = Account::balanceSheetHiddenLineAccountIdsForCompany($company->id)->flip();
+
+    $leafRows = collect($details['rows'])->filter(function ($row) {
+        $label = $row['data'][0] ?? '';
+        $balance = $row['data'][1] ?? null;
+
+        if ($balance === null || $balance === '') {
+            return false;
+        }
+        // Skip category/type headers and Total* rows
+        if (! isset($row['data'][1]) || is_string($row['data'][1]) === false && ! is_numeric($row['data'][1])) {
+            return false;
+        }
+        if (str_starts_with((string) $label, 'Total ')) {
+            return false;
+        }
+        // Pure uppercase category headers have no numeric balance in col 1 as second element only sometimes
+        if (count($row['data']) < 2) {
+            return false;
+        }
+
+        return is_numeric($row['data'][1]);
+    });
+
+    $compared = 0;
+    foreach ($leafRows as $row) {
+        $label = (string) $row['data'][0];
+        // Details labels are "{code} {name}"
+        $code = explode(' ', $label, 2)[0] ?? '';
+        if ($code === '' || ! $summaryByCode->has($code)) {
+            continue;
+        }
+
+        $accountId = $summaryByCode[$code]->accountId;
+        if ($excluded->has($accountId) || $hidden->has($accountId)) {
+            continue;
+        }
+
+        $summaryEnding = CurrencyConverter::convertToFloat(
+            $summaryByCode[$code]->balance->endingBalance ?? '0'
+        );
+        $detailsEnding = (float) $row['data'][1];
+
+        expect(abs($detailsEnding - $summaryEnding))->toBeLessThan(0.02);
+        $compared++;
+    }
+
+    expect($compared)->toBeGreaterThan(0)
+        ->and($summaryByCode->has($assetAccount->code))->toBeTrue();
+
+    $assetSummary = CurrencyConverter::convertToFloat(
+        $summaryByCode[$assetAccount->code]->balance->endingBalance ?? '0'
+    );
+    expect($assetSummary)->toBeGreaterThanOrEqual(($amount / 100) - 0.02);
 });
