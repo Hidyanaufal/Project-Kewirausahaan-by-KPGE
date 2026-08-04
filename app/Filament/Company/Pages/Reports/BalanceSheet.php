@@ -197,14 +197,24 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             ->get()
             ->groupBy(['category', 'type']);
 
-        // Recursive walker untuk hierarki akun
-        $appendAccountRows = function ($accounts, $level = 1) use (&$appendAccountRows, &$rows, $toNumber, $balanceMap, $hiddenClearingIds) {
+        // Children with a different AccountType (e.g. ContraAsset under CurrentAsset parent)
+        // must not appear/sum under the parent's type — matches Summary UI grouping by type.
+        $sameTypeChildren = static function ($account) {
+            return $account->children->filter(
+                fn ($child) => $child->type === $account->type
+            );
+        };
+
+        // Recursive walker untuk hierarki akun (hanya anak bertipe sama)
+        $appendAccountRows = function ($accounts, $level = 1) use (&$appendAccountRows, &$rows, $toNumber, $balanceMap, $hiddenClearingIds, $sameTypeChildren) {
             $padding = $level * 15;
 
             foreach ($accounts as $account) {
+                $children = $sameTypeChildren($account);
+
                 if ($hiddenClearingIds->has($account->id)) {
-                    if ($account->children->isNotEmpty()) {
-                        $appendAccountRows($account->children, $level + 1);
+                    if ($children->isNotEmpty()) {
+                        $appendAccountRows($children, $level + 1);
                     }
                     continue;
                 }
@@ -213,8 +223,8 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 // Skip account jika balance = 0
                 if ($balance == 0) {
                     // Tetap process children jika ada (mungkin ada child dengan balance != 0)
-                    if ($account->children->isNotEmpty()) {
-                        $appendAccountRows($account->children, $level + 1);
+                    if ($children->isNotEmpty()) {
+                        $appendAccountRows($children, $level + 1);
                     }
                     continue;
                 }
@@ -229,16 +239,16 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                     ],
                 ]);
 
-                if ($account->children->isNotEmpty()) {
-                    $appendAccountRows($account->children, $level + 1);
+                if ($children->isNotEmpty()) {
+                    $appendAccountRows($children, $level + 1);
                 }
             }
         };
 
-        $subtreeBalance = function ($account) use (&$subtreeBalance, $balanceMap, $excludedFromTotals): float {
+        $subtreeBalance = function ($account) use (&$subtreeBalance, $balanceMap, $excludedFromTotals, $sameTypeChildren): float {
             $own = $excludedFromTotals->has($account->id) ? 0 : ($balanceMap[$account->id] ?? 0);
 
-            return $own + $account->children->sum(fn ($child) => $subtreeBalance($child));
+            return $own + $sameTypeChildren($account)->sum(fn ($child) => $subtreeBalance($child));
         };
 
         // Loop kategori dengan urutan eksplisit: ASSET → LIABILITY → EQUITY
@@ -279,8 +289,17 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                     ],
                 ]);
 
-                $parentAccounts = $accountsByType->whereNull('parent_id');
-                foreach ($parentAccounts as $parent) {
+                // Roots for this type: parent_id null, OR parent belongs to another type
+                // (e.g. Penyisihan Piutang ContraAsset child of Piutang CurrentAsset).
+                $rootAccounts = $accountsByType->filter(function ($account) use ($accountsByType) {
+                    if (is_null($account->parent_id)) {
+                        return true;
+                    }
+
+                    return ! $accountsByType->contains('id', $account->parent_id);
+                });
+
+                foreach ($rootAccounts as $parent) {
                     $appendAccountRows(collect([$parent]), 2);
                     $groupTotal = $subtreeBalance($parent);
                     if ($groupTotal != 0) {
@@ -299,7 +318,7 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 }
 
                 // subtotal per tipe (hanya tampilkan jika bukan 0)
-                $typeTotal = $parentAccounts->sum(fn ($a) => $subtreeBalance($a));
+                $typeTotal = $rootAccounts->sum(fn ($a) => $subtreeBalance($a));
                 if ($typeTotal != 0) {
                     $rows->push([
                         'data' => [
@@ -320,9 +339,15 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
             // (contra types contribute negatively; type subtotals remain positive).
             $categoryTotal = collect($types)
                 ->map(function ($accountsByType, $type) use ($subtreeBalance) {
-                    $typeTotal = collect($accountsByType)
-                        ->filter(fn ($a) => is_null($a->parent_id))
-                        ->sum(fn ($a) => $subtreeBalance($a));
+                    $rootAccounts = collect($accountsByType)->filter(function ($a) use ($accountsByType) {
+                        if (is_null($a->parent_id)) {
+                            return true;
+                        }
+
+                        return ! collect($accountsByType)->contains('id', $a->parent_id);
+                    });
+
+                    $typeTotal = $rootAccounts->sum(fn ($a) => $subtreeBalance($a));
 
                     $accountType = $type instanceof AccountType
                         ? $type

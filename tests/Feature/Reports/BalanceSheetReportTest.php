@@ -15,6 +15,8 @@ use App\Utilities\Currency\CurrencyConverter;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
+use function Pest\Livewire\livewire;
+
 it('calculates contra equity net movement using account type normal balance', function () {
     $account = Account::factory()->make([
         'category' => AccountCategory::Equity,
@@ -887,4 +889,277 @@ it('computes total assets as current plus non-current minus contra assets', func
     expect(abs($totalAssets - ($current - $contra + $nonCurrent)))->toBeLessThan(0.02)
         ->and($contra)->toBeGreaterThanOrEqual(($amount / 100) - 0.02)
         ->and(abs($totalAssets - ($assetsBefore - ($amount / 100))))->toBeLessThan(0.02);
+});
+
+it('keeps balance sheet details export leaf endings in parity with summary for cutover OB at 23:59:59', function () {
+    $company = $this->testCompany;
+    $cutoverDay = Carbon::parse('2025-12-31');
+    $obPostedAt = $cutoverDay->copy()->endOfDay()->toDateTimeString();
+    $asOf = $cutoverDay->toDateString();
+    $amount = 4_200_000;
+
+    $bankAccount = $company->default->bankAccount;
+    $assetAccount = $bankAccount->account;
+    $equity = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::Equity)
+        ->whereDoesntHave('children')
+        ->whereNotIn('id', Account::balanceSheetHiddenLineAccountIdsForCompany($company->id))
+        ->firstOrFail();
+
+    $transaction = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($amount)
+        ->create([
+            'posted_at' => $obPostedAt,
+        ]);
+
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $assetAccount->id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $amount,
+    ]));
+    $transaction->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $equity->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $amount,
+    ]));
+
+    // Same as-of datetime the Filament page uses (endOfDay).
+    $asOfDateTime = $cutoverDay->copy()->endOfDay()->toDateTimeString();
+    $summary = Reporting::buildBalanceSheetReport($asOfDateTime, [], null, $company->id);
+    $summaryByCode = collect($summary->categories)
+        ->flatMap(fn ($cat) => collect($cat->types ?? [])->flatMap(fn ($type) => $type->accounts ?? []))
+        ->filter(fn ($dto) => $dto->accountId !== null)
+        ->keyBy(fn ($dto) => $dto->accountCode);
+
+    $component = livewire(\App\Filament\Company\Pages\Reports\BalanceSheet::class)
+        ->set('filters.asOfDate', $asOf)
+        ->set('deferredFilters.asOfDate', $asOf)
+        ->call('applyFilters');
+
+    $details = $component->instance()->buildReportEnhanced();
+    $excluded = Account::balanceSheetExcludedAccountIdsForCompany($company->id)->flip();
+    $hidden = Account::balanceSheetHiddenLineAccountIdsForCompany($company->id)->flip();
+
+    $leafRows = collect($details['rows'])->filter(function ($row) {
+        $label = $row['data'][0] ?? '';
+        $balance = $row['data'][1] ?? null;
+
+        if ($balance === null || $balance === '') {
+            return false;
+        }
+        // Skip category/type headers and Total* rows
+        if (! isset($row['data'][1]) || is_string($row['data'][1]) === false && ! is_numeric($row['data'][1])) {
+            return false;
+        }
+        if (str_starts_with((string) $label, 'Total ')) {
+            return false;
+        }
+        // Pure uppercase category headers have no numeric balance in col 1 as second element only sometimes
+        if (count($row['data']) < 2) {
+            return false;
+        }
+
+        return is_numeric($row['data'][1]);
+    });
+
+    $compared = 0;
+    foreach ($leafRows as $row) {
+        $label = (string) $row['data'][0];
+        // Details labels are "{code} {name}"
+        $code = explode(' ', $label, 2)[0] ?? '';
+        if ($code === '' || ! $summaryByCode->has($code)) {
+            continue;
+        }
+
+        $accountId = $summaryByCode[$code]->accountId;
+        if ($excluded->has($accountId) || $hidden->has($accountId)) {
+            continue;
+        }
+
+        $summaryEnding = CurrencyConverter::convertToFloat(
+            $summaryByCode[$code]->balance->endingBalance ?? '0'
+        );
+        $detailsEnding = (float) $row['data'][1];
+
+        expect(abs($detailsEnding - $summaryEnding))->toBeLessThan(0.02);
+        $compared++;
+    }
+
+    expect($compared)->toBeGreaterThan(0)
+        ->and($summaryByCode->has($assetAccount->code))->toBeTrue();
+
+    $assetSummary = CurrencyConverter::convertToFloat(
+        $summaryByCode[$assetAccount->code]->balance->endingBalance ?? '0'
+    );
+    expect($assetSummary)->toBeGreaterThanOrEqual(($amount / 100) - 0.02);
+});
+
+it('places contra-asset children under Contra Assets in details export, not under current-asset parent', function () {
+    $company = $this->testCompany;
+    $asOf = Carbon::now()->toDateString();
+    $receivableAmount = 500_000; // cents
+    $allowanceAmount = 75_000; // cents
+
+    $currentSubtype = \App\Models\Accounting\AccountSubtype::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::CurrentAsset)
+        ->firstOrFail();
+
+    $contraSubtype = \App\Models\Accounting\AccountSubtype::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::ContraAsset)
+        ->firstOrFail();
+
+    $piutangParent = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $currentSubtype->id,
+        'category' => AccountCategory::Asset,
+        'type' => AccountType::CurrentAsset,
+        'code' => '1190.bs',
+        'name' => 'BS Test Piutang Parent',
+        'parent_id' => null,
+    ]);
+
+    $receivable = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $currentSubtype->id,
+        'category' => AccountCategory::Asset,
+        'type' => AccountType::CurrentAsset,
+        'code' => '1190.01.bs',
+        'name' => 'BS Test Piutang Child',
+        'parent_id' => $piutangParent->id,
+    ]);
+
+    $allowance = Account::factory()->create([
+        'company_id' => $company->id,
+        'subtype_id' => $contraSubtype->id,
+        'category' => AccountCategory::Asset,
+        'type' => AccountType::ContraAsset,
+        'code' => '1190.10.bs',
+        'name' => 'BS Test Penyisihan Provisi Kerugian Piutang',
+        'parent_id' => $piutangParent->id,
+    ]);
+
+    $equity = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::Equity)
+        ->whereDoesntHave('children')
+        ->whereNotIn('id', Account::balanceSheetHiddenLineAccountIdsForCompany($company->id))
+        ->firstOrFail();
+
+    $bankAccount = $company->default->bankAccount;
+    $entryDefaults = [
+        'company_id' => $company->id,
+        'created_by' => $this->testUser->id,
+        'updated_by' => $this->testUser->id,
+    ];
+
+    $txReceivable = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($receivableAmount)
+        ->create(['posted_at' => now()->toDateTimeString()]);
+
+    $txReceivable->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $receivable->id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $receivableAmount,
+    ]));
+    $txReceivable->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $equity->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $receivableAmount,
+    ]));
+
+    $txAllowance = Transaction::factory()
+        ->state([
+            'company_id' => $company->id,
+            'bank_account_id' => $bankAccount->id,
+        ])
+        ->asJournal($allowanceAmount)
+        ->create(['posted_at' => now()->toDateTimeString()]);
+
+    $expense = Account::query()
+        ->where('company_id', $company->id)
+        ->where('type', AccountType::OperatingExpense)
+        ->firstOrFail();
+
+    $txAllowance->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $expense->id,
+        'type' => JournalEntryType::Debit,
+        'amount' => $allowanceAmount,
+    ]));
+    $txAllowance->journalEntries()->create(array_merge($entryDefaults, [
+        'account_id' => $allowance->id,
+        'type' => JournalEntryType::Credit,
+        'amount' => $allowanceAmount,
+    ]));
+
+    $summary = Reporting::buildBalanceSheetReport(
+        Carbon::parse($asOf)->endOfDay()->toDateTimeString(),
+        [],
+        null,
+        $company->id
+    );
+    $summaryAssets = CurrencyConverter::convertToFloat(
+        $summary->categories['Assets']->summary->endingBalance ?? '0'
+    );
+
+    $component = livewire(\App\Filament\Company\Pages\Reports\BalanceSheet::class)
+        ->set('filters.asOfDate', $asOf)
+        ->set('deferredFilters.asOfDate', $asOf)
+        ->call('applyFilters');
+
+    $details = $component->instance()->buildReportEnhanced();
+    $rows = collect($details['rows']);
+
+    $labels = $rows->map(fn ($row) => (string) ($row['data'][0] ?? ''))->values();
+
+    $allowanceLabel = $allowance->code . ' ' . $allowance->name;
+    $allowanceIndex = $labels->search($allowanceLabel);
+    expect($allowanceIndex)->not->toBeFalse();
+
+    // Allowance must sit under a Contra Asset type header, not under Current Asset.
+    $typeHeaderBefore = $labels
+        ->take($allowanceIndex)
+        ->reverse()
+        ->first(fn ($label) => in_array($label, ['Current asset', 'Non current asset', 'Contra asset'], true));
+
+    expect($typeHeaderBefore)->toBe('Contra asset');
+
+    $totalCurrent = $rows->first(
+        fn ($row) => ($row['data'][0] ?? '') === 'Total Current asset'
+    );
+    $totalContra = $rows->first(
+        fn ($row) => ($row['data'][0] ?? '') === 'Total Contra asset'
+    );
+    $totalAssets = $rows->first(
+        fn ($row) => ($row['data'][0] ?? '') === 'Total ASSET'
+    );
+
+    expect($totalCurrent)->not->toBeNull()
+        ->and($totalContra)->not->toBeNull()
+        ->and($totalAssets)->not->toBeNull();
+
+    $currentTotal = (float) $totalCurrent['data'][1];
+    $contraTotal = (float) $totalContra['data'][1];
+    $assetsTotal = (float) $totalAssets['data'][1];
+
+    // Parent group must not inflate Current Assets with the allowance balance.
+    expect($currentTotal)->toBeLessThan(($receivableAmount / 100) + ($allowanceAmount / 100) - 0.02)
+        ->and($contraTotal)->toBeGreaterThanOrEqual(($allowanceAmount / 100) - 0.02)
+        ->and(abs($assetsTotal - $summaryAssets))->toBeLessThan(0.02);
 });
