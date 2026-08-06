@@ -261,6 +261,9 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
         // Mapping urutan AccountType untuk sorting
         $typeOrder = array_flip(array_map(fn($type) => $type->value, $this->getOrderedAccountTypes()));
 
+        $totalLiabilities = 0.0;
+        $totalEquity = 0.0;
+
         foreach ($orderedCategories as $category) {
             $categoryValue = $category->value;
             
@@ -375,6 +378,12 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 $categoryTotal += $netIncome;
             }
 
+            if ($category === AccountCategory::Liability) {
+                $totalLiabilities = $categoryTotal;
+            } elseif ($category === AccountCategory::Equity) {
+                $totalEquity = $categoryTotal;
+            }
+
             if ($categoryTotal != 0) {
                 $rows->push([
                     'data' => [
@@ -387,6 +396,18 @@ class BalanceSheet extends BaseReportPage implements EnhancedReport
                 ]);
             }
         }
+
+        // Persamaan neraca: Total Liabilities + Total Equity (harus = Total Assets)
+        $liabilitiesAndEquity = $totalLiabilities + $totalEquity;
+        $rows->push([
+            'data' => [
+                'Total Liabilities + Equity',
+                $toNumber($liabilitiesAndEquity / 100),
+            ],
+            'style' => [
+                'font-weight' => 'bold',
+            ],
+        ]);
 
         $data['rows'] = $rows->toArray();
         return $data;

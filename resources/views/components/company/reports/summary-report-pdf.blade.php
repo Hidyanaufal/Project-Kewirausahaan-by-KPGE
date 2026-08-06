@@ -74,7 +74,12 @@
         @endforeach
         <tfoot>
         <tr class="table-footer-row">
-            @foreach ($report->getOverallTotals() as $index => $total)
+            @php
+                $overallTotals = method_exists($report, 'getSummaryOverallTotals')
+                    ? $report->getSummaryOverallTotals()
+                    : $report->getOverallTotals();
+            @endphp
+            @foreach ($overallTotals as $index => $total)
                 <td class="{{ $report->getAlignmentClass($index) }}">
                     {{ $total }}
                 </td>
