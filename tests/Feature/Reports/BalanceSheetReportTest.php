@@ -1163,3 +1163,38 @@ it('places contra-asset children under Contra Assets in details export, not unde
         ->and($contraTotal)->toBeGreaterThanOrEqual(($allowanceAmount / 100) - 0.02)
         ->and(abs($assetsTotal - $summaryAssets))->toBeLessThan(0.02);
 });
+
+it('appends total liabilities plus equity at the bottom of details export', function () {
+    $company = $this->testCompany;
+    $asOf = Carbon::now()->toDateString();
+
+    $component = livewire(\App\Filament\Company\Pages\Reports\BalanceSheet::class)
+        ->set('filters.asOfDate', $asOf)
+        ->set('deferredFilters.asOfDate', $asOf)
+        ->call('applyFilters');
+
+    $details = $component->instance()->buildReportEnhanced();
+    $rows = collect($details['rows']);
+
+    $totalLiability = $rows->first(fn ($row) => ($row['data'][0] ?? '') === 'Total LIABILITY');
+    $totalEquity = $rows->first(fn ($row) => ($row['data'][0] ?? '') === 'Total EQUITY');
+    $combined = $rows->last();
+
+    expect($combined['data'][0] ?? null)->toBe('Total Liabilities + Equity');
+
+    $expected = (float) ($totalLiability['data'][1] ?? 0) + (float) ($totalEquity['data'][1] ?? 0);
+    expect(abs((float) $combined['data'][1] - $expected))->toBeLessThan(0.02);
+
+    $report = Reporting::buildBalanceSheetReport($asOf, [], null, $company->id);
+    $transformer = new BalanceSheetReportTransformer($report);
+    $overall = $transformer->getOverallTotals();
+
+    expect($overall['account_name'] ?? null)->toBe('Total Liabilities + Equity')
+        ->and(abs(
+            CurrencyConverter::convertToFloat($overall['ending_balance'] ?? '0')
+            - (
+                CurrencyConverter::convertToFloat($report->categories['Liabilities']->summary->endingBalance ?? '0')
+                + CurrencyConverter::convertToFloat($report->categories['Equity']->summary->endingBalance ?? '0')
+            )
+        ))->toBeLessThan(0.02);
+});

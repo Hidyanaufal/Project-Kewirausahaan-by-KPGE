@@ -33,4 +33,5 @@
         </tr>
         </tbody>
     @endforeach
+    <x-company.tables.footer :totals="$report->getSummaryOverallTotals()" :alignment-class="[$report, 'getAlignmentClass']"/>
 </table>

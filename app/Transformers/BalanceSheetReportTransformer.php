@@ -11,11 +11,11 @@ use App\Utilities\Currency\CurrencyConverter;
 
 class BalanceSheetReportTransformer extends SummaryReportTransformer
 {
-    protected string $totalAssets;
+    protected string $totalAssets = '';
 
-    protected string $totalLiabilities;
+    protected string $totalLiabilities = '';
 
-    protected string $totalEquity;
+    protected string $totalEquity = '';
 
     public function __construct(ReportDTO $report)
     {
@@ -261,12 +261,65 @@ class BalanceSheetReportTransformer extends SummaryReportTransformer
 
     public function getOverallTotals(): array
     {
-        return [];
+        $combined = $this->formatLiabilitiesPlusEquity();
+
+        $columns = $this->getColumns();
+        if ($columns === []) {
+            return [
+                'account_name' => 'Total Liabilities + Equity',
+                'ending_balance' => $combined,
+            ];
+        }
+
+        $totals = [];
+
+        foreach ($columns as $column) {
+            $totals[$column->getName()] = match ($column->getName()) {
+                'account_name' => 'Total Liabilities + Equity',
+                'ending_balance' => $combined,
+                default => '',
+            };
+        }
+
+        return $totals;
     }
 
     public function getSummaryOverallTotals(): array
     {
-        return [];
+        $combined = $this->formatLiabilitiesPlusEquity();
+
+        $totals = [];
+        $columns = $this->getSummaryColumns();
+
+        if ($columns === []) {
+            return [
+                'account_name' => 'Total Liabilities + Equity',
+                'ending_balance' => $combined,
+            ];
+        }
+
+        foreach ($columns as $column) {
+            $totals[$column->getName()] = match ($column->getName()) {
+                'account_name' => 'Total Liabilities + Equity',
+                'ending_balance' => $combined,
+                default => '',
+            };
+        }
+
+        return $totals;
+    }
+
+    protected function formatLiabilitiesPlusEquity(): string
+    {
+        $currency = CurrencyAccessor::getDefaultCurrency();
+        $liabilitiesCents = filled($this->totalLiabilities)
+            ? CurrencyConverter::convertToCents($this->totalLiabilities, $currency)
+            : 0;
+        $equityCents = filled($this->totalEquity)
+            ? CurrencyConverter::convertToCents($this->totalEquity, $currency)
+            : 0;
+
+        return CurrencyConverter::formatCentsToMoney($liabilitiesCents + $equityCents, $currency);
     }
 
     public function getSummary(): array
