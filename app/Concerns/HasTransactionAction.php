@@ -3,10 +3,13 @@
 namespace App\Concerns;
 
 use App\Enums\Accounting\JournalEntryType;
+use App\Enums\Accounting\PaymentMethod;
 use App\Enums\Accounting\TransactionType;
 use App\Filament\Company\Resources\Addons\MemberResource;
 use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Filament\Forms\Components\CustomTableRepeater;
+use App\Models\Accounting\Account;
+use App\Models\Accounting\Invoice;
 use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Transaction;
 use App\Models\Banking\BankAccount;
@@ -110,9 +113,28 @@ trait HasTransactionAction
                     ->label('Amount')
                     ->money(static fn(Forms\Get $get) => BankAccount::find($get('bank_account_id'))?->account?->currency_code ?? CurrencyAccessor::getDefaultCurrency())
                     ->required(),
+                Forms\Components\TextInput::make('pph23')
+                    ->label('PPh 23')
+                    ->nullable()
+                    ->money(static function (?Transaction $record) {
+                        if ($record?->transactionable instanceof Invoice) {
+                            return $record->transactionable->currency_code;
+                        }
+
+                        return CurrencyAccessor::getDefaultCurrency();
+                    })
+                    ->visible(fn (?Transaction $record): bool => $this->shouldShowPph23Field($record)),
                 Forms\Components\Select::make('account_id')
                     ->label('Category')
-                    ->options(fn(Forms\Get $get, ?Transaction $transaction) => Transaction::getTransactionAccountOptions(type: TransactionType::parse($get('type')), currentAccountId: $transaction?->account_id))
+                    ->options(function (Forms\Get $get, ?Transaction $transaction) {
+                        $type = $get('type') ?? $transaction?->type?->value ?? TransactionType::Deposit->value;
+
+                        return Transaction::getTransactionAccountOptions(
+                            type: TransactionType::parse($type),
+                            currentAccountId: $transaction?->account_id ?? (is_numeric($get('account_id')) ? (int) $get('account_id') : null),
+                        );
+                    })
+                    ->getOptionLabelUsing(fn ($value): ?string => Account::query()->find($value)?->name)
                     ->searchable()
                     ->required(),
                 ProjectResource::options()->required(false),
@@ -124,6 +146,79 @@ trait HasTransactionAction
                     ->columnSpanFull(),
             ])
             ->columns();
+    }
+
+    protected function shouldShowPph23Field(?Transaction $record): bool
+    {
+        return (bool) $record?->is_payment
+            && $record->transactionable_type === Invoice::class;
+    }
+
+    protected function fillPph23IntoRecordData(array $data, Transaction $record): array
+    {
+        if (! $this->shouldShowPph23Field($record)) {
+            return $data;
+        }
+
+        $data['pph23'] = $record->meta['pph23_cents']
+            ?? ($record->transactionable instanceof Invoice ? $record->transactionable->pph23 : null);
+
+        return $data;
+    }
+
+    protected function saveTransactionFromForm(Transaction $record, array $data): Transaction
+    {
+        if ($record->is_payment && $record->transactionable instanceof Invoice) {
+            return $this->saveInvoicePaymentTransaction($record, $data);
+        }
+
+        unset($data['pph23'], $data['id']);
+
+        $record->update($data);
+
+        return $record;
+    }
+
+    protected function saveInvoicePaymentTransaction(Transaction $record, array $data): Transaction
+    {
+        /** @var Invoice $invoice */
+        $invoice = $record->transactionable;
+
+        $pph23Cents = array_key_exists('pph23', $data) && $data['pph23'] !== null && $data['pph23'] !== ''
+            ? (int) $data['pph23']
+            : null;
+
+        $amountInDocumentCurrency = (int) ($data['amount'] ?? $record->amount);
+
+        // Keep document-currency amount when the bank amount was not changed.
+        if (
+            isset($record->meta['amount_in_document_currency_cents'])
+            && (int) ($data['amount'] ?? $record->amount) === (int) $record->amount
+        ) {
+            $amountInDocumentCurrency = (int) $record->meta['amount_in_document_currency_cents'];
+        }
+
+        $invoice->updatePayment($record, [
+            'posted_at' => $data['posted_at'],
+            'bank_account_id' => $data['bank_account_id'],
+            'amount' => $amountInDocumentCurrency,
+            'payment_method' => $data['payment_method'] ?? $record->payment_method ?? PaymentMethod::BankPayment,
+            'transaction_code' => $data['transaction_code'] ?? null,
+            'notes' => $data['notes'] ?? null,
+            'pph23' => $pph23Cents,
+        ]);
+
+        Transaction::withoutEvents(function () use ($record, $data): void {
+            $record->update([
+                'description' => $data['description'] ?? $record->description,
+                'account_id' => $data['account_id'] ?? $record->account_id,
+                'project_id' => $data['project_id'] ?? null,
+                'member_id' => $data['member_id'] ?? null,
+                'type' => $data['type'] ?? $record->type,
+            ]);
+        });
+
+        return $record->refresh();
     }
 
     public function transferForm(Form $form): Form

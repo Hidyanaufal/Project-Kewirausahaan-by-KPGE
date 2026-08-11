@@ -54,6 +54,14 @@ class EditTransactionAction extends EditAction
             };
         });
 
+        $this->mutateRecordDataUsing(function (array $data, Transaction $record): array {
+            return $this->fillPph23IntoRecordData($data, $record);
+        });
+
+        $this->using(function (Transaction $record, array $data): Transaction {
+            return $this->saveTransactionFromForm($record, $data);
+        });
+
         $this->afterFormFilled(function (Transaction $record) {
             if ($this->getTransactionType() === TransactionType::Journal) {
                 $debitAmounts = $record->journalEntries->sumDebits()->getAmount();
