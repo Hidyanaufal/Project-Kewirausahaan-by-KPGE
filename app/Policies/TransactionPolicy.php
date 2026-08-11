@@ -36,7 +36,8 @@ class TransactionPolicy
      */
     public function update(User $user, Transaction $transaction): bool
     {
-        if ($transaction->transactionable_id) {
+        // Approval / document journals stay locked; payment transactions may be edited.
+        if ($transaction->transactionable_id && ! $transaction->is_payment) {
             return false;
         }
 
