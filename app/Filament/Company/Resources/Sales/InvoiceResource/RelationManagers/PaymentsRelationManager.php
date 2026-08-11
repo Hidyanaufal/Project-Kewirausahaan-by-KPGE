@@ -47,7 +47,7 @@ class PaymentsRelationManager extends RelationManager
         /** @var Invoice $ownerRecord */
         $ownerRecord = $this->getOwnerRecord();
 
-        if (! $ownerRecord->isFinalized() || $ownerRecord->status === InvoiceStatus::Cancelled) {
+        if (! $ownerRecord->canManagePayments()) {
             return false;
         }
 
@@ -266,7 +266,7 @@ class PaymentsRelationManager extends RelationManager
                     ->slideOver()
                     ->modalWidth(MaxWidth::TwoExtraLarge)
                     ->visible(function () {
-                        return $this->getOwnerRecord()->canRecordPayment() && $this->getOwnerRecord()->isFinalized();
+                        return $this->getOwnerRecord()->canRecordPayment() && $this->getOwnerRecord()->canManagePayments();
                     })
                     ->mountUsing(function (Form $form) {
                         /** @var Invoice $record */

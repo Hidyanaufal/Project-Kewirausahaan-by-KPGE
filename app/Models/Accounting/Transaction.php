@@ -282,17 +282,40 @@ class Transaction extends Model
             default => null,
         };
 
-        return Account::query()
-            ->doesntHave('adjustment')
-            ->doesntHave('bankAccount')
-            ->when($associatedAccountTypes, fn(Builder $query) => $query->whereIn('type', $associatedAccountTypes))
+        $accounts = Account::query()
+            ->where(function (Builder $query) use ($associatedAccountTypes, $currentAccountId) {
+                $query->where(function (Builder $inner) use ($associatedAccountTypes) {
+                    $inner->doesntHave('adjustment')
+                        ->doesntHave('bankAccount');
+
+                    if ($associatedAccountTypes) {
+                        $inner->whereIn('type', $associatedAccountTypes);
+                    }
+                });
+
+                // Keep the currently selected account visible even if it would
+                // normally be excluded (e.g. Accounts Receivable on payments).
+                if ($currentAccountId) {
+                    $query->orWhere('id', $currentAccountId);
+                }
+            })
             ->where(function (Builder $query) use ($currentAccountId) {
                 $query->where('archived', false)
                     ->orWhere('id', $currentAccountId);
             })
-            ->get()
+            ->get();
+
+        if ($currentAccountId && ! $accounts->contains(fn (Account $account) => (int) $account->id === (int) $currentAccountId)) {
+            $currentAccount = Account::query()->find($currentAccountId);
+
+            if ($currentAccount) {
+                $accounts->push($currentAccount);
+            }
+        }
+
+        return $accounts
             ->groupBy(fn(Account $account) => $account->category->getPluralLabel())
-            ->map(fn(Collection $accounts, string $category) => $accounts->pluck('name', 'id'))
+            ->map(fn(Collection $groupedAccounts, string $category) => $groupedAccounts->pluck('name', 'id'))
             ->toArray();
     }
 

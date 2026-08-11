@@ -840,6 +840,62 @@ test('update first payment on paid invoice rebuilds latest payment journals', fu
         ->and($invoice->journalTransactionIsBalanced($payment2))->toBeTrue();
 });
 
+test('legacy imported invoice can manage and update payments without finalized_at', function () {
+    $invoice = Invoice::factory()
+        ->withLineItems()
+        ->state([
+            'company_id' => $this->testCompany->id,
+            'due_date' => now()->addDays(30),
+            'is_imported' => true,
+            'finalized_at' => null,
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    expect($invoice->isFinalized())->toBeFalse()
+        ->and($invoice->canManagePayments())->toBeTrue();
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $invoice->company_id)
+        ->where('enabled', true)
+        ->firstOrFail();
+
+    $payable = (int) ($invoice->actual_total ?? $invoice->total);
+    $paymentAmount = (int) floor($payable / 2);
+    expect($paymentAmount)->toBeGreaterThan(0);
+
+    $invoice->recordPayment([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $paymentAmount,
+        'notes' => 'Legacy import payment backfill',
+    ]);
+
+    $invoice->refresh();
+    $payment = $invoice->payments()->firstOrFail();
+
+    $newAmount = $paymentAmount + min(10_000, max(1, (int) floor(($payable - $paymentAmount) / 2)));
+
+    $invoice->updatePayment($payment, [
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $newAmount,
+        'notes' => 'Updated legacy payment',
+    ]);
+
+    $invoice->refresh();
+    $payment->refresh();
+
+    expect((int) $invoice->amount_paid)->toBe($newAmount)
+        ->and((int) ($payment->meta['amount_in_document_currency_cents'] ?? 0))->toBe($newAmount)
+        ->and($invoice->journalTransactionIsBalanced($payment))->toBeTrue();
+});
+
 function removePpnWapuConfigurationForCompany(int $companyId): void
 {
     Adjustment::query()

@@ -820,6 +820,23 @@ class Invoice extends Document
         ]);
     }
 
+    /**
+     * Whether payment records on this invoice may be created/edited from the UI.
+     * Legacy imports skip finalize, so approved imported invoices are allowed.
+     */
+    public function canManagePayments(): bool
+    {
+        if ($this->status === InvoiceStatus::Cancelled) {
+            return false;
+        }
+
+        if ($this->isFinalized()) {
+            return true;
+        }
+
+        return $this->is_imported && $this->wasApproved();
+    }
+
     public function canBulkRecordPayment(): bool
     {
         if (! $this->client_id || $this->currency_code !== CurrencyAccessor::getDefaultCurrency()) {
@@ -983,7 +1000,7 @@ class Invoice extends Document
             throw new \InvalidArgumentException('Cannot update payment on a cancelled invoice.');
         }
 
-        if (! $payment->is_payment || $payment->transactionable_id !== $this->id) {
+        if (! $payment->is_payment || (int) $payment->transactionable_id !== (int) $this->id) {
             throw new \InvalidArgumentException('Invalid payment transaction.');
         }
 

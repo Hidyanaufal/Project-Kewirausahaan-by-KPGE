@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Accounting\JournalEntryType;
+use App\Enums\Accounting\PaymentMethod;
 use App\Enums\Accounting\TransactionType;
 use App\Filament\Company\Resources\Accounting\JournalEntryResource\Pages\ListJournalEntries;
 use App\Filament\Company\Resources\Accounting\TransactionResource\Pages\ListTransactions;
@@ -8,7 +9,9 @@ use App\Filament\Forms\Components\JournalEntryRepeater;
 use App\Filament\Tables\Actions\EditTransactionAction;
 use App\Filament\Tables\Actions\ReplicateBulkAction;
 use App\Models\Accounting\Account;
+use App\Models\Accounting\Invoice;
 use App\Models\Accounting\Transaction;
+use App\Models\Banking\BankAccount;
 use App\Utilities\Currency\ConfigureCurrencies;
 use App\Utilities\Currency\CurrencyConverter;
 use Filament\Facades\Filament;
@@ -512,4 +515,63 @@ it('can bulk delete transactions with journal entries', function () {
             $this->assertSoftDeleted($entry);
         }
     }
+});
+
+it('can edit invoice payment transaction with pph23 from transactions list', function () {
+    $this->withOfferings();
+    ensureInvoiceAccountDefaultsForCompany($this->testCompany->id);
+
+    $invoice = Invoice::factory()
+        ->withLineItems()
+        ->state([
+            'company_id' => $this->testCompany->id,
+            'due_date' => now()->addDays(30),
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $invoice->company_id)
+        ->where('enabled', true)
+        ->firstOrFail();
+
+    $paymentAmount = (int) ($invoice->actual_total ?? $invoice->total);
+    $pph23 = 20_000;
+
+    $invoice->recordPayment([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $paymentAmount,
+        'pph23' => $pph23,
+        'notes' => 'Payment with pph23',
+    ]);
+
+    $invoice->refresh();
+    $payment = $invoice->payments()->firstOrFail();
+
+    $formattedAmount = CurrencyConverter::convertCentsToFormatSimple($payment->amount);
+    $newPph23 = 25_000;
+
+    livewire(ListTransactions::class)
+        ->mountTableAction(EditTransactionAction::class, $payment)
+        ->assertTableActionDataSet([
+            'account_id' => $payment->account_id,
+            'pph23' => CurrencyConverter::convertCentsToFormatSimple($pph23),
+        ])
+        ->setTableActionData([
+            'amount' => $formattedAmount,
+            'pph23' => CurrencyConverter::convertCentsToFormatSimple($newPph23),
+        ])
+        ->callMountedTableAction()
+        ->assertHasNoTableActionErrors();
+
+    $payment->refresh();
+    $invoice->refresh();
+
+    expect((int) ($payment->meta['pph23_cents'] ?? 0))->toBe($newPph23)
+        ->and((int) $invoice->pph23)->toBe($newPph23);
 });
