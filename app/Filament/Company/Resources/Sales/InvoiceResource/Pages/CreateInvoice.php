@@ -17,7 +17,7 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Url;
 
 class CreateInvoice extends CreateRecord
@@ -62,6 +62,21 @@ class CreateInvoice extends CreateRecord
     public function getMaxContentWidth(): MaxWidth | string | null
     {
         return MaxWidth::Full;
+    }
+
+    protected function onValidationError(ValidationException $exception): void
+    {
+        $message = $exception->validator->errors()->first('data.invoice_number')
+            ?: $exception->validator->errors()->first('invoice_number');
+
+        if ($message) {
+            Notification::make()
+                ->danger()
+                ->title($message)
+                ->send();
+        }
+
+        parent::onValidationError($exception);
     }
 
     protected function handleRecordCreation(array $data): Model
@@ -116,6 +131,7 @@ class CreateInvoice extends CreateRecord
                 ->body('Another invoice is being created. Please try again in a moment.')
                 ->send();
             $this->halt();
+
             throw $e;
         } catch (\Exception $e) {
             DB::rollBack();
@@ -125,6 +141,7 @@ class CreateInvoice extends CreateRecord
                 ->body($e->getMessage())
                 ->send();
             $this->halt();
+
             throw $e;
         } finally {
             if ($lock !== null) {
