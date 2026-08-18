@@ -24,6 +24,7 @@ use App\Models\Company;
 use App\Models\Setting\DocumentDefault;
 use App\Observers\InvoiceObserver;
 use App\Observers\TransactionObserver;
+use App\Scopes\CurrentCompanyScope;
 use App\Services\TransactionService;
 use App\Utilities\Currency\CurrencyAccessor;
 use App\Utilities\Currency\CurrencyConverter;
@@ -939,6 +940,23 @@ class Invoice extends Document
         );
 
         return $documentNumber;
+    }
+
+    public static function isInvoiceNumberTaken(string $invoiceNumber, ?Company $company = null, ?int $ignoreId = null): bool
+    {
+        $invoiceNumber = trim($invoiceNumber);
+        $companyId = $company?->id ?? auth()->user()?->currentCompany?->id ?? AuthHelper::currentCompany();
+
+        if ($invoiceNumber === '' || ! $companyId) {
+            return false;
+        }
+
+        return static::query()
+            ->withoutGlobalScope(CurrentCompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('invoice_number', $invoiceNumber)
+            ->when($ignoreId, fn (Builder $query) => $query->whereKeyNot($ignoreId))
+            ->exists();
     }
 
     public function recordPayment(array $data): void
