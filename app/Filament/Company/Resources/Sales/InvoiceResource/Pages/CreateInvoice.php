@@ -95,7 +95,27 @@ class CreateInvoice extends CreateRecord
             $lock = Cache::lock($lockKey, 15);
             $lock->block(10);
 
-            $data['invoice_number'] = Invoice::getNextDocumentNumber($company);
+            $invoiceNumber = trim((string) ($data['invoice_number'] ?? ''));
+
+            if ($invoiceNumber === '') {
+                $invoiceNumber = Invoice::getNextDocumentNumber($company);
+                $data['invoice_number'] = $invoiceNumber;
+            }
+
+            if (Invoice::isInvoiceNumberTaken($invoiceNumber, $company)) {
+                DB::rollBack();
+
+                $message = $invoiceNumber . ' sudah digunakan';
+
+                Notification::make()
+                    ->danger()
+                    ->title($message)
+                    ->send();
+
+                throw ValidationException::withMessages([
+                    'data.invoice_number' => $message,
+                ]);
+            }
 
             /** @var Invoice $record */
             $record = parent::handleRecordCreation($data);
@@ -131,6 +151,10 @@ class CreateInvoice extends CreateRecord
                 ->body('Another invoice is being created. Please try again in a moment.')
                 ->send();
             $this->halt();
+
+            throw $e;
+        } catch (ValidationException $e) {
+            DB::rollBack();
 
             throw $e;
         } catch (\Exception $e) {

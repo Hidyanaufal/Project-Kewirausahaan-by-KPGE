@@ -107,7 +107,9 @@ class InvoiceResource extends Resource
                                     ->label('Invoice number')
                                     ->default(static fn () => Invoice::getNextDocumentNumber())
                                     ->unique(ignoreRecord: true, modifyRuleUsing: function (Unique $rule) {
-                                        return $rule->where('company_id', AuthHelper::currentCompany());
+                                        $companyId = Auth::user()?->currentCompany?->id ?? AuthHelper::currentCompany();
+
+                                        return $rule->where('company_id', $companyId);
                                     })
                                     ->validationMessages([
                                         'unique' => ':input sudah digunakan',

@@ -85,6 +85,21 @@ class EditInvoice extends EditRecord
             $this->redirect(ViewInvoice::getUrl(['record' => $record]));
         }
 
+        $invoiceNumber = trim((string) ($data['invoice_number'] ?? ''));
+
+        if ($invoiceNumber !== '' && Invoice::isInvoiceNumberTaken($invoiceNumber, $record->company, $record->id)) {
+            $message = $invoiceNumber . ' sudah digunakan';
+
+            Notification::make()
+                ->danger()
+                ->title($message)
+                ->send();
+
+            throw ValidationException::withMessages([
+                'data.invoice_number' => $message,
+            ]);
+        }
+
         $lineItems = collect($data['lineItems'] ?? []);
 
         $this->deleteRemovedLineItems($record, $lineItems);
