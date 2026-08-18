@@ -25,21 +25,13 @@ class InvoiceExporter extends BaseExporter
                 ->label('Project number'),
             ExportColumn::make('status')
                 ->enum(),
-            ExportColumn::make('total')
-                ->money(),
-            ExportColumn::make('amount_paid')
-                ->money(),
-            ExportColumn::make('amount_due')
-                ->money(),
-            ExportColumn::make('profit_total')
-                ->label('Profit')
-                ->money(),
-            ExportColumn::make('subtotal')
-                ->money(),
-            ExportColumn::make('tax_total')
-                ->money(),
-            ExportColumn::make('discount_total')
-                ->money(),
+            static::moneyColumn('total'),
+            static::moneyColumn('amount_paid'),
+            static::moneyColumn('amount_due'),
+            static::moneyColumn('profit_total', 'Profit'),
+            static::moneyColumn('subtotal'),
+            static::moneyColumn('tax_total'),
+            static::moneyColumn('discount_total'),
             ExportColumn::make('discount_rate'),
             ExportColumn::make('currency_code'),
             ExportColumn::make('order_number'),

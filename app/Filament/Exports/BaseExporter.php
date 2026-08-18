@@ -2,13 +2,74 @@
 
 namespace App\Filament\Exports;
 
+use Filament\Actions\Exports\ExportColumn;
 use Filament\Actions\Exports\Exporter;
-use OpenSpout\Common\Entity\Style\Style;
 use Filament\Actions\Exports\Models\Export;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use OpenSpout\Common\Entity\Style\Style;
 
 abstract class BaseExporter extends Exporter
 {
+    /**
+     * Column names that should be exported as numeric Excel cells.
+     *
+     * @return list<string>
+     */
+    public static function getMoneyColumnNames(): array
+    {
+        return [
+            'total',
+            'amount_paid',
+            'amount_due',
+            'subtotal',
+            'tax_total',
+            'discount_total',
+            'profit_total',
+            'debit',
+            'credit',
+            'amount',
+            'balance',
+            'overdue_amount',
+            'project_value',
+            'approved_invoice_total_without_ppn_sum',
+            'approved_bill_total_sum',
+            'total_invoice_without_ppn',
+            'total_biaya',
+            'net_earning',
+            'opening_fiscal_book_value',
+            'depreciation_expense',
+            'closing_fiscal_book_value',
+        ];
+    }
+
+    public static function getXlsxMoneyCellStyle(): Style
+    {
+        return (new Style())
+            ->setFormat('#,##0.00')
+            ->setShouldWrapText(false);
+    }
+
+    protected static function moneyColumn(string $name, ?string $label = null): ExportColumn
+    {
+        $column = ExportColumn::make($name)
+            ->state(function (Model $record) use ($name): ?float {
+                $raw = $record->getRawOriginal($name);
+
+                if ($raw === null) {
+                    $raw = $record->getAttribute($name);
+                }
+
+                return self::excelMoney($raw);
+            });
+
+        if ($label !== null) {
+            $column->label($label);
+        }
+
+        return $column;
+    }
+
     /**
      * Normalize a money-like value into a numeric amount for Excel.
      * - Money object (has getValue()) -> getValue()

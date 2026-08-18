@@ -39,13 +39,13 @@ class JournalEntryExporter extends BaseExporter
                 ->label('Description'),
             ExportColumn::make('debit')
                 ->label('Debit')
-                ->state(static function (JournalEntry $record): ?string {
-                    return $record->type->value === 'debit' ? ($record->amount / 100) : null;
+                ->state(static function (JournalEntry $record): ?float {
+                    return $record->type->value === 'debit' ? self::excelMoney($record->amount) : null;
                 }),
             ExportColumn::make('credit')
                 ->label('Credit')
-                ->state(static function (JournalEntry $record): ?string {
-                    return $record->type->value === 'credit' ? ($record->amount / 100) : null;
+                ->state(static function (JournalEntry $record): ?float {
+                    return $record->type->value === 'credit' ? self::excelMoney($record->amount) : null;
                 }),
             ExportColumn::make('transaction.transactionable.invoice_number')
                 ->label('Invoice Number')

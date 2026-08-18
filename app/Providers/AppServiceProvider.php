@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Filament\Exports\Jobs\CreateNumericXlsxFile;
 use App\Http\Responses\LoginRedirectResponse;
 use App\Jobs\ExportCompletion;
 use App\Models\Export;
@@ -11,6 +12,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Observers\ExportObserver;
 use App\Services\DateRangeService;
+use Filament\Actions\Exports\Jobs\CreateXlsxFile;
 use Filament\Actions\Exports\Jobs\ExportCompletion as FilamentExportCompletion;
 use Filament\Actions\Exports\Models\Export as BaseExport;
 use Filament\Actions\Imports\Models\Import as BaseImport;
@@ -48,6 +50,9 @@ class AppServiceProvider extends ServiceProvider
         // Bind custom Import and Export models
         $this->app->bind(BaseImport::class, Import::class);
         $this->app->bind(BaseExport::class, Export::class);
+
+        // Write numeric money columns as real Excel numbers (not text) with #,##0.00 format.
+        $this->app->bind(CreateXlsxFile::class, CreateNumericXlsxFile::class);
 
         // Bind custom ExportCompletion job (injects Export company_id into notification).
         // Closure ensures our job is always instantiated when the chain is built.
