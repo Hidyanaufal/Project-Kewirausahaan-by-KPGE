@@ -26,20 +26,20 @@ class InvoiceExporter extends BaseExporter
             ExportColumn::make('status')
                 ->enum(),
             ExportColumn::make('total')
-                ->state(fn (Invoice $record) => self::excelMoney($record->total)),
+                ->money(),
             ExportColumn::make('amount_paid')
-                ->state(fn (Invoice $record) => self::excelMoney($record->amount_paid)),
+                ->money(),
             ExportColumn::make('amount_due')
-                ->state(fn (Invoice $record) => self::excelMoney($record->amount_due)),
+                ->money(),
             ExportColumn::make('profit_total')
                 ->label('Profit')
-                ->state(fn (Invoice $record) => self::excelMoney($record->profit_total)),
+                ->money(),
             ExportColumn::make('subtotal')
-                ->state(fn (Invoice $record) => self::excelMoney($record->subtotal)),
+                ->money(),
             ExportColumn::make('tax_total')
-                ->state(fn (Invoice $record) => self::excelMoney($record->tax_total)),
+                ->money(),
             ExportColumn::make('discount_total')
-                ->state(fn (Invoice $record) => self::excelMoney($record->discount_total)),
+                ->money(),
             ExportColumn::make('discount_rate'),
             ExportColumn::make('currency_code'),
             ExportColumn::make('order_number'),

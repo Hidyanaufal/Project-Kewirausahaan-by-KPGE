@@ -668,6 +668,7 @@ class InvoiceResource extends Resource
                             'report_period'      => 'As of ' . now()->format('d M Y'),
                             'columns'            => $columns,
                             'rows'               => $rows->toArray(),
+                            'amount_decimal_places' => 0,
                         ];
 
                         $exportService = new ExportService();
