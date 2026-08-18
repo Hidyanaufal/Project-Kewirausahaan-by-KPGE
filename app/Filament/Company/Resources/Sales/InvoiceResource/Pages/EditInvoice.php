@@ -13,14 +13,14 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\MaxWidth;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 
 class EditInvoice extends EditRecord
 {
-
     use \App\Concerns\HideFromSpotlight;
     use HandlePageRedirect;
-    use ManagesLineItems;
     use HideFromSpotlight;
+    use ManagesLineItems;
 
     protected static string $resource = InvoiceResource::class;
 
@@ -55,6 +55,21 @@ class EditInvoice extends EditRecord
     public function getMaxContentWidth(): MaxWidth | string | null
     {
         return MaxWidth::Full;
+    }
+
+    protected function onValidationError(ValidationException $exception): void
+    {
+        $message = $exception->validator->errors()->first('data.invoice_number')
+            ?: $exception->validator->errors()->first('invoice_number');
+
+        if ($message) {
+            Notification::make()
+                ->danger()
+                ->title($message)
+                ->send();
+        }
+
+        parent::onValidationError($exception);
     }
 
     protected function handleRecordUpdate(Model $record, array $data): Model
