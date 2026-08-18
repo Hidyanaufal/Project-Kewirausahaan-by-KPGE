@@ -13,6 +13,7 @@ abstract class BaseExporter extends Exporter
      * Normalize a money-like value into a numeric amount for Excel.
      * - Money object (has getValue()) -> getValue()
      * - int (assumed minor units / cents) -> / 100
+     * - numeric string (cents from PDO) -> / 100
      * - float -> as-is
      */
     protected static function excelMoney(mixed $value): ?float
@@ -31,6 +32,10 @@ abstract class BaseExporter extends Exporter
 
         if (is_float($value)) {
             return $value;
+        }
+
+        if (is_numeric($value)) {
+            return ((int) $value) / 100;
         }
 
         return null;
