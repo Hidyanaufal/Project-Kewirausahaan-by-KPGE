@@ -17,8 +17,7 @@ class TransactionExporter extends BaseExporter
             ExportColumn::make('posted_at')
                 ->date(),
             ExportColumn::make('description'),
-            ExportColumn::make('amount')
-                ->state(fn (Transaction $record) => self::excelMoney($record->amount)),
+            static::moneyColumn('amount'),
             ExportColumn::make('account.name')
                 ->label('Category'),
             ExportColumn::make('bankAccount.account.name')
