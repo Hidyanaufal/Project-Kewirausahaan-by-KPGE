@@ -175,7 +175,13 @@ test('record payment with lowered pph23 realigns amount and posts manual hutang 
     $bill->refresh();
 
     $defaultPph23 = (int) $bill->pph23;
-    $manualPph23 = max($defaultPph23 - 50_000, 1_000);
+    if ($defaultPph23 <= 50_000) {
+        $defaultPph23 = 100_000;
+        $bill->update(['pph23' => $defaultPph23]);
+        $bill->refresh();
+    }
+
+    $manualPph23 = $defaultPph23 - 50_000;
     expect($manualPph23)->toBeLessThan($defaultPph23);
 
     $bankAccount = BankAccount::query()

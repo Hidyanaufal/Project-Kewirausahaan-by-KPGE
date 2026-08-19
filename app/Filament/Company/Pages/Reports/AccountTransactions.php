@@ -10,6 +10,7 @@ use App\Filament\Company\Resources\Accounting\TransactionResource;
 use App\Filament\Company\Resources\Addons\ProjectResource;
 use App\Helpers\AuthHelper;
 use App\Models\Accounting\Account;
+use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Transaction;
 use App\Models\Banking\BankAccount;
 use App\Models\Common\Client;
@@ -48,17 +49,6 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
     protected ExportService $exportService;
 
     protected AccountService $accountService;
-
-    /**
-     * Account names (case-insensitive) to exclude from Bank Book report.
-     *
-     * @var array<string>
-     */
-    private const BANK_BOOK_EXCLUDED_ACCOUNT_NAMES = [
-        'kas kecil',
-        'kas besar',
-        'deposito',
-    ];
 
     public function boot(ReportService $reportService, ExportService $exportService, AccountService $accountService): void
     {
@@ -701,20 +691,167 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         ];
     }
 
-    private function isBankBookExcludedAccount(BankAccount $bank): bool
+    private function getKasBankParentAccount(int $companyId): ?Account
     {
-        $account = $bank->account;
-        if (! $account?->name) {
-            return false;
+        $byName = Account::query()
+            ->where('company_id', $companyId)
+            ->whereRaw('LOWER(name) = ?', ['kas & bank'])
+            ->first();
+
+        if ($byName) {
+            return $byName;
         }
-        $nameLower = strtolower($account->name);
-        foreach (self::BANK_BOOK_EXCLUDED_ACCOUNT_NAMES as $excluded) {
-            if (str_contains($nameLower, $excluded) || $nameLower === $excluded) {
-                return true;
+
+        return Account::query()
+            ->where('company_id', $companyId)
+            ->where('code', '1000')
+            ->first();
+    }
+
+    /**
+     * @return array<int>
+     */
+    private function getKasBankChildAccountIds(int $companyId): array
+    {
+        $parent = $this->getKasBankParentAccount($companyId);
+        if (! $parent) {
+            return [];
+        }
+
+        return Account::query()
+            ->where('company_id', $companyId)
+            ->where('parent_id', $parent->id)
+            ->orderByRaw('LENGTH(code), code')
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @return array<int>
+     */
+    private function resolveBankBookTargetAccountIds(int $companyId, array $params): array
+    {
+        if ($params['filtered'] && ($params['accountId'] ?? null) !== null) {
+            return [(int) $params['accountId']];
+        }
+
+        $kasBankChildIds = $this->getKasBankChildAccountIds($companyId);
+        if ($kasBankChildIds !== []) {
+            return $kasBankChildIds;
+        }
+
+        return BankAccount::query()
+            ->where('company_id', $companyId)
+            ->pluck('account_id')
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @param  array<int>  $targetAccountIds
+     */
+    private function getBankBookOpeningBalanceMinor(int $companyId, array $params, array $targetAccountIds): int
+    {
+        if (! ($params['filtered'] ?? false) || $targetAccountIds === []) {
+            return 0;
+        }
+
+        $rows = $this->accountService->getAccountBalances(
+            startDate: $params['startDate'],
+            endDate: $params['startDate'],
+            accountIds: $targetAccountIds,
+            projectId: $params['projectId'] ?? null,
+            companyId: $companyId,
+            projectTypeId: null,
+            entityId: $params['entityId'] ?? null,
+        )->get();
+
+        return (int) $rows->sum('starting_balance');
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @param  array<int>  $accountIds
+     * @return Collection<int, Collection<int, JournalEntry>>
+     */
+    private function loadBankBookJournalEntriesByAccount(int $companyId, array $accountIds, array $params): Collection
+    {
+        if ($accountIds === []) {
+            return collect();
+        }
+
+        $query = JournalEntry::query()
+            ->where('journal_entries.company_id', $companyId)
+            ->whereIn('journal_entries.account_id', $accountIds)
+            ->join('transactions', function ($join) use ($companyId) {
+                $join->on('transactions.id', '=', 'journal_entries.transaction_id')
+                    ->where('transactions.company_id', $companyId)
+                    ->whereNotNull('transactions.posted_at')
+                    ->whereNull('transactions.deleted_at');
+            })
+            ->whereNull('journal_entries.deleted_at')
+            ->select('journal_entries.*');
+
+        if ($params['filtered'] ?? false) {
+            $query->whereBetween('transactions.posted_at', [$params['startDate'], $params['endDate']]);
+        }
+
+        if (($params['entityId'] ?? null) !== null) {
+            $entityId = (int) $params['entityId'];
+            if ($entityId < 0) {
+                $query->where('transactions.payeeable_type', Vendor::class)
+                    ->where('transactions.payeeable_id', abs($entityId));
+            } else {
+                $query->where('transactions.payeeable_type', Client::class)
+                    ->where('transactions.payeeable_id', $entityId);
             }
         }
 
-        return false;
+        return $query
+            ->with(['transaction:id,posted_at,transaction_code,description,company_id'])
+            ->orderBy('transactions.posted_at')
+            ->orderBy('transactions.id')
+            ->get()
+            ->groupBy('account_id');
+    }
+
+    /**
+     * @return array{data: array<int, mixed>, style?: array<string, mixed>}
+     */
+    private function makeBankBookSaldoAwalRow(int $balanceMinor, callable $toNumber): array
+    {
+        return [
+            'data' => [
+                '',
+                '',
+                'Saldo Awal',
+                '',
+                '',
+                $toNumber($balanceMinor),
+            ],
+        ];
+    }
+
+    /**
+     * @return array{data: array<int, mixed>, style: array<string, mixed>}
+     */
+    private function makeBankBookAccountHeaderRow(Account $account): array
+    {
+        return [
+            'data' => [
+                '__str' . ($account->code ?? '-'),
+                $account->name ?? '-',
+                'Currency: IDR',
+                '',
+                '',
+                '',
+            ],
+            'style' => [
+                'font-weight' => 'bold',
+                'color' => 'rgb(6, 6, 174)',
+            ],
+        ];
     }
 
     public function __buildReportBankBook(?array $exportFilterOverride = null): array
@@ -725,71 +862,48 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
         $toNumber = fn ($value) => number_format((float) $value / 100, 2, ',', '.');
         $params = $this->getExportFilterParams($exportFilterOverride);
 
-        $bankQuery = \App\Models\Banking\BankAccount::query()
-            ->where('company_id', $companyId);
+        $targetAccountIds = $this->resolveBankBookTargetAccountIds($companyId, $params);
+        $openingBalanceMinor = $this->getBankBookOpeningBalanceMinor($companyId, $params, $targetAccountIds);
+        $isSingleAccountFilter = ($params['filtered'] ?? false) && ($params['accountId'] ?? null) !== null;
 
-        if ($params['filtered'] && $params['accountId'] !== null) {
-            $bankQuery->where('account_id', $params['accountId']);
-        }
+        $accounts = Account::query()
+            ->where('company_id', $companyId)
+            ->whereIn('id', $targetAccountIds)
+            ->orderByRaw('LENGTH(code), code')
+            ->get();
 
-        $banks = $bankQuery->with([
-            'account',
-            'transactions' => function ($q) use ($companyId, $params) {
-                $q->where('company_id', $companyId)
-                    ->whereNotNull('posted_at');
-                if ($params['filtered']) {
-                    $q->whereBetween('posted_at', [$params['startDate'], $params['endDate']]);
-                }
-                if ($params['entityId'] !== null) {
-                    $entityId = (int) $params['entityId'];
-                    if ($entityId < 0) {
-                        $q->where('payeeable_type', Vendor::class)->where('payeeable_id', abs($entityId));
-                    } else {
-                        $q->where('payeeable_type', Client::class)->where('payeeable_id', $entityId);
-                    }
-                }
-                $q->orderBy('id', 'desc');
-            },
-        ])->get();
-
-        $banks = $banks->filter(fn (BankAccount $bank) => ! $this->isBankBookExcludedAccount($bank));
+        $journalEntriesByAccount = $this->loadBankBookJournalEntriesByAccount($companyId, $targetAccountIds, $params);
 
         $rows = collect();
+        $balance = $openingBalanceMinor;
 
-        foreach ($banks as $bank) {
-            $rows->push([
-                'data' => [
-                    '__str' . ($bank->account->code ?? '-'),
-                    $bank->account->name ?? '-',
-                    'Currency: IDR',
-                    '',
-                    '',
-                    '',
-                ],
-                'style' => [
-                    'font-weight' => 'bold',
-                    'color' => 'rgb(6, 6, 174)',
-                ],
-            ]);
+        if (($params['filtered'] ?? false) && ! $isSingleAccountFilter) {
+            $rows->push($this->makeBankBookSaldoAwalRow($openingBalanceMinor, $toNumber));
+        }
 
-            $balance = 0;
+        foreach ($accounts as $account) {
+            $rows->push($this->makeBankBookAccountHeaderRow($account));
 
-            foreach ($bank->transactions as $trx) {
-                $journalEntries = \App\Models\Accounting\JournalEntry::where('transaction_id', $trx->id)
-                    ->where('company_id', $companyId)
-                    ->where('account_id', $bank->account_id)
-                    ->get();
+            if ($isSingleAccountFilter) {
+                $rows->push($this->makeBankBookSaldoAwalRow($openingBalanceMinor, $toNumber));
+            }
 
-                $increase = $journalEntries->filter(fn ($je) => $je->type->value === 'debit')->sum('amount');
-                $decrease = $journalEntries->filter(fn ($je) => $je->type->value === 'credit')->sum('amount');
+            $accountEntries = $journalEntriesByAccount->get($account->id, collect());
+
+            foreach ($accountEntries as $journalEntry) {
+                $transaction = $journalEntry->transaction;
+                $increase = $journalEntry->type->value === 'debit' ? (int) $journalEntry->amount : 0;
+                $decrease = $journalEntry->type->value === 'credit' ? (int) $journalEntry->amount : 0;
 
                 $balance += ($increase - $decrease);
 
                 $rows->push([
                     'data' => [
-                        \Carbon\Carbon::parse($trx->posted_at)->format('d M Y'),
-                        $trx->transaction_code ?? '-',
-                        $trx->description ?? '-',
+                        $transaction?->posted_at
+                            ? Carbon::parse($transaction->posted_at)->format('d M Y')
+                            : '-',
+                        $transaction?->transaction_code ?? '-',
+                        $transaction?->description ?? '-',
                         $toNumber($increase),
                         $toNumber($decrease),
                         $toNumber($balance),

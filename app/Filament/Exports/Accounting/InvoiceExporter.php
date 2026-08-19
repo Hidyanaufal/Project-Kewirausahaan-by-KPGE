@@ -25,22 +25,14 @@ class InvoiceExporter extends BaseExporter
                 ->label('Project number'),
             ExportColumn::make('status')
                 ->enum(),
-            ExportColumn::make('total')
-                ->state(fn (Invoice $record) => self::excelMoney($record->total)),
-            ExportColumn::make('amount_paid')
-                ->state(fn (Invoice $record) => self::excelMoney($record->amount_paid)),
-            ExportColumn::make('amount_due')
-                ->state(fn (Invoice $record) => self::excelMoney($record->amount_due)),
-            ExportColumn::make('profit_total')
-                ->label('Profit')
-                ->state(fn (Invoice $record) => self::excelMoney($record->profit_total)),
-            ExportColumn::make('subtotal')
-                ->state(fn (Invoice $record) => self::excelMoney($record->subtotal)),
-            ExportColumn::make('tax_total')
-                ->state(fn (Invoice $record) => self::excelMoney($record->tax_total)),
-            ExportColumn::make('discount_total')
-                ->state(fn (Invoice $record) => self::excelMoney($record->discount_total)),
-            ExportColumn::make('discount_rate'),
+            static::moneyColumn('total'),
+            static::moneyColumn('amount_paid'),
+            static::moneyColumn('amount_due'),
+            static::moneyColumn('profit_total', 'Profit'),
+            static::moneyColumn('subtotal'),
+            static::moneyColumn('tax_total'),
+            static::moneyColumn('discount_total'),
+            static::discountRateColumn(),
             ExportColumn::make('currency_code'),
             ExportColumn::make('order_number'),
             ExportColumn::make('approved_at')

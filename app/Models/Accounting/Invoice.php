@@ -24,6 +24,7 @@ use App\Models\Company;
 use App\Models\Setting\DocumentDefault;
 use App\Observers\InvoiceObserver;
 use App\Observers\TransactionObserver;
+use App\Scopes\CurrentCompanyScope;
 use App\Services\TransactionService;
 use App\Utilities\Currency\CurrencyAccessor;
 use App\Utilities\Currency\CurrencyConverter;
@@ -939,6 +940,149 @@ class Invoice extends Document
         );
 
         return $documentNumber;
+    }
+
+    public static function isInvoiceNumberTaken(string $invoiceNumber, ?Company $company = null, ?int $ignoreId = null): bool
+    {
+        $invoiceNumber = trim($invoiceNumber);
+        $companyId = $company?->id ?? auth()->user()?->currentCompany?->id ?? AuthHelper::currentCompany();
+
+        if ($invoiceNumber === '' || ! $companyId) {
+            return false;
+        }
+
+        return static::query()
+            ->withoutGlobalScope(CurrentCompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('invoice_number', $invoiceNumber)
+            ->when($ignoreId, fn (Builder $query) => $query->whereKeyNot($ignoreId))
+            ->exists();
+    }
+
+    /**
+     * Base amount for PPh 23 (subtotal + profit - discount).
+     */
+    public function pph23Base(): int
+    {
+        return (int) $this->subtotal + (int) $this->profit_total - (int) ($this->discount_total ?? 0);
+    }
+
+    /**
+     * Invoice total payable for a given PPh 23 amount (matches actual_total updating hook).
+     */
+    public function actualTotalForPph23(?int $pph23Cents): int
+    {
+        $subtotal = $this->pph23Base();
+        $pph23 = $pph23Cents ?? (int) round($subtotal * 0.02);
+
+        if ($this->isWapu()) {
+            return $subtotal - $pph23;
+        }
+
+        return $subtotal - $pph23 + (int) $this->tax_total;
+    }
+
+    /**
+     * Remaining cash due for a payment given a (possibly manual) PPh 23 amount.
+     */
+    public function paymentAmountForPph23(?int $pph23Cents): int
+    {
+        return max(
+            $this->actualTotalForPph23($pph23Cents) - (int) ($this->amount_paid ?? 0),
+            0
+        );
+    }
+
+    /**
+     * Prefer stored invoice.pph23 on the payment form (including explicit 0); fall back to 2% of base.
+     */
+    public function defaultPph23ForPaymentForm(): int
+    {
+        if ($this->pph23 !== null) {
+            return (int) $this->pph23;
+        }
+
+        return (int) round($this->pph23Base() * 0.02);
+    }
+
+    /**
+     * Parse form/API pph23: explicit 0 is valid; blank/missing stays null (auto 2% on create/update).
+     */
+    public static function parsePph23Cents(array $data): ?int
+    {
+        if (! array_key_exists('pph23', $data) || $data['pph23'] === null || $data['pph23'] === '') {
+            return null;
+        }
+
+        return (int) $data['pph23'];
+    }
+
+    /**
+     * Update pph23 then record payment, aligning cash amount when the payment is a full-pay intent.
+     */
+    public function recordPaymentWithPph23(array $data): void
+    {
+        $pph23Cents = static::parsePph23Cents($data);
+        $amountCents = (int) $data['amount'];
+        $previousAmountDue = (int) $this->amount_due;
+        $projectedFullPay = $this->paymentAmountForPph23($pph23Cents);
+        $currentActualTotalDue = (int) ($this->actual_total ?? $this->total) - (int) ($this->amount_paid ?? 0);
+
+        $isFullPayIntent = $amountCents === $previousAmountDue
+            || $amountCents === $projectedFullPay
+            || $amountCents === $currentActualTotalDue;
+
+        $this->update([
+            'pph23' => $pph23Cents,
+        ]);
+
+        $this->refresh();
+
+        if ($isFullPayIntent) {
+            $amountCents = $this->paymentAmountForPph23($pph23Cents);
+        }
+
+        if ($amountCents <= 0) {
+            throw new \InvalidArgumentException('Payment amount must be greater than zero.');
+        }
+
+        $this->recordPayment([
+            ...$data,
+            'amount' => $amountCents,
+            'pph23' => $pph23Cents,
+        ]);
+    }
+
+    /**
+     * Update payment with PPh 23, aligning cash amount when the payment is a full-pay intent.
+     */
+    public function updatePaymentWithPph23(Transaction $payment, array $data): void
+    {
+        $pph23Cents = static::parsePph23Cents($data);
+        $amountCents = (int) $data['amount'];
+        $currentPaymentAmount = (int) ($payment->meta['amount_in_document_currency_cents'] ?? $payment->amount);
+        $amountDueBeforeThisPayment = (int) $this->amount_due + $currentPaymentAmount;
+        $amountPaidExcludingThis = (int) ($this->amount_paid ?? 0) - $currentPaymentAmount;
+        $projectedFullPay = max($this->actualTotalForPph23($pph23Cents) - $amountPaidExcludingThis, 0);
+
+        $isFullPayIntent = $amountCents === $amountDueBeforeThisPayment
+            || $amountCents === $projectedFullPay
+            || $amountCents === $currentPaymentAmount;
+
+        if ($isFullPayIntent) {
+            if ($pph23Cents !== null && $pph23Cents !== (int) $this->pph23) {
+                $this->update(['pph23' => $pph23Cents]);
+                $this->refresh();
+            }
+
+            $amountCents = max($this->actualTotalForPph23($pph23Cents) - $amountPaidExcludingThis, 0);
+        }
+
+        $this->updatePayment($payment, [
+            ...$data,
+            'amount' => $amountCents,
+            'pph23' => $pph23Cents,
+        ]);
     }
 
     public function recordPayment(array $data): void

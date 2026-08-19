@@ -503,18 +503,20 @@ class MacroServiceProvider extends ServiceProvider
         });
 
         ExportColumn::macro('money', function (?string $currency = null) {
-            $this->formatStateUsing(static function ($state) {
+            $this->formatStateUsing(static function ($state) use ($currency): ?float {
                 if ($state === null || $state === '') {
-                    return 0.00;
+                    return null;
+                }
+
+                if (is_float($state)) {
+                    return $state;
                 }
 
                 if (! is_numeric($state)) {
-                    return 0.00;
+                    return null;
                 }
 
-                $cents = (int) $state;
-
-                return CurrencyConverter::convertCentsToFloat($cents);
+                return CurrencyConverter::convertCentsToFloat((int) $state, $currency);
             });
 
             return $this;

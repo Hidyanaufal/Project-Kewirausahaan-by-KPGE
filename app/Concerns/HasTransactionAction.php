@@ -198,7 +198,7 @@ trait HasTransactionAction
             $amountInDocumentCurrency = (int) $record->meta['amount_in_document_currency_cents'];
         }
 
-        $invoice->updatePayment($record, [
+        $invoice->updatePaymentWithPph23($record, [
             'posted_at' => $data['posted_at'],
             'bank_account_id' => $data['bank_account_id'],
             'amount' => $amountInDocumentCurrency,

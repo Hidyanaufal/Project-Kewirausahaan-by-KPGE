@@ -17,7 +17,7 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Url;
 
 class CreateInvoice extends CreateRecord
@@ -64,6 +64,21 @@ class CreateInvoice extends CreateRecord
         return MaxWidth::Full;
     }
 
+    protected function onValidationError(ValidationException $exception): void
+    {
+        $message = $exception->validator->errors()->first('data.invoice_number')
+            ?: $exception->validator->errors()->first('invoice_number');
+
+        if ($message) {
+            Notification::make()
+                ->danger()
+                ->title($message)
+                ->send();
+        }
+
+        parent::onValidationError($exception);
+    }
+
     protected function handleRecordCreation(array $data): Model
     {
         $lock = null;
@@ -80,7 +95,27 @@ class CreateInvoice extends CreateRecord
             $lock = Cache::lock($lockKey, 15);
             $lock->block(10);
 
-            $data['invoice_number'] = Invoice::getNextDocumentNumber($company);
+            $invoiceNumber = trim((string) ($data['invoice_number'] ?? ''));
+
+            if ($invoiceNumber === '') {
+                $invoiceNumber = Invoice::getNextDocumentNumber($company);
+                $data['invoice_number'] = $invoiceNumber;
+            }
+
+            if (Invoice::isInvoiceNumberTaken($invoiceNumber, $company)) {
+                DB::rollBack();
+
+                $message = $invoiceNumber . ' sudah digunakan';
+
+                Notification::make()
+                    ->danger()
+                    ->title($message)
+                    ->send();
+
+                throw ValidationException::withMessages([
+                    'data.invoice_number' => $message,
+                ]);
+            }
 
             /** @var Invoice $record */
             $record = parent::handleRecordCreation($data);
@@ -116,6 +151,11 @@ class CreateInvoice extends CreateRecord
                 ->body('Another invoice is being created. Please try again in a moment.')
                 ->send();
             $this->halt();
+
+            throw $e;
+        } catch (ValidationException $e) {
+            DB::rollBack();
+
             throw $e;
         } catch (\Exception $e) {
             DB::rollBack();
@@ -125,6 +165,7 @@ class CreateInvoice extends CreateRecord
                 ->body($e->getMessage())
                 ->send();
             $this->halt();
+
             throw $e;
         } finally {
             if ($lock !== null) {

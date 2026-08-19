@@ -41,11 +41,9 @@ use Awcodes\TableRepeater\Header;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Filament\Forms;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
-use Filament\Support\Enums\MaxWidth;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Guava\FilamentClusters\Forms\Cluster;
@@ -53,6 +51,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rules\Unique;
 
 class InvoiceResource extends Resource
 {
@@ -78,7 +77,7 @@ class InvoiceResource extends Resource
                             Forms\Components\Group::make([
                                 ProjectResource::options(),
                                 CreateClientSelect::make('client_id')
-                                    ->options(fn() => Client::where('company_id', AuthHelper::currentCompany())->pluck('name', 'id'))
+                                    ->options(fn () => Client::where('company_id', AuthHelper::currentCompany())->pluck('name', 'id'))
                                     ->label('Client')
                                     ->required()
                                     ->live()
@@ -106,7 +105,15 @@ class InvoiceResource extends Resource
                             Forms\Components\Group::make([
                                 Forms\Components\TextInput::make('invoice_number')
                                     ->label('Invoice number')
-                                    ->default(static fn() => Invoice::getNextDocumentNumber()),
+                                    ->default(static fn () => Invoice::getNextDocumentNumber())
+                                    ->unique(ignoreRecord: true, modifyRuleUsing: function (Unique $rule) {
+                                        $companyId = Auth::user()?->currentCompany?->id ?? AuthHelper::currentCompany();
+
+                                        return $rule->where('company_id', $companyId);
+                                    })
+                                    ->validationMessages([
+                                        'unique' => ':input sudah digunakan',
+                                    ]),
                                 Cluster::make([
                                     Forms\Components\DatePicker::make('date')
                                         ->label('Invoice date')
@@ -387,6 +394,7 @@ class InvoiceResource extends Resource
 
                                         // Final total
                                         $totalInCents = $subtotalInCents + ($taxAmountInCents - $discountAmountInCents);
+
                                         return CurrencyConverter::formatCentsToMoney($totalInCents, $currencyCode);
                                     }),
                             ]),
@@ -434,7 +442,7 @@ class InvoiceResource extends Resource
                     ]),
                 Forms\Components\Section::make('Tax Detail')
                     ->columns(3)
-                    ->visible(fn() => AuthHelper::isAdmin())
+                    ->visible(fn () => AuthHelper::isAdmin())
                     ->schema([
                         Forms\Components\Select::make('tax_code_id')
                             ->label('Tax Code')
@@ -448,16 +456,16 @@ class InvoiceResource extends Resource
                                         ];
                                     });
                             })
-                            ->required(fn(?Invoice $record) => $record?->isFinalized())
-                            ->helperText(fn(?Invoice $record) => $record?->isFinalized() ? 'Tax code is required after invoice is finalized.' : null),
+                            ->required(fn (?Invoice $record) => $record?->isFinalized())
+                            ->helperText(fn (?Invoice $record) => $record?->isFinalized() ? 'Tax code is required after invoice is finalized.' : null),
                         Forms\Components\TextInput::make('tax_number')
                             ->label('Tax Number')
-                            ->required(fn(?Invoice $record) => $record?->isFinalized())
-                            ->helperText(fn(?Invoice $record) => $record?->isFinalized() ? 'Tax number is required after invoice is finalized.' : null),
+                            ->required(fn (?Invoice $record) => $record?->isFinalized())
+                            ->helperText(fn (?Invoice $record) => $record?->isFinalized() ? 'Tax number is required after invoice is finalized.' : null),
                         Forms\Components\DatePicker::make('tax_date')
                             ->label('Tax Date')
-                            ->required(fn(?Invoice $record) => $record?->isFinalized())
-                            ->helperText(fn(?Invoice $record) => $record?->isFinalized() ? 'Tax date is required after invoice is finalized.' : null),
+                            ->required(fn (?Invoice $record) => $record?->isFinalized())
+                            ->helperText(fn (?Invoice $record) => $record?->isFinalized() ? 'Tax date is required after invoice is finalized.' : null),
                     ]),
                 DocumentFooterSection::make('Invoice Footer')
                     ->defaultFooter($settings->footer)
@@ -513,13 +521,13 @@ class InvoiceResource extends Resource
                     ->searchable()
                     ->hiddenOn(InvoicesRelationManager::class),
                 Tables\Columns\TextColumn::make('total')
-                    ->currencyWithConversion(static fn(Invoice $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn (Invoice $record) => $record->currency_code)
                     ->sortable()
                     ->toggleable()
                     ->alignEnd(),
                 Tables\Columns\TextColumn::make('amount_paid')
                     ->label('Amount paid')
-                    ->currencyWithConversion(static fn(Invoice $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn (Invoice $record) => $record->currency_code)
                     ->sortable()
                     ->alignEnd()
                     ->showOnTabs(['unpaid']),
@@ -546,14 +554,14 @@ class InvoiceResource extends Resource
                     ->hideOnTabs(['draft']),
                 Tables\Columns\TextColumn::make('amount_due')
                     ->label('Amount due')
-                    ->currencyWithConversion(static fn(Invoice $record) => $record->currency_code)
+                    ->currencyWithConversion(static fn (Invoice $record) => $record->currency_code)
                     ->sortable()
                     ->alignEnd()
                     ->hideOnTabs(['draft']),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('client')
-                    ->options(fn() => Client::where('company_id', AuthHelper::currentCompany())->pluck('name', 'id'))
+                    ->options(fn () => Client::where('company_id', AuthHelper::currentCompany())->pluck('name', 'id'))
                     ->searchable()
                     ->preload()
                     ->hiddenOn(InvoicesRelationManager::class),
@@ -565,8 +573,8 @@ class InvoiceResource extends Resource
                     ->native(false)
                     ->placeholder('All Status')
                     ->queries(
-                        true: fn(Builder $query) => $query->whereHas('payments'),
-                        false: fn(Builder $query) => $query->whereDoesntHave('payments'),
+                        true: fn (Builder $query) => $query->whereHas('payments'),
+                        false: fn (Builder $query) => $query->whereDoesntHave('payments'),
                     ),
                 Tables\Filters\Filter::make('aging')
                     ->label('Aging (Days)')
@@ -576,13 +584,14 @@ class InvoiceResource extends Resource
                         }
                         $aging = AgingRange::from($state['aging_range']);
                         $label = 'Aging (Days) ' . $aging->getLabel();
+
                         return Tables\Filters\Indicator::make("{$label}")->removable(true);
                     })
                     ->form([
                         Select::make('aging_range')
                             ->label('Select Aging Range')
                             ->options(AgingRange::class)
-                            ->required()
+                            ->required(),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         $aging_range = $data['aging_range'] ?? null;
@@ -601,6 +610,7 @@ class InvoiceResource extends Resource
                                     return $query; // No filtering if no range is selected
                             }
                         }
+
                         return $query;
                     }),
                 DateRangeFilter::make('date')
@@ -662,15 +672,16 @@ class InvoiceResource extends Resource
                         }
 
                         $data = [
-                            'filename'           => $filename,
-                            'company_name'       => $company->name,
-                            'report_title'       => "Invoice List",
-                            'report_period'      => 'As of ' . now()->format('d M Y'),
-                            'columns'            => $columns,
-                            'rows'               => $rows->toArray(),
+                            'filename' => $filename,
+                            'company_name' => $company->name,
+                            'report_title' => 'Invoice List',
+                            'report_period' => 'As of ' . now()->format('d M Y'),
+                            'columns' => $columns,
+                            'rows' => $rows->toArray(),
+                            'amount_decimal_places' => 0,
                         ];
 
-                        $exportService = new ExportService();
+                        $exportService = new ExportService;
 
                         $pdf = SnappyPdf::loadView('pdf.reports-general', [
                             'data' => $data,
@@ -686,25 +697,25 @@ class InvoiceResource extends Resource
                             'margin-left' => 5,
                             'margin-right' => 5,
                             'disable-smart-shrinking' => true,
-                            'orientation' => 'Landscape'
+                            'orientation' => 'Landscape',
                         ]);
 
                         return response()->streamDownload(function () use ($pdf) {
                             echo $pdf->output();
                         }, $data['filename']);
-                    })
+                    }),
 
             ])
             ->actions([
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ActionGroup::make([
                         Tables\Actions\EditAction::make()
-                            ->url(static fn(Invoice $record) => Pages\EditInvoice::getUrl(['record' => $record]))
+                            ->url(static fn (Invoice $record) => Pages\EditInvoice::getUrl(['record' => $record]))
                             ->visible(function (Invoice $record) {
                                 return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
                             }),
                         Tables\Actions\ViewAction::make()
-                            ->url(static fn(Invoice $record) => Pages\ViewInvoice::getUrl(['record' => $record])),
+                            ->url(static fn (Invoice $record) => Pages\ViewInvoice::getUrl(['record' => $record])),
                         Invoice::getCancelInvoiceAction(Tables\Actions\Action::class)
                             ->visible(function (Invoice $record) {
                                 return AuthHelper::isAdmin() && $record->status !== InvoiceStatus::Cancelled;
@@ -723,7 +734,7 @@ class InvoiceResource extends Resource
                             ->visible(function (Invoice $record) {
                                 return $record->canRecordPayment();
                             })
-                            ->url(fn(Invoice $record) => Pages\RecordPayments::getUrl([
+                            ->url(fn (Invoice $record) => Pages\RecordPayments::getUrl([
                                 'tableFilters' => [
                                     'client_id' => ['value' => $record->client_id],
                                     'currency_code' => ['value' => $record->currency_code],
@@ -748,7 +759,7 @@ class InvoiceResource extends Resource
                         ->successNotificationTitle('Invoices approved')
                         ->failureNotificationTitle('Failed to Approve Invoices')
                         ->before(function (Collection $records, Tables\Actions\BulkAction $action) {
-                            $isInvalid = $records->contains(fn(Invoice $record) => ! $record->canBeApproved());
+                            $isInvalid = $records->contains(fn (Invoice $record) => ! $record->canBeApproved());
 
                             if ($isInvalid) {
                                 Notification::make()
@@ -775,7 +786,7 @@ class InvoiceResource extends Resource
                         ->successNotificationTitle('Invoices sent')
                         ->failureNotificationTitle('Failed to Mark Invoices as Sent')
                         ->before(function (Collection $records, Tables\Actions\BulkAction $action) {
-                            $isInvalid = $records->contains(fn(Invoice $record) => ! $record->canBeMarkedAsSent());
+                            $isInvalid = $records->contains(fn (Invoice $record) => ! $record->canBeMarkedAsSent());
 
                             if ($isInvalid) {
                                 Notification::make()

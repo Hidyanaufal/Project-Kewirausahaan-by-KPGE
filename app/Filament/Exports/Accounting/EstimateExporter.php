@@ -22,15 +22,11 @@ class EstimateExporter extends BaseExporter
             ExportColumn::make('client.name'),
             ExportColumn::make('status')
                 ->enum(),
-            ExportColumn::make('total')
-                ->state(fn (Estimate $record) => self::excelMoney($record->total)),
-            ExportColumn::make('subtotal')
-                ->state(fn (Estimate $record) => self::excelMoney($record->subtotal)),
-            ExportColumn::make('tax_total')
-                ->state(fn (Estimate $record) => self::excelMoney($record->tax_total)),
-            ExportColumn::make('discount_total')
-                ->state(fn (Estimate $record) => self::excelMoney($record->discount_total)),
-            ExportColumn::make('discount_rate'),
+            static::moneyColumn('total'),
+            static::moneyColumn('subtotal'),
+            static::moneyColumn('tax_total'),
+            static::moneyColumn('discount_total'),
+            static::discountRateColumn(),
             ExportColumn::make('currency_code'),
             ExportColumn::make('reference_number'),
             ExportColumn::make('approved_at')
