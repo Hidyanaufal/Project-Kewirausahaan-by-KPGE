@@ -1264,3 +1264,127 @@ it('treats invoice above 10jt as WAPU when PPN WAPU adjustment is configured', f
         ->and($invoice->isWapu())->toBeTrue()
         ->and(Adjustment::findPpnWapuForCompany($this->testCompany->id))->not->toBeNull();
 });
+
+test('record payment with pph23 aligns amount when discount affects pph23 base', function () {
+    $companyId = $this->testCompany->id;
+    removePpnWapuConfigurationForCompany($companyId);
+
+    $defaultCurrency = CurrencyAccessor::getDefaultCurrency();
+    $subtotal = 47_680_000;
+    $profitTotal = 4_768_000;
+    $discountTotal = 4_768_000;
+    $taxTotal = 5_244_800;
+    $total = $subtotal + $profitTotal - $discountTotal + $taxTotal;
+    $expectedDefaultPph23 = 953_600;
+    $revenueBasedPph23 = 1_048_960;
+
+    $invoice = Invoice::factory()
+        ->withLineItems(1)
+        ->state([
+            'company_id' => $companyId,
+            'currency_code' => $defaultCurrency,
+            'due_date' => now()->addDays(30),
+            'profit_total' => $profitTotal,
+            'discount_method' => \App\Enums\Accounting\DocumentDiscountMethod::PerLineItem,
+            'discount_rate' => 0,
+            'discount_total' => $discountTotal,
+        ])
+        ->create();
+
+    $invoice->refresh();
+    $lineItem = $invoice->lineItems->first();
+    $lineItem->updateQuietly([
+        'subtotal' => $subtotal,
+        'unit_price' => $subtotal,
+        'quantity' => 1,
+    ]);
+    attachElevenPercentPpnToInvoiceLineItem($invoice);
+    $invoice->updateQuietly([
+        'subtotal' => $subtotal,
+        'profit_total' => $profitTotal,
+        'discount_total' => $discountTotal,
+        'tax_total' => $taxTotal,
+        'total' => $total,
+    ]);
+
+    $invoice->refresh();
+    $invoice->load(['lineItems.adjustments', 'client']);
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    expect($invoice->defaultPph23ForPaymentForm())->toBe($expectedDefaultPph23)
+        ->and($revenueBasedPph23)->toBe((int) round(($subtotal + $profitTotal) * 0.02))
+        ->and($invoice->paymentAmountForPph23($expectedDefaultPph23))->toBe((int) $invoice->amount_due);
+
+    $amountDueBeforePayment = (int) $invoice->amount_due;
+
+    $bankAccount = BankAccount::query()
+        ->where('company_id', $invoice->company_id)
+        ->where('enabled', true)
+        ->firstOrFail();
+
+    expect($invoice->payments()->count())->toBe(0);
+
+    $expectedCash = $invoice->paymentAmountForPph23($revenueBasedPph23);
+
+    // Simulate legacy form: Amount prefilled from amount_due, PPh 23 from revenue base (before discount).
+    $invoice->recordPaymentWithPph23([
+        'posted_at' => now()->toDateString(),
+        'payment_method' => PaymentMethod::BankPayment,
+        'bank_account_id' => $bankAccount->id,
+        'amount' => $amountDueBeforePayment,
+        'pph23' => $revenueBasedPph23,
+        'notes' => 'Full pay with mismatched PPh 23 base',
+    ]);
+
+    $invoice->refresh();
+
+    $payment = $invoice->payments()->orderByDesc('id')->first();
+
+    expect($payment)->not->toBeNull()
+        ->and((int) $payment->amount)->toBe($expectedCash)
+        ->and((int) ($payment->meta['amount_in_document_currency_cents'] ?? 0))->toBe($expectedCash)
+        ->and($invoice->status)->toBe(InvoiceStatus::Paid)
+        ->and((int) $invoice->pph23)->toBe($revenueBasedPph23)
+        ->and((int) $invoice->amount_paid)->toBe($expectedCash)
+        ->and($expectedCash)->toBeLessThan($amountDueBeforePayment);
+});
+
+test('default pph23 for payment form uses discounted base not revenue journal', function () {
+    $companyId = $this->testCompany->id;
+    removePpnWapuConfigurationForCompany($companyId);
+
+    $subtotal = 47_680_000;
+    $profitTotal = 4_768_000;
+    $discountTotal = 4_768_000;
+    $taxTotal = 5_244_800;
+    $total = $subtotal + $profitTotal - $discountTotal + $taxTotal;
+
+    $invoice = Invoice::factory()
+        ->withLineItems(1)
+        ->state([
+            'company_id' => $companyId,
+            'due_date' => now()->addDays(30),
+            'profit_total' => $profitTotal,
+            'discount_total' => $discountTotal,
+        ])
+        ->create();
+
+    $invoice->refresh();
+    attachElevenPercentPpnToInvoiceLineItem($invoice);
+    $invoice->updateQuietly([
+        'subtotal' => $subtotal,
+        'profit_total' => $profitTotal,
+        'discount_total' => $discountTotal,
+        'tax_total' => $taxTotal,
+        'total' => $total,
+    ]);
+
+    $invoice->refresh();
+    $invoice->approveDraft();
+    $invoice->refresh();
+
+    expect($invoice->defaultPph23ForPaymentForm())->toBe(953_600)
+        ->and($invoice->paymentAmountForPph23($invoice->defaultPph23ForPaymentForm()))
+        ->toBe((int) $invoice->amount_due);
+});
