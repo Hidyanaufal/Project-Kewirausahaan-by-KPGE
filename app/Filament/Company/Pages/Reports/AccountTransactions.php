@@ -748,7 +748,7 @@ class AccountTransactions extends BaseReportPage implements EnhancedReport
                         $q->where('payeeable_type', Client::class)->where('payeeable_id', $entityId);
                     }
                 }
-                $q->orderBy('id', 'desc');
+                $q->orderBy('posted_at', 'asc')->orderBy('id', 'asc');
             },
         ])->get();
 
