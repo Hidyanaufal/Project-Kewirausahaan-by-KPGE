@@ -32,7 +32,7 @@ class InvoiceExporter extends BaseExporter
             static::moneyColumn('subtotal'),
             static::moneyColumn('tax_total'),
             static::moneyColumn('discount_total'),
-            ExportColumn::make('discount_rate'),
+            static::discountRateColumn(),
             ExportColumn::make('currency_code'),
             ExportColumn::make('order_number'),
             ExportColumn::make('approved_at')

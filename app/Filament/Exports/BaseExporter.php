@@ -2,6 +2,7 @@
 
 namespace App\Filament\Exports;
 
+use App\Utilities\RateCalculator;
 use Filament\Actions\Exports\ExportColumn;
 use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
@@ -25,6 +26,7 @@ abstract class BaseExporter extends Exporter
             'subtotal',
             'tax_total',
             'discount_total',
+            'discount_rate',
             'profit_total',
             'debit',
             'credit',
@@ -50,6 +52,13 @@ abstract class BaseExporter extends Exporter
             ->setShouldWrapText(false);
     }
 
+    public static function getXlsxPercentCellStyle(): Style
+    {
+        return (new Style())
+            ->setFormat('0%')
+            ->setShouldWrapText(false);
+    }
+
     protected static function moneyColumn(string $name, ?string $label = null): ExportColumn
     {
         $column = ExportColumn::make($name)
@@ -68,6 +77,32 @@ abstract class BaseExporter extends Exporter
         }
 
         return $column;
+    }
+
+    /**
+     * Export a document discount rate.
+     * Percentages are written as "10%" then converted to a numeric Excel percent cell.
+     * Fixed amounts are written as numbers.
+     */
+    protected static function discountRateColumn(): ExportColumn
+    {
+        return ExportColumn::make('discount_rate')
+            ->state(function (Model $record): mixed {
+                $raw = $record->getRawOriginal('discount_rate');
+
+                if ($raw === null || $raw === '') {
+                    return null;
+                }
+
+                if ($record->discount_computation?->isPercentage()) {
+                    $percent = ((int) $raw) / RateCalculator::SCALING_FACTOR;
+                    $formatted = rtrim(rtrim(number_format($percent, RateCalculator::PRECISION, '.', ''), '0'), '.');
+
+                    return ($formatted === '' ? '0' : $formatted) . '%';
+                }
+
+                return self::excelMoney($raw);
+            });
     }
 
     /**
