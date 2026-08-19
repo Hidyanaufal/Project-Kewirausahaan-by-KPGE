@@ -2,13 +2,10 @@
 
 namespace App\Filament\Company\Resources\Sales\InvoiceResource\RelationManagers;
 
-use App\Enums\Accounting\AccountCategory;
 use App\Enums\Accounting\InvoiceStatus;
 use App\Enums\Accounting\PaymentMethod;
 use App\Enums\Accounting\TransactionType;
-use App\Models\Accounting\Account;
 use App\Models\Accounting\Invoice;
-use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\Transaction;
 use App\Models\Banking\BankAccount;
 use App\Utilities\Currency\CurrencyAccessor;
@@ -105,7 +102,7 @@ class PaymentsRelationManager extends RelationManager
                                 return $invoice->currency_code;
                             })
                             ->live(onBlur: true)
-                            ->helperText(function (RelationManager $livewire, $state, ?Transaction $record) {
+                            ->helperText(function (Forms\Get $get, RelationManager $livewire, $state, ?Transaction $record) {
                                 /** @var Invoice $ownerRecord */
                                 $ownerRecord = $livewire->getOwnerRecord();
 
@@ -115,19 +112,20 @@ class PaymentsRelationManager extends RelationManager
                                     return null;
                                 }
 
-                                $amountDue = $ownerRecord->amount_due;
-
                                 $amount = CurrencyConverter::convertToCents($state, 'USD');
 
                                 if ($amount <= 0) {
                                     return 'Please enter a valid positive amount';
                                 }
 
-                                $currentPaymentAmount = $record?->amount ?? 0;
+                                $currentPaymentAmount = (int) ($record?->meta['amount_in_document_currency_cents'] ?? $record?->amount ?? 0);
 
                                 if ($ownerRecord->status === InvoiceStatus::Overpaid) {
+                                    $amountDue = $ownerRecord->amount_due;
                                     $newAmountDue = $amountDue + $amount - $currentPaymentAmount;
                                 } else {
+                                    $pph23Cents = self::parseMoneyStateToCents($get('pph23'));
+                                    $amountDue = $ownerRecord->paymentAmountForPph23($pph23Cents);
                                     $newAmountDue = $amountDue - $amount + $currentPaymentAmount;
                                 }
 
@@ -153,6 +151,15 @@ class PaymentsRelationManager extends RelationManager
 
                                 return $invoice->currency_code;
                             })
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function ($state, Forms\Set $set, RelationManager $livewire) {
+                                /** @var Invoice $invoice */
+                                $invoice = $livewire->getOwnerRecord();
+                                $pph23Cents = self::parseMoneyStateToCents($state);
+                                $amountCents = $invoice->paymentAmountForPph23($pph23Cents);
+
+                                $set('amount', CurrencyConverter::convertCentsToFormatSimple($amountCents, 'USD'));
+                            }),
                     ])->columns(3),
                 Forms\Components\Placeholder::make('currency_conversion')
                     ->label('Currency Conversion')
@@ -271,30 +278,12 @@ class PaymentsRelationManager extends RelationManager
                     ->mountUsing(function (Form $form) {
                         /** @var Invoice $record */
                         $record = $this->getOwnerRecord()->fresh();
-                        $defaultPph23 = 0;
-
-                        $approvalTransaction = Transaction::query()
-                            ->where('transactionable_type', Invoice::class)
-                            ->where('transactionable_id', $record->id)
-                            ->where('is_payment', false)
-                            ->first();
-
-                        if ($approvalTransaction) {
-                            $journals = JournalEntry::where('transaction_id', $approvalTransaction->id)->get();
-                            $revenueAccounts = Account::where('company_id', $record->company_id)
-                                ->where('category', AccountCategory::Revenue)
-                                ->pluck('id');
-                            $revenueJournals = $journals->whereIn('account_id', $revenueAccounts)->first();
-
-                            if ($revenueJournals) {
-                                $defaultPph23 = (int) round(abs($revenueJournals->amount) * 0.02);
-                            }
-                        }
+                        $defaultPph23 = $record->defaultPph23ForPaymentForm();
 
                         $form->fill([
                             'transaction_code' => Transaction::getNextDocumentNumber(TransactionType::Deposit),
                             'posted_at' => company_today()->toDateString(),
-                            'amount' => max($record->amount_due, 0),
+                            'amount' => max($record->paymentAmountForPph23($defaultPph23), 0),
                             'pph23' => $defaultPph23 ?: null,
                             'payment_method' => PaymentMethod::BankPayment,
                         ]);
@@ -306,16 +295,13 @@ class PaymentsRelationManager extends RelationManager
                         $record = $this->getOwnerRecord();
 
                         DB::transaction(function () use ($record, $data) {
-                            $pph23Cents = ! empty($data['pph23']) ? (int) $data['pph23'] : null;
+                            if ($record->status === InvoiceStatus::Overpaid) {
+                                $record->recordPayment($data);
 
-                            $record->update([
-                                'pph23' => $pph23Cents,
-                            ]);
+                                return;
+                            }
 
-                            $record->recordPayment([
-                                ...$data,
-                                'pph23' => $pph23Cents,
-                            ]);
+                            $record->recordPaymentWithPph23($data);
                         });
 
                         $action->success();
@@ -346,12 +332,7 @@ class PaymentsRelationManager extends RelationManager
                         $ownerRecord = $this->getOwnerRecord();
 
                         DB::transaction(function () use ($ownerRecord, $record, $data) {
-                            $pph23Cents = ! empty($data['pph23']) ? (int) $data['pph23'] : null;
-
-                            $ownerRecord->updatePayment($record, [
-                                ...$data,
-                                'pph23' => $pph23Cents,
-                            ]);
+                            $ownerRecord->updatePaymentWithPph23($record, $data);
                         });
 
                         $action->success();
@@ -365,5 +346,24 @@ class PaymentsRelationManager extends RelationManager
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    protected static function parseMoneyStateToCents(mixed $state): int
+    {
+        if (blank($state)) {
+            return 0;
+        }
+
+        if (is_int($state)) {
+            return $state;
+        }
+
+        $string = (string) $state;
+
+        if (! CurrencyConverter::isValidAmount($string, 'USD')) {
+            return 0;
+        }
+
+        return CurrencyConverter::convertToCents($string, 'USD');
     }
 }
