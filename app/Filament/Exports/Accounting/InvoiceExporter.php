@@ -23,10 +23,6 @@ class InvoiceExporter extends BaseExporter
             ExportColumn::make('client.name'),
             ExportColumn::make('project.number')
                 ->label('Project number'),
-            ExportColumn::make('project.description')
-                ->label('Project description'),
-            ExportColumn::make('terms')
-                ->label('Invoice terms'),
             ExportColumn::make('status')
                 ->enum(),
             static::moneyColumn('total'),
