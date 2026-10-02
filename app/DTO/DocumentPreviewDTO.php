@@ -49,7 +49,7 @@ readonly class DocumentPreviewDTO extends DocumentDTO
             showLogo: $data['show_logo'] ?? $settings->show_logo ?? true,
             font: Font::tryFrom($data['font']) ?? $settings->font ?? Font::Inter,
             email: $company->profile->email,
-            terbilang: self::generateTerbilang($amountDue),
+            terbilang: trim(self::generateTerbilang($amountDue)) . ' Rupiah',
             dpp: self::generateDpp(95000),
             project: 'Pengadaan Jasa',
             bankName: $settings->bank_name,

@@ -158,7 +158,7 @@ readonly class DocumentDTO
             showLogo: $settings->show_logo ?? false,
             font: $settings->font ?? Font::Inter,
             email: $document->company->profile->email,
-            terbilang: self::generateTerbilang(ceil($document->total / 100)),
+            terbilang: trim(self::generateTerbilang(ceil($document->total / 100))) . ' Rupiah',
             dpp: self::generateDpp($document->subtotal),
             project: $projectName,
             bankName: $settings->bank_name,
